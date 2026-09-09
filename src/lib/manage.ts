@@ -15,12 +15,12 @@ export type PinJoinOutcome = "ok" | "wrong_pin" | "rate_limited";
 
 export type GroupChromeLink = "people" | "invite" | "settings";
 
-export function canAccessPeople(_role: Role): boolean {
-  return true;
+export function canAccessPeople(role: Role): boolean {
+  return role === "member" || role === "owner";
 }
 
-export function canAccessInvite(_role: Role): boolean {
-  return true;
+export function canAccessInvite(role: Role): boolean {
+  return role === "member" || role === "owner";
 }
 
 export function canAccessSettings(role: Role): boolean {
