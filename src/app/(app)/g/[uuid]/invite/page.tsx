@@ -13,7 +13,7 @@ export default async function InvitePage({ params }: { params: Promise<{ uuid: s
 
   return (
     <div className="space-y-6">
-      <Link href={`/g/${uuid}`} className="text-sm text-muted">
+      <Link href={`/g/${uuid}`} className="link-quiet">
         Back
       </Link>
       <InvitePanel shareUrl={shareUrl} />

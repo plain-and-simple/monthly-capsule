@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { groupDisplayName } from "@/lib/copy";
 import { monthLabel } from "@/lib/schedule";
 import { requireGroupMember } from "@/lib/session";
 import { signedPhotoUrl } from "@/lib/photos";
@@ -37,7 +38,7 @@ export default async function CapsulePage({
   if (!capsule) {
     return (
       <div className="space-y-4">
-        <Link href={`/g/${uuid}`} className="text-sm text-muted">
+        <Link href={`/g/${uuid}`} className="link-quiet">
           Back
         </Link>
         <h1 className="font-serif text-4xl">Not ready</h1>
@@ -83,12 +84,14 @@ export default async function CapsulePage({
 
   return (
     <article className="space-y-10">
-      <Link href={`/g/${uuid}`} className="text-sm text-muted">
+      <Link href={`/g/${uuid}`} className="link-quiet">
         Back
       </Link>
       <header>
         <p className="text-xs uppercase tracking-wide text-muted">{monthLabel(yearMonth)}</p>
-        <h1 className="font-serif text-4xl leading-tight">{group?.name || "Capsule"}</h1>
+        <h1 className="font-serif text-4xl font-medium leading-tight">
+          {groupDisplayName(group?.name)}
+        </h1>
       </header>
       {letters.length === 0 ? <p>No letters this month.</p> : null}
       {letters.map(({ submission, member, photos }) => (

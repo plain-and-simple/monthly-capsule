@@ -11,7 +11,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ uuid:
 
   return (
     <div className="space-y-10">
-      <Link href={`/g/${uuid}`} className="text-sm text-muted">
+      <Link href={`/g/${uuid}`} className="link-quiet">
         Back
       </Link>
       <SettingsForm group={group} />

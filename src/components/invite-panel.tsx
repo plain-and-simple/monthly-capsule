@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { CopyButton } from "@/components/copy-button";
+import { INVITE_HELPER, JOIN_PIN_LABEL } from "@/lib/copy";
 import { inviteShareText } from "@/lib/manage";
 
 export function InvitePanel({ shareUrl }: { shareUrl: string }) {
@@ -10,7 +11,8 @@ export function InvitePanel({ shareUrl }: { shareUrl: string }) {
 
   return (
     <div className="space-y-6">
-      <h1 className="font-serif text-4xl leading-tight">Invite</h1>
+      <h1 className="font-serif text-4xl font-medium leading-tight">Invite</h1>
+      <p className="text-muted">{INVITE_HELPER}</p>
       <div className="space-y-4 rounded-xl border border-rule bg-card p-5">
         <div>
           <p className="text-xs uppercase tracking-wide text-muted">Join link</p>
@@ -20,7 +22,7 @@ export function InvitePanel({ shareUrl }: { shareUrl: string }) {
           </div>
         </div>
         <div className="field">
-          <label htmlFor="typed_pin">PIN</label>
+          <label htmlFor="typed_pin">{JOIN_PIN_LABEL}</label>
           <input
             id="typed_pin"
             inputMode="numeric"

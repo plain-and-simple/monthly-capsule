@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { JoinForm } from "@/components/join-form";
+import { SiteHeader } from "@/components/site-header";
 import { sessionRejoinsGroup } from "@/lib/manage";
 import { getAccount, getSession } from "@/lib/session";
 
@@ -11,5 +12,10 @@ export default async function JoinPage({ params }: { params: Promise<{ uuid: str
   if (sessionRejoinsGroup(session, uuid)) {
     redirect(`/g/${uuid}`);
   }
-  return <JoinForm uuid={uuid} signedInAs={account?.preferred_name ?? null} />;
+  return (
+    <>
+      <SiteHeader />
+      <JoinForm uuid={uuid} signedInAs={account?.preferred_name ?? null} />
+    </>
+  );
 }

@@ -4,31 +4,27 @@ import { useActionState, useState } from "react";
 import Link from "next/link";
 import { createGroup, type CreateState } from "@/actions/create-group";
 import { CopyButton } from "@/components/copy-button";
+import {
+  ACCOUNT_PASSWORD_LABEL,
+  PREFERRED_NAME_LABEL,
+  createSuccessHero,
+} from "@/lib/copy";
 
 export function CreateForm({ signedInAs }: { signedInAs?: string | null }) {
   const [state, action, pending] = useActionState<CreateState, FormData>(createGroup, null);
   const [studioCode, setStudioCode] = useState("");
 
   if (state?.ok) {
+    const hero = createSuccessHero({ name: state.groupName, pin: state.pin });
     return (
-      <div className="space-y-6">
-        <h1 className="font-serif text-4xl leading-tight">Join with this link and PIN</h1>
-        <p className="text-muted">PIN is shown once. It cannot be recovered.</p>
-        <div className="space-y-4 rounded-xl border border-rule bg-card p-5">
-          <div>
-            <p className="text-xs uppercase tracking-wide text-muted">Join link</p>
-            <p className="mt-1 break-all font-serif text-lg">{state.shareUrl}</p>
-            <div className="mt-2">
-              <CopyButton text={state.shareUrl} label="Copy link" />
-            </div>
-          </div>
-          <div>
-            <p className="text-xs uppercase tracking-wide text-muted">PIN</p>
-            <p className="mt-1 font-serif text-3xl tracking-[0.2em]">{state.pin}</p>
-            <div className="mt-2">
-              <CopyButton text={state.pin} label="Copy PIN" />
-            </div>
-          </div>
+      <div className="create-success space-y-8">
+        <div className="space-y-3">
+          <h1 className="font-serif text-4xl font-medium leading-tight">{hero.groupName}</h1>
+          <p className="create-success-pin">{hero.pin}</p>
+        </div>
+        <div className="space-y-3">
+          <CopyButton text={hero.pin} label={hero.copyLabel} />
+          <p className="text-muted">{hero.hint}</p>
         </div>
         <Link className="btn" href={`/g/${state.groupId}`}>
           Continue
@@ -47,7 +43,7 @@ export function CreateForm({ signedInAs }: { signedInAs?: string | null }) {
           if (next) setStudioCode(next);
         }}
       >
-        <h1 className="font-serif text-4xl leading-tight">Create Capsule Group</h1>
+        <h1 className="font-serif text-4xl font-medium leading-tight">Create Capsule Group</h1>
         <p className="text-muted">Studio code first.</p>
         <div className="field">
           <label htmlFor="studio_code">Studio code</label>
@@ -62,7 +58,7 @@ export function CreateForm({ signedInAs }: { signedInAs?: string | null }) {
 
   return (
     <form action={action} className="space-y-5">
-      <h1 className="font-serif text-4xl leading-tight">Create Capsule Group</h1>
+      <h1 className="font-serif text-4xl font-medium leading-tight">Create Capsule Group</h1>
       <p className="text-muted">
         {signedInAs
           ? `Creating as ${signedInAs}. Your account will own this group.`
@@ -76,7 +72,7 @@ export function CreateForm({ signedInAs }: { signedInAs?: string | null }) {
       {signedInAs ? null : (
         <>
           <div className="field">
-            <label htmlFor="preferred_name">Preferred name</label>
+            <label htmlFor="preferred_name">{PREFERRED_NAME_LABEL}</label>
             <input id="preferred_name" name="preferred_name" maxLength={40} required />
           </div>
           <div className="field">
@@ -84,7 +80,7 @@ export function CreateForm({ signedInAs }: { signedInAs?: string | null }) {
             <input id="email" name="email" type="email" required autoComplete="email" />
           </div>
           <div className="field">
-            <label htmlFor="password">Password</label>
+            <label htmlFor="password">{ACCOUNT_PASSWORD_LABEL}</label>
             <input
               id="password"
               name="password"

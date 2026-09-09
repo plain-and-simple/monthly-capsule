@@ -2,6 +2,11 @@ import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ManageForm } from "@/components/manage-form";
+import {
+  LANDING_CREATE_LABEL,
+  LANDING_PROMISE,
+  PRODUCT_NAME,
+} from "@/lib/copy";
 import { getAccount } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
@@ -26,13 +31,14 @@ export default async function HomePage() {
       </div>
       <div className="landing-panel">
         <header className="landing-bar">
-          <Link href="/" className="font-serif text-xl tracking-tight">
-            Capsule
+          <Link href="/" className="brand-mark">
+            {PRODUCT_NAME}
           </Link>
-          <Link href="/create" className="text-sm underline">
-            Create Capsule Group
+          <Link href="/create" className="btn btn-quiet">
+            {LANDING_CREATE_LABEL}
           </Link>
         </header>
+        <p className="landing-promise">{LANDING_PROMISE}</p>
         <div className="landing-form">
           <ManageForm />
         </div>

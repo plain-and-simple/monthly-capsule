@@ -2,6 +2,7 @@
 
 import { useActionState, useState } from "react";
 import { joinGroup, type JoinState } from "@/actions/join-group";
+import { ACCOUNT_PASSWORD_LABEL, JOIN_PIN_LABEL, PREFERRED_NAME_LABEL } from "@/lib/copy";
 
 export function JoinForm({
   uuid,
@@ -15,7 +16,7 @@ export function JoinForm({
 
   return (
     <form action={action} className="space-y-5">
-      <h1 className="font-serif text-4xl leading-tight">Join</h1>
+      <h1 className="font-serif text-4xl font-medium leading-tight">Join</h1>
       {uuid ? (
         <input type="hidden" name="uuid" value={uuid} />
       ) : (
@@ -25,7 +26,7 @@ export function JoinForm({
         </div>
       )}
       <div className="field">
-        <label htmlFor="pin">PIN</label>
+        <label htmlFor="pin">{JOIN_PIN_LABEL}</label>
         <input
           id="pin"
           name="pin"
@@ -36,7 +37,7 @@ export function JoinForm({
         />
       </div>
       <div className="field">
-        <label htmlFor="preferred_name">Preferred name</label>
+        <label htmlFor="preferred_name">{PREFERRED_NAME_LABEL}</label>
         <input
           id="preferred_name"
           name="preferred_name"
@@ -67,7 +68,7 @@ export function JoinForm({
                 <input id="email" name="email" type="email" required autoComplete="email" />
               </div>
               <div className="field">
-                <label htmlFor="password">Password</label>
+                <label htmlFor="password">{ACCOUNT_PASSWORD_LABEL}</label>
                 <input
                   id="password"
                   name="password"

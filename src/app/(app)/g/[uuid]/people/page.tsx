@@ -22,10 +22,10 @@ export default async function PeoplePage({ params }: { params: Promise<{ uuid: s
 
   return (
     <div className="space-y-6">
-      <Link href={`/g/${uuid}`} className="text-sm text-muted">
+      <Link href={`/g/${uuid}`} className="link-quiet">
         Back
       </Link>
-      <h1 className="font-serif text-4xl leading-tight">People</h1>
+      <h1 className="font-serif text-4xl font-medium leading-tight">People</h1>
       <ul className="space-y-3">
         {people.map((person) => (
           <li key={person.id} className="font-serif text-xl">
