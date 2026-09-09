@@ -1,0 +1,12 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/compile",
+      "schedule": "10 6 * * *"
+    },
+    {
+      "path": "/api/cron/email",
+      "schedule": "0 15 * * *"
+    }
+  ]
+}

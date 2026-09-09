@@ -1,0 +1,86 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
+  --font-serif: var(--font-newsreader), ui-serif, Georgia, serif;
+  --color-paper: #f4efe6;
+  --color-ink: #1f1a14;
+  --color-muted: #6f675d;
+  --color-rule: #d8d0c4;
+  --color-accent: #8b3a1e;
+  --color-card: #fffdf8;
+}
+
+html,
+body {
+  background: var(--color-paper);
+  color: var(--color-ink);
+}
+
+body {
+  min-height: 100vh;
+}
+
+::selection {
+  background: #ead8c8;
+}
+
+input,
+textarea,
+button {
+  font: inherit;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.field label {
+  font-size: 0.9rem;
+  color: var(--color-muted);
+}
+
+.field input,
+.field textarea {
+  width: 100%;
+  border: 1px solid var(--color-rule);
+  background: var(--color-card);
+  color: var(--color-ink);
+  border-radius: 0.4rem;
+  padding: 0.7rem 0.8rem;
+}
+
+.field textarea {
+  min-height: 14rem;
+  resize: vertical;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  padding: 0.7rem 1.15rem;
+  background: var(--color-ink);
+  color: var(--color-paper);
+  border: 0;
+  cursor: pointer;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--color-ink);
+  border: 1px solid var(--color-rule);
+}
+
+.err {
+  color: var(--color-accent);
+  font-size: 0.95rem;
+}

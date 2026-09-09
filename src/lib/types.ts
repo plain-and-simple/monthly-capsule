@@ -1,0 +1,60 @@
+export type Role = "owner" | "member";
+export type MonthStatus = "open" | "closed" | "compiled";
+
+export type Group = {
+  id: string;
+  name: string;
+  pin_hash: string;
+  submit_start_day: number;
+  submit_end_day: number;
+  email_day: number;
+  created_at: string;
+};
+
+export type Member = {
+  id: string;
+  group_id: string;
+  display_name: string;
+  email: string | null;
+  role: Role;
+  joined_at: string;
+};
+
+export type Month = {
+  id: string;
+  group_id: string;
+  year_month: string;
+  status: MonthStatus;
+  created_at: string;
+};
+
+export type Submission = {
+  id: string;
+  month_id: string;
+  member_id: string;
+  body: string;
+  submitted_at: string;
+  updated_at: string;
+};
+
+export type Photo = {
+  id: string;
+  submission_id: string;
+  storage_path: string;
+  width: number;
+  height: number;
+  bytes: number;
+  sort_order: number;
+};
+
+export type Capsule = {
+  id: string;
+  month_id: string;
+  compiled_at: string;
+  email_sent_at: string | null;
+};
+
+export type SessionPayload = {
+  memberId: string;
+  groupId: string;
+};
