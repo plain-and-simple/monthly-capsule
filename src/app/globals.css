@@ -38,9 +38,7 @@ button {
 }
 
 .field label {
-  font-size: 0.8rem;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  font-size: 0.9rem;
   color: var(--color-muted);
 }
 
