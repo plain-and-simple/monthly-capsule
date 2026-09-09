@@ -1,4 +1,5 @@
 import "server-only";
+import { resolveCreateGroupCode } from "@/lib/studio-code";
 
 function required(name: string): string {
   const value = process.env[name];
@@ -38,4 +39,8 @@ export function resendApiKey(): string | null {
 
 export function resendFromEmail(): string {
   return process.env.RESEND_FROM_EMAIL || "Capsule <capsule@plainandsimple.app>";
+}
+
+export function createGroupCode(): string {
+  return resolveCreateGroupCode(process.env.CREATE_GROUP_CODE);
 }

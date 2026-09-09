@@ -1,8 +1,9 @@
 "use server";
 
-import { appUrl } from "@/lib/env";
+import { appUrl, createGroupCode } from "@/lib/env";
 import { generatePin, hashPin } from "@/lib/pin";
 import { setSession } from "@/lib/session";
+import { rejectInvalidStudioCode } from "@/lib/studio-code";
 import { createAdminClient } from "@/lib/supabase";
 
 export type CreateState =
@@ -15,6 +16,14 @@ function normalizeEmail(value: string): string {
 }
 
 export async function createGroup(_prev: CreateState, formData: FormData): Promise<CreateState> {
+  const codeError = rejectInvalidStudioCode(
+    String(formData.get("studio_code") ?? ""),
+    createGroupCode(),
+  );
+  if (codeError) {
+    return codeError;
+  }
+
   const name = String(formData.get("name") ?? "").trim();
   const email = normalizeEmail(String(formData.get("email") ?? ""));
 

@@ -48,6 +48,10 @@ export function CreateForm() {
         <label htmlFor="email">Your email</label>
         <input id="email" name="email" type="email" required autoComplete="email" />
       </div>
+      <div className="field">
+        <label htmlFor="studio_code">Studio code</label>
+        <input id="studio_code" name="studio_code" required autoComplete="off" />
+      </div>
       {state && !state.ok ? <p className="err">{state.error}</p> : null}
       <button className="btn" type="submit" disabled={pending}>
         {pending ? "Creating…" : "Create"}
