@@ -1,0 +1,84 @@
+import "server-only";
+import { jwtVerify, SignJWT } from "jose";
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
+import { SESSION_COOKIE } from "@/lib/constants";
+import { cookieSecret } from "@/lib/env";
+import { createAdminClient } from "@/lib/supabase";
+import type { Group, Member, SessionPayload } from "@/lib/types";
+
+export async function setSession(payload: SessionPayload): Promise<void> {
+  const token = await new SignJWT({
+    memberId: payload.memberId,
+    groupId: payload.groupId,
+  })
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuedAt()
+    .setExpirationTime("400d")
+    .sign(cookieSecret());
+
+  const jar = await cookies();
+  jar.set(SESSION_COOKIE, token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+    maxAge: 60 * 60 * 24 * 400,
+  });
+}
+
+export async function getSession(): Promise<SessionPayload | null> {
+  const jar = await cookies();
+  const token = jar.get(SESSION_COOKIE)?.value;
+  if (!token) return null;
+
+  try {
+    const { payload } = await jwtVerify(token, cookieSecret());
+    const memberId = payload.memberId;
+    const groupId = payload.groupId;
+    if (typeof memberId !== "string" || typeof groupId !== "string") {
+      return null;
+    }
+    return { memberId, groupId };
+  } catch {
+    return null;
+  }
+}
+
+export async function clearSession(): Promise<void> {
+  const jar = await cookies();
+  jar.delete(SESSION_COOKIE);
+}
+
+export async function requireGroupMember(groupId: string): Promise<{
+  member: Member;
+  group: Group;
+}> {
+  const session = await getSession();
+  if (!session || session.groupId !== groupId) {
+    redirect(`/join/${groupId}`);
+  }
+
+  const admin = createAdminClient();
+  const [{ data: member }, { data: group }] = await Promise.all([
+    admin.from("members").select("*").eq("id", session.memberId).maybeSingle(),
+    admin.from("groups").select("*").eq("id", groupId).maybeSingle(),
+  ]);
+
+  if (!member || member.group_id !== groupId || !group) {
+    redirect(`/join/${groupId}`);
+  }
+
+  return {
+    member: member as Member,
+    group: group as Group,
+  };
+}
+
+export async function requireOwner(groupId: string) {
+  const ctx = await requireGroupMember(groupId);
+  if (ctx.member.role !== "owner") {
+    redirect(`/g/${groupId}`);
+  }
+  return ctx;
+}

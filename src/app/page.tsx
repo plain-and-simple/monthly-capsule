@@ -1,0 +1,7 @@
+import { CreateForm } from "@/components/create-form";
+
+export const dynamic = "force-dynamic";
+
+export default function HomePage() {
+  return <CreateForm />;
+}
