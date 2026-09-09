@@ -1,12 +1,13 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import Link from "next/link";
 import { createGroup, type CreateState } from "@/actions/create-group";
 import { CopyButton } from "@/components/copy-button";
 
-export function CreateForm() {
+export function CreateForm({ signedInAs }: { signedInAs?: string | null }) {
   const [state, action, pending] = useActionState<CreateState, FormData>(createGroup, null);
+  const [studioCode, setStudioCode] = useState("");
 
   if (state?.ok) {
     return (
@@ -36,22 +37,65 @@ export function CreateForm() {
     );
   }
 
+  if (!studioCode) {
+    return (
+      <form
+        className="space-y-5"
+        onSubmit={(event) => {
+          event.preventDefault();
+          const next = String(new FormData(event.currentTarget).get("studio_code") ?? "").trim();
+          if (next) setStudioCode(next);
+        }}
+      >
+        <h1 className="font-serif text-4xl leading-tight">Create Capsule Group</h1>
+        <p className="text-muted">Studio code first.</p>
+        <div className="field">
+          <label htmlFor="studio_code">Studio code</label>
+          <input id="studio_code" name="studio_code" required autoComplete="off" />
+        </div>
+        <button className="btn" type="submit">
+          Continue
+        </button>
+      </form>
+    );
+  }
+
   return (
     <form action={action} className="space-y-5">
-      <h1 className="font-serif text-4xl leading-tight">Create a group</h1>
-      <p className="text-muted">A monthly letter. Photos optional.</p>
+      <h1 className="font-serif text-4xl leading-tight">Create Capsule Group</h1>
+      <p className="text-muted">
+        {signedInAs
+          ? `Creating as ${signedInAs}. Your account will own this group.`
+          : "Preferred name, email, and password. Your account will own this group."}
+      </p>
+      <input type="hidden" name="studio_code" value={studioCode} />
       <div className="field">
         <label htmlFor="name">Group name</label>
         <input id="name" name="name" maxLength={40} placeholder="Optional" />
       </div>
-      <div className="field">
-        <label htmlFor="email">Your email</label>
-        <input id="email" name="email" type="email" required autoComplete="email" />
-      </div>
-      <div className="field">
-        <label htmlFor="studio_code">Studio code</label>
-        <input id="studio_code" name="studio_code" required autoComplete="off" />
-      </div>
+      {signedInAs ? null : (
+        <>
+          <div className="field">
+            <label htmlFor="preferred_name">Preferred name</label>
+            <input id="preferred_name" name="preferred_name" maxLength={40} required />
+          </div>
+          <div className="field">
+            <label htmlFor="email">Email</label>
+            <input id="email" name="email" type="email" required autoComplete="email" />
+          </div>
+          <div className="field">
+            <label htmlFor="password">Password</label>
+            <input
+              id="password"
+              name="password"
+              type="password"
+              required
+              minLength={8}
+              autoComplete="new-password"
+            />
+          </div>
+        </>
+      )}
       {state && !state.ok ? <p className="err">{state.error}</p> : null}
       <button className="btn" type="submit" disabled={pending}>
         {pending ? "Creating…" : "Create"}

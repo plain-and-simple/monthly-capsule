@@ -1,24 +1,42 @@
+import Image from "next/image";
 import Link from "next/link";
-import { getSession } from "@/lib/session";
+import { redirect } from "next/navigation";
+import { ManageForm } from "@/components/manage-form";
+import { getAccount } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
-  const session = await getSession();
+  const account = await getAccount();
+  if (account) {
+    redirect("/manage");
+  }
 
   return (
-    <nav className="flex flex-col gap-3" aria-label="Home">
-      <Link className="btn" href="/create">
-        Create a group
-      </Link>
-      <Link className="btn btn-ghost" href="/join">
-        Join a group
-      </Link>
-      {session ? (
-        <Link className="btn btn-ghost" href={`/g/${session.groupId}`}>
-          Open your capsule
-        </Link>
-      ) : null}
-    </nav>
+    <div className="landing">
+      <div className="landing-photo">
+        <Image
+          src="/landing.jpg"
+          alt=""
+          fill
+          priority
+          sizes="(min-width: 800px) 50vw, 100vw"
+          className="object-cover"
+        />
+      </div>
+      <div className="landing-panel">
+        <header className="landing-bar">
+          <Link href="/" className="font-serif text-xl tracking-tight">
+            Capsule
+          </Link>
+          <Link href="/create" className="text-sm underline">
+            Create Capsule Group
+          </Link>
+        </header>
+        <div className="landing-form">
+          <ManageForm />
+        </div>
+      </div>
+    </div>
   );
 }

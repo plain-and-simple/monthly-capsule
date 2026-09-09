@@ -17,7 +17,7 @@ export default async function PeoplePage({ params }: { params: Promise<{ uuid: s
     .order("joined_at", { ascending: true });
 
   const people = toRoster(
-    (data ?? []) as Array<{ id: string; display_name: string; role: Role }>,
+    (data ?? []) as Array<{ id: string; preferred_name: string; role: Role }>,
   );
 
   return (
@@ -29,7 +29,7 @@ export default async function PeoplePage({ params }: { params: Promise<{ uuid: s
       <ul className="space-y-3">
         {people.map((person) => (
           <li key={person.id} className="font-serif text-xl">
-            {person.display_name}
+            {person.preferred_name}
             {person.role === "owner" ? <span className="text-muted"> · Owner</span> : null}
             {person.id === member.id ? <span className="text-muted"> · you</span> : null}
           </li>

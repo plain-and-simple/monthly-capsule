@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { leaveGroup } from "@/actions/leave";
 import { GroupChrome } from "@/components/group-chrome";
+import { SaveLoginForm } from "@/components/save-login-form";
 import { currentYearMonth, isSubmitOpen, monthLabel } from "@/lib/schedule";
 import { requireGroupMember } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase";
@@ -57,6 +58,13 @@ export default async function GroupHomePage({
         ) : null}
       </div>
       <GroupChrome uuid={uuid} role={member.role} />
+      {member.account_id ? (
+        <Link href="/manage" className="text-sm text-muted underline">
+          Your capsules
+        </Link>
+      ) : (
+        <SaveLoginForm groupId={uuid} />
+      )}
       <form action={leaveGroup}>
         <button type="submit" className="text-sm text-muted underline">
           Leave

@@ -1,9 +1,10 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { clearSession } from "@/lib/session";
+import { clearSession, getAccount } from "@/lib/session";
 
 export async function leaveGroup() {
   await clearSession();
-  redirect("/");
+  const account = await getAccount();
+  redirect(account ? "/manage" : "/");
 }

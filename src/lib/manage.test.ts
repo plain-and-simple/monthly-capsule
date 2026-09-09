@@ -64,22 +64,24 @@ describe("manage UI scenarios 1–20", () => {
     const roster = toRoster([
       {
         id: "m1",
-        display_name: "Ada",
+        preferred_name: "Ada",
         role: "owner",
         email: "ada@example.com",
       },
       {
         id: "m2",
-        display_name: "Bess",
+        preferred_name: "Bess",
         role: "member",
         email: "bess@example.com",
       },
     ]);
     expect(roster).toEqual([
-      { id: "m1", display_name: "Ada", role: "owner" },
-      { id: "m2", display_name: "Bess", role: "member" },
+      { id: "m1", preferred_name: "Ada", role: "owner" },
+      { id: "m2", preferred_name: "Bess", role: "member" },
     ]);
     expect(rosterLeaksPrivate(roster)).toBe(false);
+    expect(ROSTER_SELECT).toContain("preferred_name");
+    expect(ROSTER_SELECT).not.toContain("display_name");
     expect(ROSTER_SELECT).not.toContain("email");
     expect(ROSTER_SELECT).not.toContain("pin");
   });
@@ -88,7 +90,7 @@ describe("manage UI scenarios 1–20", () => {
     const roster = toRoster([
       {
         id: "m1",
-        display_name: "Ada",
+        preferred_name: "Ada",
         role: "owner",
         pin_hash: "$2a$12$secret",
       },

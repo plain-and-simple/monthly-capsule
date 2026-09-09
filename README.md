@@ -13,25 +13,27 @@ Friends write a letter (and up to six photos) each month. After the window close
 
 ## Product locks
 
+- **Account** is one field `preferred_name`, plus email and a hashed password (min 8). Memberships link an account to groups. **No phone. No SMS.**
+- **Manage** is email + password, rate-limited (5 / 15 minutes / IP + email). After login: 0 groups → empty + join hint; 1 → group home; many → pick list.
 - Web join with a group UUID + PIN. PIN is generated at create, shown **once**, stored as a bcrypt hash only, never recovered.
-- Owner may **Regenerate PIN**. New PIN is shown once. The old PIN dies immediately. Existing sessions stay valid.
-- Invite is the join URL plus an optional PIN the member types. The server never returns a PIN after create/regen.
-- People is any member. Names only — no emails, no PIN hash.
+- Join asks for preferred name. **Save login** (email + password) is optional. Skip → group session only until it expires; Manage will not list that group until they save.
+- Owner may **Regenerate PIN**. Confirm first. New PIN is shown once. The old PIN dies immediately. Existing sessions stay valid.
+- Invite is the join URL plus an optional PIN the member types, plus share text. The server never returns a PIN after create/regen. Any member.
+- People is any member. **preferred_name only** — no emails, no PIN hash.
 - Settings (schedule + regen PIN) is owner only.
-- Creating a group requires a studio code from `CREATE_GROUP_CODE` (default `plainandsimple` if unset). Compared trim + case-insensitive. Server rejects a missing or wrong code.
-- Owner email required at create. Member email optional; Resend skips members with no email.
+- Creating a group requires a studio code from `CREATE_GROUP_CODE` (default `plainandsimple` if unset). Compared trim + case-insensitive. Server rejects a missing or wrong code. Then preferred name + email + password. The account owns the group.
 - Photos: max 6 per submission. Client resizes to a 1600px long edge. Server checks MIME + size.
 - Timezone is **America/Chicago** for every group. No picker.
 - Schedule fields: `submit_start_day` (default 1), `submit_end_day` (default 8), `email_day` (default 9).
   - Rule: `1 ≤ start ≤ end ≤ 28` **and** `end < email_day ≤ 28`.
 - One submission per member per month. In-window save upserts. Server rejects when the window is closed.
 - Compile job runs after `submit_end_day` ends (Chicago). Idempotent `capsules` row + HTML page.
-- Email job runs on `email_day`. Sends only if a capsule exists and `email_sent_at` is null.
+- Email job runs on `email_day`. Sends only if a capsule exists and `email_sent_at` is null. Resend skips members with no email.
 - Owner settings labels are exactly: **Submit opens**, **Submit closes**, **Email capsule**.
-- Sessions: httpOnly, Secure (prod), SameSite=Lax, host-only cookie on `capsule.plainandsimple.app` binding `member_id` + `group_id`.
+- Sessions: httpOnly, Secure (prod), SameSite=Lax, host-only cookies on `capsule.plainandsimple.app`. `capsule_session` binds `member_id` + `group_id`. `capsule_account` binds `account_id`.
 - Capsules are session-gated. No public unauthenticated pages.
 
-Out of scope: PDF, Apple Sign In / CloudKit, send-now, co-owners, rich editor, video, per-member schedules.
+Out of scope: PDF, phone / SMS OTP, first/last name, Apple Sign In / CloudKit, send-now, co-owners, rich editor, video, per-member schedules.
 
 ## Stack
 
@@ -53,7 +55,7 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
-Apply the SQL in `supabase/migrations/` to your Supabase project (SQL editor, or `supabase db push` if you use the CLI). The first migration creates tables, indexes, RLS, and the private storage bucket.
+Apply the SQL in `supabase/migrations/` to your Supabase project (SQL editor, or `supabase db push` if you use the CLI). The first migration creates tables, indexes, RLS, and the private storage bucket. The accounts migration adds `accounts`, `login_attempts`, `members.account_id`, and renames `display_name` → `preferred_name`.
 
 ```bash
 npm run typecheck
@@ -78,27 +80,30 @@ See `.env.example`.
 
 ## Screens
 
-1. **Home** `/` — Create a group, Join a group, and Open your capsule when a session exists.
-2. **Create** `/create` — studio code + optional group name + owner email → UUID + PIN shown once (copy).
-3. **Join** `/join` — join link or group ID + PIN + display name + optional email → session.
-4. **Join link** `/join/[uuid]` — PIN + display name + optional email → session.
-5. **Group home** `/g/[uuid]` — name, open/closed, member count, Submit / View capsule, People, Invite, Settings (owner).
-6. **People** `/g/[uuid]/people` — display names. Any member.
-7. **Invite** `/g/[uuid]/invite` — copy join URL, optional typed PIN, and share text (URL + PIN if typed). Server never returns a PIN.
-8. **Submit** `/g/[uuid]/submit` — letter + ≤6 photos; upsert in window; “Closed.” when shut.
-9. **Capsule** `/g/[uuid]/capsule/[YYYY-MM]` — read-only HTML; session required.
-10. **Owner settings** `/g/[uuid]/settings` — the three day-of-month fields and Regenerate PIN.
+1. **Home** `/` — left picture; right **Manage your capsule** (email → password → Continue). Upper-right **Create Capsule Group**. No three equal CTAs. No phone.
+2. **Manage** `/manage` — account groups. Empty + join hint, a pick list, or (after login with exactly one group) the group home.
+3. **Create** `/create` — studio code → preferred name + email + password + optional group name → UUID + PIN shown once (copy). Account owns the group.
+4. **Join** `/join` — join link or group ID + PIN + preferred name. Optional Save login (email + password). Skip → group session only.
+5. **Join link** `/join/[uuid]` — PIN + preferred name + optional Save login.
+6. **Group home** `/g/[uuid]` — name, open/closed, member count, Submit / View capsule, People, Invite, Settings (owner). Save login if this seat has no account.
+7. **People** `/g/[uuid]/people` — preferred names. Any member. No emails.
+8. **Invite** `/g/[uuid]/invite` — copy join URL, optional typed PIN, and share text (URL + PIN if typed). Server never returns a PIN.
+9. **Submit** `/g/[uuid]/submit` — letter + ≤6 photos; upsert in window; “Closed.” when shut.
+10. **Capsule** `/g/[uuid]/capsule/[YYYY-MM]` — read-only HTML; session required.
+11. **Owner settings** `/g/[uuid]/settings` — the three day-of-month fields and Regenerate PIN.
 
-## Manual check: create then join a second session
+## Dogfood path
 
-e2e is not set up. After env + migration:
+e2e is not set up. After env + **both** migrations:
 
-1. Browser A: from home, Create a group. Enter the studio code (local default `plainandsimple` if `CREATE_GROUP_CODE` is unset). Copy the join link and PIN. Continue to the group home (owner session). Home then shows Open your capsule.
-2. Browser B (or a private window): Join a group from home — paste the join link or the group ID, plus PIN, a display name, optional email. Or open `/join/[uuid]`. You land on the same group home as a member.
-3. Owner: Settings — change the three day fields; invalid combos (e.g. close ≥ email day) are rejected. Regenerate PIN asks to confirm first; the new PIN is shown once; join with the old PIN fails; the owner session still opens the group.
-4. Member: People and Invite work. Settings redirects home. Invite copies the join URL (and share text with a typed PIN) and never shows a stored PIN. People lists names only.
-5. If Chicago’s day is inside the window, submit a letter + photos from either session. Saving again replaces that member’s letter. After the window, Submit shows Closed and the server rejects writes.
-6. Cron (optional, needs the same env):
+1. **Create (GWT B).** Open `/`. Upper-right Create Capsule Group. Studio code (local default `plainandsimple` if `CREATE_GROUP_CODE` is unset). Preferred name, email, password (8+). Copy the join link and PIN. Continue to the group home. You are the owner.
+2. **Manage (GWT A).** Private window. `/` → Manage your capsule with that email + password. No SMS. One group → group home. Sign out from `/manage` (Leave, then Your capsules, or open `/manage` directly).
+3. **Join without save (GWT C).** Another private window. Open the join link. Preferred name. Leave Save login unchecked. You land in the group. Manage with a *new* email does not list this group. The owner’s Manage still does.
+4. **Join with save (GWT D).** Preferred name + check Save login + email + password. That account’s Manage finds the group. Or Save login from group home after a skip.
+5. **People (GWT E).** People shows preferred names only — no emails.
+6. **Invite / PIN / schedule.** Invite: copy link, type PIN, copy share text. Settings (owner): the three day fields; invalid combos rejected. Regenerate PIN asks to confirm; new PIN once; old PIN fails; sessions stay valid.
+7. If Chicago’s day is inside the window, submit a letter + photos. After the window, Submit shows Closed.
+8. Cron (optional, needs the same env):
 
 ```bash
 curl -H "Authorization: Bearer $CRON_SECRET" http://localhost:3000/api/cron/compile
@@ -127,4 +132,4 @@ Both require `Authorization: Bearer $CRON_SECRET`.
 
 ## Schema (minimal)
 
-`groups`, `members` (unique `group_id + email` where email is not null), `months`, `submissions` (unique `month_id + member_id`), `photos`, `capsules` (`month_id` unique), plus `pin_attempts` for PIN rate limits (5 / 15 minutes / IP+group).
+`accounts` (preferred_name, unique email, password_hash), `groups`, `members` (memberships: `preferred_name`, optional `account_id`, unique `group_id + email` where email is not null, unique `account_id + group_id` where account_id is not null), `months`, `submissions` (unique `month_id + member_id`), `photos`, `capsules` (`month_id` unique), `pin_attempts` (5 / 15 minutes / IP+group), `login_attempts` (5 / 15 minutes / IP+email).
