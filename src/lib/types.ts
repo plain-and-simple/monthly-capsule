@@ -8,6 +8,7 @@ export type Group = {
   submit_start_day: number;
   submit_end_day: number;
   email_day: number;
+  force_open_year_month: string | null;
   created_at: string;
 };
 
@@ -65,6 +66,7 @@ export type Capsule = {
   month_id: string;
   compiled_at: string;
   email_sent_at: string | null;
+  email_held: boolean;
 };
 
 export type SessionPayload = {

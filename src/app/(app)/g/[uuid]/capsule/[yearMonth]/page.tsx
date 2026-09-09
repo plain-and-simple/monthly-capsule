@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { EmailGroupForm } from "@/components/email-group-form";
 import { groupDisplayName } from "@/lib/copy";
+import { canForceCycle } from "@/lib/manage";
 import { monthLabel } from "@/lib/schedule";
 import { requireGroupMember } from "@/lib/session";
 import { signedPhotoUrl } from "@/lib/photos";
@@ -19,7 +21,7 @@ export default async function CapsulePage({
     notFound();
   }
 
-  await requireGroupMember(uuid);
+  const { member: viewer } = await requireGroupMember(uuid);
   const admin = createAdminClient();
 
   const { data: month } = await admin
@@ -32,7 +34,7 @@ export default async function CapsulePage({
 
   const { data: capsule } = await admin
     .from("capsules")
-    .select("id")
+    .select("id, email_sent_at")
     .eq("month_id", month.id)
     .maybeSingle();
   if (!capsule) {
@@ -93,6 +95,9 @@ export default async function CapsulePage({
           {groupDisplayName(group?.name)}
         </h1>
       </header>
+      {canForceCycle(viewer.role) && !capsule.email_sent_at ? (
+        <EmailGroupForm groupId={uuid} yearMonth={yearMonth} />
+      ) : null}
       {letters.length === 0 ? <p>No letters this month.</p> : null}
       {letters.map(({ submission, member, photos }) => (
         <section key={submission.id} className="space-y-4 border-t border-rule pt-8">

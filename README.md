@@ -20,7 +20,7 @@ Friends write a letter (and up to six photos) each month. After the window close
 - Owner may **Regenerate PIN**. Confirm first. New PIN is shown once. The old PIN dies immediately. Existing sessions stay valid.
 - Invite is the join URL plus an optional PIN the member types, plus share text. The server never returns a PIN after create/regen. Any member.
 - People is any member. **preferred_name only** — no emails, no PIN hash.
-- Settings (schedule + regen PIN) is owner only.
+- Settings (schedule, **Capsule cycle** force open/close/email, regen PIN) is owner only. Members never see force actions.
 - Creating a group requires a studio code from `CREATE_GROUP_CODE` (default `plainandsimple` if unset). Compared trim + case-insensitive. Server rejects a missing or wrong code. Then preferred name + email + password. The account owns the group.
 - Photos: max 6 per submission. Client resizes to a 1600px long edge. Server checks MIME + size.
 - Timezone is **America/Chicago** for every group. No picker.
@@ -28,12 +28,17 @@ Friends write a letter (and up to six photos) each month. After the window close
   - Rule: `1 ≤ start ≤ end ≤ 28` **and** `end < email_day ≤ 28`.
 - One submission per member per month. In-window save upserts. Server rejects when the window is closed.
 - Compile job runs after `submit_end_day` ends (Chicago). Idempotent `capsules` row + HTML page.
-- Email job runs on `email_day`. Sends only if a capsule exists and `email_sent_at` is null. Resend skips members with no email.
+- Email job runs on `email_day`. Sends only if a capsule exists, `email_sent_at` is null, and `email_held` is false. Resend skips members with no email.
 - Owner settings labels are exactly: **Submit opens**, **Submit closes**, **Email capsule**.
+- Owner **Capsule cycle** (force, unused = calendar path unchanged):
+  - **Open submit early** opens the next closed→open period (not always this calendar month). Already open → “Already open.” No duplicate month.
+  - **Close & make capsule** (confirm; danger) always compiles HTML via `compileGroupMonth` (idempotent). Email is a separate optional step.
+  - After compile: **Email the group?** → **Send** (Resend; mark sent; no double-send) or **Not now** (`email_held`; cron `email_day` will not send until the owner Sends later).
+  - **Email group** later from View or Settings when a capsule exists and is unsent.
 - Sessions: httpOnly, Secure (prod), SameSite=Lax, host-only cookies on `capsule.plainandsimple.app`. `capsule_session` binds `member_id` + `group_id`. `capsule_account` binds `account_id`.
 - Capsules are session-gated. No public unauthenticated pages.
 
-Out of scope: PDF, phone / SMS OTP, first/last name, Apple Sign In / CloudKit, send-now, co-owners, rich editor, video, per-member schedules.
+Out of scope: PDF, phone / SMS OTP, first/last name, Apple Sign In / CloudKit, co-owners, rich editor, video, per-member schedules.
 
 ## Stack
 
@@ -55,7 +60,7 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
-Apply the SQL in `supabase/migrations/` to your Supabase project (SQL editor, or `supabase db push` if you use the CLI). The first migration creates tables, indexes, RLS, and the private storage bucket. The accounts migration adds `accounts`, `login_attempts`, `members.account_id`, and renames `display_name` → `preferred_name`.
+Apply the SQL in `supabase/migrations/` to your Supabase project (SQL editor, or `supabase db push` if you use the CLI). The first migration creates tables, indexes, RLS, and the private storage bucket. The accounts migration adds `accounts`, `login_attempts`, `members.account_id`, and renames `display_name` → `preferred_name`. The force-cycle migration adds `groups.force_open_year_month` and `capsules.email_held`.
 
 ```bash
 npm run typecheck
@@ -90,11 +95,11 @@ See `.env.example`.
 8. **Invite** `/g/[uuid]/invite` — copy join URL, optional typed PIN, and share text (URL + PIN if typed). Server never returns a PIN.
 9. **Submit** `/g/[uuid]/submit` — letter + ≤6 photos; upsert in window; “Closed.” when shut.
 10. **Capsule** `/g/[uuid]/capsule/[YYYY-MM]` — read-only HTML; session required.
-11. **Owner settings** `/g/[uuid]/settings` — the three day-of-month fields and Regenerate PIN.
+11. **Owner settings** `/g/[uuid]/settings` — the three day-of-month fields, Capsule cycle (open early / close & make / email), and Regenerate PIN.
 
 ## Dogfood path
 
-e2e is not set up. After env + **both** migrations:
+e2e is not set up. After env + **all** migrations (init, accounts, force-cycle):
 
 1. **Create (GWT B).** Open `/`. Upper-right Create Capsule Group. Studio code (local default `plainandsimple` if `CREATE_GROUP_CODE` is unset). Preferred name, email, password (8+). Copy the join link and PIN. Continue to the group home. You are the owner.
 2. **Manage (GWT A).** Private window. `/` → Manage your capsule with that email + password. No SMS. One group → group home. Sign out from `/manage` (Leave, then Your capsules, or open `/manage` directly).
@@ -103,14 +108,15 @@ e2e is not set up. After env + **both** migrations:
 5. **People (GWT E).** People shows preferred names only — no emails.
 6. **Invite / PIN / schedule.** Invite: copy link, type PIN, copy share text. Settings (owner): the three day fields; invalid combos rejected. Regenerate PIN asks to confirm; new PIN once; old PIN fails; sessions stay valid.
 7. If Chicago’s day is inside the window, submit a letter + photos. After the window, Submit shows Closed.
-8. Cron (optional, needs the same env):
+8. **Force cycle (owner).** Settings → Capsule cycle. If closed: Open submit early → group home shows Open, members can Submit. If already open: “Already open.” Close & make capsule → confirm → View capsule. Email the group? Send (Resend; sent) or Not now (in-app only; cron email_day does not send). Email group later from View or Settings until sent. A member must not see these actions.
+9. Cron (optional, needs the same env):
 
 ```bash
 curl -H "Authorization: Bearer $CRON_SECRET" http://localhost:3000/api/cron/compile
 curl -H "Authorization: Bearer $CRON_SECRET" http://localhost:3000/api/cron/email
 ```
 
-Compile is idempotent (unique `capsules.month_id`). Email sets `email_sent_at` only after a Resend key is present.
+Compile is idempotent (unique `capsules.month_id`). Email sets `email_sent_at` only after a Resend key is present. Cron skips a capsule with `email_held`.
 
 ## Jobs
 
@@ -132,4 +138,4 @@ Both require `Authorization: Bearer $CRON_SECRET`.
 
 ## Schema (minimal)
 
-`accounts` (preferred_name, unique email, password_hash), `groups`, `members` (memberships: `preferred_name`, optional `account_id`, unique `group_id + email` where email is not null, unique `account_id + group_id` where account_id is not null), `months`, `submissions` (unique `month_id + member_id`), `photos`, `capsules` (`month_id` unique), `pin_attempts` (5 / 15 minutes / IP+group), `login_attempts` (5 / 15 minutes / IP+email).
+`accounts` (preferred_name, unique email, password_hash), `groups` (`force_open_year_month` nullable), `members` (memberships: `preferred_name`, optional `account_id`, unique `group_id + email` where email is not null, unique `account_id + group_id` where account_id is not null), `months`, `submissions` (unique `month_id + member_id`), `photos`, `capsules` (`month_id` unique, `email_held` default false), `pin_attempts` (5 / 15 minutes / IP+group), `login_attempts` (5 / 15 minutes / IP+email).

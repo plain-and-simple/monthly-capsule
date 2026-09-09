@@ -7,6 +7,7 @@ import {
   canAccessInvite,
   canAccessPeople,
   canAccessSettings,
+  canForceCycle,
   canMintRegenPin,
   canRegeneratePin,
   groupChromeLinks,
@@ -58,6 +59,11 @@ describe("manage UI scenarios 1–20", () => {
   it("7. regenerate PIN is owner only", () => {
     expect(canRegeneratePin("owner")).toBe(true);
     expect(canRegeneratePin("member")).toBe(false);
+  });
+
+  it("7b. force cycle is owner only", () => {
+    expect(canForceCycle("owner")).toBe(true);
+    expect(canForceCycle("member")).toBe(false);
   });
 
   it("8. roster privacy: names and role, never email", () => {

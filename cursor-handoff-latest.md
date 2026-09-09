@@ -1,80 +1,52 @@
-# P0 Capsule UI redesign — handoff
+# Handoff — owner force-cycle (Monthly Capsule)
 
-**Repo:** https://github.com/plain-and-simple/monthly-capsule (`main`)  
-**Live host:** https://capsule.plainandsimple.app — no `basePath`  
-**Force-cycle:** out of scope this WO. Do not add it on landing or group home.
+Shipped 2026-09-09 on branch `cursor/owner-force-cycle-78c3`.
 
-## Work order (product locks)
+## What shipped
 
-1. Landing promise: **Friends write once a month. You get one capsule.**
-2. Create success: **show-once PIN + copy only** (no PIN email)
-3. Manage 1 group: **auto-enter** + **group name in header**
-4. Brand: **Plain and Simple Monthly Capsule** in header/title — kill bare “Capsule” chrome
+Owner-only **Capsule cycle** on Settings. Cron calendar path is unchanged when force is unused.
 
-Do not second-guess product. No schema break unless required for display names.
-
-## KEEP / CUT / SHIP — what shipped
-
-### LANDING `/`
-
-| | |
+| Action | Behavior |
 | --- | --- |
-| KEEP | Photo left, beige Manage right, Create secondary upper-right, email/password, Join via share only. |
-| CUT | Bare “Capsule” chrome. Underlined Create-as-link. “No phone.” Sparse default type. |
-| SHIP | Header = **Plain and Simple Monthly Capsule**. Promise line. Create = quiet secondary **button**. Right: **Manage your capsule** + fine **Sign in** · Email · Password · Continue. Tighter type/weight/rhythm. |
+| **Open submit early** | Opens the **next closed→open** period (`groups.force_open_year_month`). After this month’s window: next month. Before `submit_start_day`: this month. Already open → “Already open.” No duplicate `months` row. |
+| **Close & make capsule** | Confirm (danger). Closes the open period (or cron compile target if already closed). Always runs `compileGroupMonth` (idempotent HTML capsule). |
+| **Email the group?** | After compile succeeds, if unsent. **Send** = existing Resend path, sets `email_sent_at`, no double-send. **Not now** = `capsules.email_held`. |
+| **Email group** later | Settings and View capsule, when a capsule exists and `email_sent_at` is null. |
 
-### CREATE + SUCCESS
+Members: no Settings force actions. Server actions return “Owner only.”
 
-| | |
-| --- | --- |
-| KEEP | Studio code then setup. Show-once PIN + copy only. `CREATE_GROUP_CODE` unchanged. |
-| CUT | Quiet toast for success. Join-link card on the success screen. |
-| SHIP | **Hero success:** group name · big PIN · Copy · “Show once — save it.” Then Continue into the group. `shareUrl` still returned (Invite uses the join URL); it is not shown here. |
+**Cron coexistence (F8):** `isSubmitOpen` / compile / email target days are untouched. Email cron also skips `email_held`. If force is never used, open/close/compile/email_day behave as before.
 
-### JOIN
+**Submit gate** uses `openSubmitYearMonth` so a force-opened next month receives letters (not “always this calendar month”). A compiled/closed month does not reopen on leftover calendar days.
 
-| | |
-| --- | --- |
-| KEEP | UUID + PIN via share (`/join/[uuid]`). |
-| CUT | PIN / password label muddle. |
-| SHIP | **Group PIN** (join) vs **Password** (account). Preferred name labels stay. |
+### Schema (apply this migration)
 
-### MANAGE 0 / 1 / many
+`supabase/migrations/20260909223000_force_cycle.sql`
 
-| | |
-| --- | --- |
-| KEEP | 0 empty / 1 auto-enter / many pick. Login already routed one-group to group home. |
-| CUT | UUID rows. Manage-0 dead end (no Create; Join-a-group as the only out). |
-| SHIP | 0: **No groups yet** + Create + **Have a link? Open it to join.** 1: skip list (`/manage` redirects into the group; header = group name). Many: names only. |
+- `groups.force_open_year_month` text null (`YYYY-MM`)
+- `capsules.email_held` boolean not null default false
 
-### GROUP HOME
+Applied to the live Supabase project `monthly-capsule` (`uqqxauszzorzhmngcnvf`) on 2026-09-09. Preview/prod can dogfood without a separate SQL step.
 
-| | |
-| --- | --- |
-| KEEP | State CTA (Submit when open, View capsule when closed and a capsule exists). |
-| CUT | People / Invite / Settings as equal primaries. Force-cycle on home. |
-| SHIP | **One primary:** Submit (open) or View capsule (closed). People · Invite · Settings quiet. Header = group name. |
+### Key files
 
-### PEOPLE / INVITE / SETTINGS
+- `src/lib/cycle.ts` — next period, open window, force-close target, owner decisions
+- `src/lib/email-policy.ts` — cron send vs hold vs sent
+- `src/actions/cycle.ts` — force open / close / send / skip
+- `src/components/cycle-form.tsx` — Settings UI
+- `src/components/email-group-form.tsx` — View later-send
+- Cron routes still call `compileDueCapsules` / `sendDueCapsuleEmails`
 
-| | |
-| --- | --- |
-| KEEP | Owner-only Settings. Invite never returns a PIN. Regen confirm. Share text. |
-| CUT | Force-cycle on landing/home. |
-| SHIP | Force-cycle later as a Settings add-on only — **not in this WO**. Invite helper: “Share the link. Type the PIN if you have it. We never show it again.” Preferred name labels. |
+## How to dogfood
 
-## Constraints held
+1. Apply **all three** migrations to the Supabase project (init, accounts, force-cycle).
+2. Owner: Settings → **Capsule cycle**.
+3. If the group is **Closed** (Chicago day outside 1–8, or after a force-close): **Open submit early**. Group home should read **Open**. A second member can **Submit**. Opening again → **Already open.**
+4. **Close & make capsule** → confirm. Window closes. **View capsule** works (empty letters is fine). Prompt: **Email the group?**
+5. **Not now.** Capsule stays in-app. Call `GET /api/cron/email` with `CRON_SECRET` on/after `email_day` — it must **not** send (`skipped: held`).
+6. Settings or View → **Email group**. With `RESEND_API_KEY` it sends to members who have email and marks sent. Click again → **Already sent.**
+7. Repeat close+compile: idempotent, no second capsule row.
+8. Sign in as a member: Settings is hidden; posting the cycle actions returns Owner only.
+9. Leave force unused on another group: calendar open/close/compile/email_day unchanged.
 
-- `CREATE_GROUP_CODE`, accounts (`preferred_name` / email / password), Invite never returns PIN, regen confirm, share text.
-- Few words. Plain and Simple Monthly Capsule brand.
-- No schema migration. Unnamed groups display as **Untitled group** (display only).
-- Hosting lock: no `basePath`, no `/capsule` prefix.
-
-## Tests
-
-- `src/lib/copy.test.ts` — landing copy smoke + create success hero smoke + join/manage labels.
-- Existing manage / account / hosting / studio-code tests unchanged.
-
-## Out of scope
-
-Force-cycle (landing, group home, or Settings). PIN email. Schema changes.
+No phone/SMS. Preferred name account model unchanged. Landing not rewritten.

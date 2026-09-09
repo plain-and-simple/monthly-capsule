@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { MAX_PHOTOS, PHOTO_BUCKET } from "@/lib/constants";
 import { ensureMonth } from "@/lib/compile";
 import { deleteStoredPhotos, validatePhotoList } from "@/lib/photos";
-import { currentYearMonth, isSubmitOpen } from "@/lib/schedule";
+import { resolveSubmitWindow } from "@/lib/cycle-store";
 import { requireGroupMember } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase";
 
@@ -25,7 +25,8 @@ export async function submitLetter(
   }
 
   const { member, group } = await requireGroupMember(groupId);
-  if (!isSubmitOpen(group)) {
+  const window = await resolveSubmitWindow(group);
+  if (!window.open || !window.yearMonth) {
     return { error: "Submit is closed." };
   }
 
@@ -34,7 +35,7 @@ export async function submitLetter(
     return { error: photoError };
   }
 
-  const yearMonth = currentYearMonth();
+  const yearMonth = window.yearMonth;
   const month = await ensureMonth(groupId, yearMonth, "open");
   const admin = createAdminClient();
 

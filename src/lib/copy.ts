@@ -22,6 +22,13 @@ export const INVITE_HELPER =
 export const GROUP_PRIMARY_SUBMIT = "Submit";
 export const GROUP_PRIMARY_VIEW = "View capsule";
 
+export const CYCLE_SECTION = "Capsule cycle";
+export const CYCLE_OPEN_EARLY = "Open submit early";
+export const CYCLE_CLOSE_COMPILE = "Close & make capsule";
+export const CYCLE_SEND = "Send";
+export const CYCLE_NOT_NOW = "Not now";
+export const CYCLE_EMAIL_LATER = "Email group";
+
 export const UNTITLED_GROUP = "Untitled group";
 
 export const LANDING_CUT_PHRASES = ["No phone.", "Create Capsule Group"] as const;
