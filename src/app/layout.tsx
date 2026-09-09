@@ -14,7 +14,10 @@ const newsreader = Newsreader({
 });
 
 export const metadata: Metadata = {
-  title: "Capsule",
+  title: {
+    default: "Plain and Simple Monthly Capsule",
+    template: "%s · Plain and Simple Monthly Capsule",
+  },
   description: "A monthly letter for friends.",
 };
 
