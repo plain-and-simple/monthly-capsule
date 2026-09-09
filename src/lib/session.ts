@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { SESSION_COOKIE } from "@/lib/constants";
 import { cookieSecret } from "@/lib/env";
+import { sessionCookieOptions } from "@/lib/hosting";
 import { createAdminClient } from "@/lib/supabase";
 import type { Group, Member, SessionPayload } from "@/lib/types";
 
@@ -18,13 +19,7 @@ export async function setSession(payload: SessionPayload): Promise<void> {
     .sign(cookieSecret());
 
   const jar = await cookies();
-  jar.set(SESSION_COOKIE, token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/",
-    maxAge: 60 * 60 * 24 * 400,
-  });
+  jar.set(SESSION_COOKIE, token, sessionCookieOptions(process.env.NODE_ENV === "production"));
 }
 
 export async function getSession(): Promise<SessionPayload | null> {
@@ -47,7 +42,10 @@ export async function getSession(): Promise<SessionPayload | null> {
 
 export async function clearSession(): Promise<void> {
   const jar = await cookies();
-  jar.delete(SESSION_COOKIE);
+  jar.set(SESSION_COOKIE, "", {
+    ...sessionCookieOptions(process.env.NODE_ENV === "production"),
+    maxAge: 0,
+  });
 }
 
 export async function requireGroupMember(groupId: string): Promise<{

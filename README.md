@@ -2,7 +2,14 @@
 
 Friends write a letter (and up to six photos) each month. After the window closes, Capsule compiles a private HTML page and emails a link.
 
-Live host: [capsule.plainandsimple.app](https://capsule.plainandsimple.app) — its own Vercel project, **no `basePath`**, not inside the PlainAndSimple marketing monorepo.
+## Hosting lock (do not reopen)
+
+- Origin: [https://capsule.plainandsimple.app](https://capsule.plainandsimple.app)
+- **Separate Vercel project** from the PlainAndSimple marketing site. Not a monorepo path.
+- **No Next.js `basePath`.** No `assetPrefix`. No site-wide `/capsule` prefix.
+- **Path + rewrite** on `plainandsimple.app/capsule` was considered and **rejected**.
+- Session cookie is **host-only** on `capsule.plainandsimple.app` (`Path=/`, no `Domain` on the parent).
+- App routes are rooted at `/` (`/join/…`, `/g/…`). `/g/[uuid]/capsule/[YYYY-MM]` is a month page on this subdomain, not a marketing-site prefix.
 
 ## Product locks
 
@@ -16,7 +23,7 @@ Live host: [capsule.plainandsimple.app](https://capsule.plainandsimple.app) — 
 - Compile job runs after `submit_end_day` ends (Chicago). Idempotent `capsules` row + HTML page.
 - Email job runs on `email_day`. Sends only if a capsule exists and `email_sent_at` is null.
 - Owner settings labels are exactly: **Submit opens**, **Submit closes**, **Email capsule**.
-- Sessions: httpOnly, Secure (prod), SameSite=Lax cookie binding `member_id` + `group_id`.
+- Sessions: httpOnly, Secure (prod), SameSite=Lax, host-only cookie on `capsule.plainandsimple.app` binding `member_id` + `group_id`.
 - Capsules are session-gated. No public unauthenticated pages.
 
 Out of scope: PDF, Apple Sign In / CloudKit, PIN regen, send-now, co-owners, rich editor, video, per-member schedules.
@@ -100,11 +107,12 @@ Both require `Authorization: Bearer $CRON_SECRET`.
 
 ## Deploy (capsule.plainandsimple.app)
 
-1. New Vercel project from this repo. Framework: Next.js. **Do not set `basePath`.**
-2. Add the env vars above. Production `APP_URL=https://capsule.plainandsimple.app`.
-3. Apply `supabase/migrations` to the production Supabase project. Confirm the `capsule-photos` bucket exists and is private.
-4. Attach the domain `capsule.plainandsimple.app` (DNS at the registrar / Vercel).
-5. Confirm Vercel Cron is enabled (Pro) or call the two routes from an external scheduler with `CRON_SECRET`.
+1. **New Vercel project** from this repo (not a path on the marketing project). Framework: Next.js.
+2. Do **not** set `basePath`, `assetPrefix`, or rewrites under `/capsule`.
+3. Add the env vars above. Production `APP_URL=https://capsule.plainandsimple.app`.
+4. Apply `supabase/migrations` to the production Supabase project. Confirm the `capsule-photos` bucket exists and is private.
+5. Attach the domain `capsule.plainandsimple.app` (DNS at the registrar / Vercel). Cookies stay on that host.
+6. Confirm Vercel Cron is enabled (Pro) or call the two routes from an external scheduler with `CRON_SECRET`.
 
 ## Schema (minimal)
 
