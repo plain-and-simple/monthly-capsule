@@ -1,52 +1,52 @@
-# Handoff — owner force-cycle (Monthly Capsule)
+# Handoff — GET /manage cookie-write 500
 
-Shipped 2026-09-09 on branch `cursor/owner-force-cycle-78c3`.
+Shipped on branch `cursor/fix-manage-cookie-write-edbd`.
 
-## What shipped
+## Production bug
 
-Owner-only **Capsule cycle** on Settings. Cron calendar path is unchanged when force is unused.
+Signed-in `GET /manage` returned 500 (`digest: 1808042703`):
 
-| Action | Behavior |
-| --- | --- |
-| **Open submit early** | Opens the **next closed→open** period (`groups.force_open_year_month`). After this month’s window: next month. Before `submit_start_day`: this month. Already open → “Already open.” No duplicate `months` row. |
-| **Close & make capsule** | Confirm (danger). Closes the open period (or cron compile target if already closed). Always runs `compileGroupMonth` (idempotent HTML capsule). |
-| **Email the group?** | After compile succeeds, if unsent. **Send** = existing Resend path, sets `email_sent_at`, no double-send. **Not now** = `capsules.email_held`. |
-| **Email group** later | Settings and View capsule, when a capsule exists and `email_sent_at` is null. |
+```
+Error: Cookies can only be modified in a Server Action or Route Handler.
+```
 
-Members: no Settings force actions. Server actions return “Owner only.”
+Next.js forbids `cookies().set` during Server Component render. Two render paths wrote cookies:
 
-**Cron coexistence (F8):** `isSubmitOpen` / compile / email target days are untouched. Email cron also skips `email_held`. If force is never used, open/close/compile/email_day behave as before.
+1. **`/manage` with exactly one group** called `setSession()` then redirected to the group home.
+2. **`getAccount()`** called `clearAccountSession()` when the account JWT was present but the account row was gone (also hit from `/` and other pages that read the account).
 
-**Submit gate** uses `openSubmitYearMonth` so a force-opened next month receives letters (not “always this calendar month”). A compiled/closed month does not reopen on leftover calendar days.
+Catching the error would still leave sessions wrong. Writes moved to Route Handlers.
 
-### Schema (apply this migration)
+## Fix
 
-`supabase/migrations/20260909223000_force_cycle.sql`
+| Render situation | Before (illegal write) | After |
+| --- | --- | --- |
+| Valid account, 1 group on `GET /manage` | `setSession` in the page | `redirect("/api/session/open-solo")` — Route Handler sets the group cookie, then `redirect(/g/…)` |
+| Cookie present, JWT invalid or account missing | `clearAccountSession` in `getAccount` | `redirect("/api/session/clear")` — Route Handler expires the account cookie, then `redirect(/)` |
+| Valid account, 0 or many groups | render | unchanged (read-only) |
+| No account cookie on `/manage` | `redirect(/)` | unchanged |
 
-- `groups.force_open_year_month` text null (`YYYY-MM`)
-- `capsules.email_held` boolean not null default false
+`getAccount()` is read-only. Invalid sessions become a signed-out landing page without a 500. The stale cookie is actually expired, not left behind.
 
-Applied to the live Supabase project `monthly-capsule` (`uqqxauszzorzhmngcnvf`) on 2026-09-09. Preview/prod can dogfood without a separate SQL step.
+Login (`manageLogin`) and the group pick-list (`openManagedGroup`) already set cookies in Server Actions and are unchanged.
 
-### Key files
+## Key files
 
-- `src/lib/cycle.ts` — next period, open window, force-close target, owner decisions
-- `src/lib/email-policy.ts` — cron send vs hold vs sent
-- `src/actions/cycle.ts` — force open / close / send / skip
-- `src/components/cycle-form.tsx` — Settings UI
-- `src/components/email-group-form.tsx` — View later-send
-- Cron routes still call `compileDueCapsules` / `sendDueCapsuleEmails`
+- `src/lib/session-policy.ts` — when a write is allowed; stale-session and solo-group decisions
+- `src/lib/session.ts` — `getAccount` no longer calls `clearAccountSession`
+- `src/app/(app)/manage/page.tsx` — no `setSession` during render
+- `src/app/api/session/clear/route.ts`
+- `src/app/api/session/open-solo/route.ts`
+- `src/lib/session-policy.test.ts`
 
-## How to dogfood
+## How to verify
 
-1. Apply **all three** migrations to the Supabase project (init, accounts, force-cycle).
-2. Owner: Settings → **Capsule cycle**.
-3. If the group is **Closed** (Chicago day outside 1–8, or after a force-close): **Open submit early**. Group home should read **Open**. A second member can **Submit**. Opening again → **Already open.**
-4. **Close & make capsule** → confirm. Window closes. **View capsule** works (empty letters is fine). Prompt: **Email the group?**
-5. **Not now.** Capsule stays in-app. Call `GET /api/cron/email` with `CRON_SECRET` on/after `email_day` — it must **not** send (`skipped: held`).
-6. Settings or View → **Email group**. With `RESEND_API_KEY` it sends to members who have email and marks sent. Click again → **Already sent.**
-7. Repeat close+compile: idempotent, no second capsule row.
-8. Sign in as a member: Settings is hidden; posting the cycle actions returns Owner only.
-9. Leave force unused on another group: calendar open/close/compile/email_day unchanged.
+1. `npm test` — includes cookie-write policy + RSC source regression.
+2. Anonymous `GET /` → 200 landing.
+3. Anonymous `GET /manage` → redirect `/` (not 500).
+4. `GET /api/session/clear` → expires `capsule_account`, redirect `/`.
+5. Signed-in, **one** group: `/manage` → `/api/session/open-solo` → group home with `capsule_session` set.
+6. Signed-in, **many** groups: `/manage` renders the pick list (no cookie write).
+7. Garbage or orphaned `capsule_account` on `/` or `/manage` → `/api/session/clear` → landing, signed out, no 500.
 
-No phone/SMS. Preferred name account model unchanged. Landing not rewritten.
+No schema change. Force-cycle from PR #8 is untouched.
