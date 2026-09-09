@@ -32,59 +32,66 @@ export async function joinGroup(_prev: JoinState, formData: FormData): Promise<J
     return { error: "PIN is 6 digits." };
   }
 
-  const ip = await clientIp();
-  if (await pinAttemptsBlocked(groupId, ip)) {
-    return { error: "Too many tries. Wait a bit." };
-  }
-
-  const admin = createAdminClient();
-  const { data: group } = await admin.from("groups").select("*").eq("id", groupId).maybeSingle();
-  if (!group) {
-    return { error: "Unknown group." };
-  }
-
-  await recordPinAttempt(groupId, ip);
-  const ok = await verifyPin(pin, group.pin_hash);
-  if (!ok) {
-    return { error: "Wrong PIN." };
-  }
-
-  let memberId: string | null = null;
-
-  if (email) {
-    const { data: existing } = await admin
-      .from("members")
-      .select("id")
-      .eq("group_id", groupId)
-      .eq("email", email)
-      .maybeSingle();
-    if (existing) {
-      memberId = existing.id;
+  try {
+    const ip = await clientIp();
+    if (await pinAttemptsBlocked(groupId, ip)) {
+      return { error: "Too many tries. Wait a bit." };
     }
-  }
 
-  if (!memberId) {
-    const { data: inserted, error } = await admin
-      .from("members")
-      .insert({
-        group_id: groupId,
-        display_name: displayName,
-        email,
-        role: "member",
-      })
-      .select("id")
-      .single();
+    const admin = createAdminClient();
+    const { data: group } = await admin.from("groups").select("*").eq("id", groupId).maybeSingle();
+    if (!group) {
+      return { error: "Unknown group." };
+    }
 
-    if (error || !inserted) {
+    await recordPinAttempt(groupId, ip);
+    const ok = await verifyPin(pin, group.pin_hash);
+    if (!ok) {
+      return { error: "Wrong PIN." };
+    }
+
+    let memberId: string | null = null;
+
+    if (email) {
+      const { data: existing } = await admin
+        .from("members")
+        .select("id")
+        .eq("group_id", groupId)
+        .eq("email", email)
+        .maybeSingle();
+      if (existing) {
+        memberId = existing.id;
+      }
+    }
+
+    if (!memberId) {
+      const { data: inserted, error } = await admin
+        .from("members")
+        .insert({
+          group_id: groupId,
+          display_name: displayName,
+          email,
+          role: "member",
+        })
+        .select("id")
+        .single();
+
+      if (error || !inserted) {
+        return { error: "Could not join." };
+      }
+      memberId = inserted.id;
+    }
+
+    if (!memberId) {
       return { error: "Could not join." };
     }
-    memberId = inserted.id;
-  }
 
-  if (!memberId) {
+    await setSession({ memberId, groupId });
+    redirect(`/g/${groupId}`);
+  } catch (error) {
+    if (error && typeof error === "object" && "digest" in error) {
+      throw error;
+    }
     return { error: "Could not join." };
   }
-
-  await setSession({ memberId, groupId });
-  redirect(`/g/${groupId}`);
 }

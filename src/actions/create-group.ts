@@ -25,42 +25,46 @@ export async function createGroup(_prev: CreateState, formData: FormData): Promi
     return { ok: false, error: "Owner email required." };
   }
 
-  const pin = generatePin();
-  const pinHash = await hashPin(pin);
-  const admin = createAdminClient();
+  try {
+    const pin = generatePin();
+    const pinHash = await hashPin(pin);
+    const admin = createAdminClient();
 
-  const { data: group, error: groupError } = await admin
-    .from("groups")
-    .insert({ name, pin_hash: pinHash })
-    .select("id")
-    .single();
+    const { data: group, error: groupError } = await admin
+      .from("groups")
+      .insert({ name, pin_hash: pinHash })
+      .select("id")
+      .single();
 
-  if (groupError || !group) {
+    if (groupError || !group) {
+      return { ok: false, error: "Could not create group." };
+    }
+
+    const displayName = email.split("@")[0] || "Owner";
+    const { data: member, error: memberError } = await admin
+      .from("members")
+      .insert({
+        group_id: group.id,
+        display_name: displayName,
+        email,
+        role: "owner",
+      })
+      .select("id")
+      .single();
+
+    if (memberError || !member) {
+      return { ok: false, error: "Could not create owner." };
+    }
+
+    await setSession({ memberId: member.id, groupId: group.id });
+
+    return {
+      ok: true,
+      groupId: group.id,
+      pin,
+      shareUrl: `${appUrl()}/join/${group.id}`,
+    };
+  } catch {
     return { ok: false, error: "Could not create group." };
   }
-
-  const displayName = email.split("@")[0] || "Owner";
-  const { data: member, error: memberError } = await admin
-    .from("members")
-    .insert({
-      group_id: group.id,
-      display_name: displayName,
-      email,
-      role: "owner",
-    })
-    .select("id")
-    .single();
-
-  if (memberError || !member) {
-    return { ok: false, error: "Could not create owner." };
-  }
-
-  await setSession({ memberId: member.id, groupId: group.id });
-
-  return {
-    ok: true,
-    groupId: group.id,
-    pin,
-    shareUrl: `${appUrl()}/join/${group.id}`,
-  };
 }
