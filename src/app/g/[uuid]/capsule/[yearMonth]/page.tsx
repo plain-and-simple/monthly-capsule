@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { monthLabel } from "@/lib/schedule";
 import { requireGroupMember } from "@/lib/session";
@@ -36,9 +37,9 @@ export default async function CapsulePage({
   if (!capsule) {
     return (
       <div className="space-y-4">
-        <a href={`/g/${uuid}`} className="text-sm text-muted">
+        <Link href={`/g/${uuid}`} className="text-sm text-muted">
           Back
-        </a>
+        </Link>
         <h1 className="font-serif text-4xl">Not ready</h1>
       </div>
     );
@@ -82,9 +83,9 @@ export default async function CapsulePage({
 
   return (
     <article className="space-y-10">
-      <a href={`/g/${uuid}`} className="text-sm text-muted">
+      <Link href={`/g/${uuid}`} className="text-sm text-muted">
         Back
-      </a>
+      </Link>
       <header>
         <p className="text-xs uppercase tracking-wide text-muted">{monthLabel(yearMonth)}</p>
         <h1 className="font-serif text-4xl leading-tight">{group?.name || "Capsule"}</h1>

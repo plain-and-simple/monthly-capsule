@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { SubmitForm } from "@/components/submit-form";
 import { currentYearMonth, isSubmitOpen } from "@/lib/schedule";
 import { requireGroupMember } from "@/lib/session";
@@ -41,9 +42,9 @@ export default async function SubmitPage({ params }: { params: Promise<{ uuid: s
 
   return (
     <div className="space-y-6">
-      <a href={`/g/${uuid}`} className="text-sm text-muted">
+      <Link href={`/g/${uuid}`} className="text-sm text-muted">
         Back
-      </a>
+      </Link>
       <SubmitForm
         groupId={uuid}
         closed={!open}

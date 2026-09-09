@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { SettingsForm } from "@/components/settings-form";
 import { requireOwner } from "@/lib/session";
 
@@ -9,9 +10,9 @@ export default async function SettingsPage({ params }: { params: Promise<{ uuid:
 
   return (
     <div className="space-y-6">
-      <a href={`/g/${uuid}`} className="text-sm text-muted">
+      <Link href={`/g/${uuid}`} className="text-sm text-muted">
         Back
-      </a>
+      </Link>
       <SettingsForm group={group} />
     </div>
   );

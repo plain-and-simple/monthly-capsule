@@ -81,6 +81,10 @@ export async function joinGroup(_prev: JoinState, formData: FormData): Promise<J
     memberId = inserted.id;
   }
 
+  if (!memberId) {
+    return { error: "Could not join." };
+  }
+
   await setSession({ memberId, groupId });
   redirect(`/g/${groupId}`);
 }

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { leaveGroup } from "@/actions/leave";
 import { currentYearMonth, isSubmitOpen, monthLabel } from "@/lib/schedule";
 import { requireGroupMember } from "@/lib/session";
@@ -41,22 +42,22 @@ export default async function GroupHomePage({
       </div>
       <div className="flex flex-wrap gap-3">
         {open ? (
-          <a className="btn" href={`/g/${uuid}/submit`}>
+          <Link className="btn" href={`/g/${uuid}/submit`}>
             Submit
-          </a>
+          </Link>
         ) : (
           <span className="btn btn-ghost">Submit closed</span>
         )}
         {capsuleMonth ? (
-          <a className="btn btn-ghost" href={`/g/${uuid}/capsule/${capsuleMonth}`}>
+          <Link className="btn btn-ghost" href={`/g/${uuid}/capsule/${capsuleMonth}`}>
             View capsule
             {capsuleMonth !== thisMonth ? ` · ${monthLabel(capsuleMonth)}` : ""}
-          </a>
+          </Link>
         ) : null}
         {member.role === "owner" ? (
-          <a className="btn btn-ghost" href={`/g/${uuid}/settings`}>
+          <Link className="btn btn-ghost" href={`/g/${uuid}/settings`}>
             Settings
-          </a>
+          </Link>
         ) : null}
       </div>
       <form action={leaveGroup}>

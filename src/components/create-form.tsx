@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
+import Link from "next/link";
 import { createGroup, type CreateState } from "@/actions/create-group";
 import { CopyButton } from "@/components/copy-button";
 
@@ -28,9 +29,9 @@ export function CreateForm() {
             </div>
           </div>
         </div>
-        <a className="btn" href={`/g/${state.groupId}`}>
+        <Link className="btn" href={`/g/${state.groupId}`}>
           Continue
-        </a>
+        </Link>
       </div>
     );
   }
