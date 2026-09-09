@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { SubmitForm } from "@/components/submit-form";
-import { currentYearMonth, isSubmitOpen } from "@/lib/schedule";
+import { resolveSubmitWindow } from "@/lib/cycle-store";
 import { requireGroupMember } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase";
 
@@ -9,16 +9,19 @@ export const dynamic = "force-dynamic";
 export default async function SubmitPage({ params }: { params: Promise<{ uuid: string }> }) {
   const { uuid } = await params;
   const { group, member } = await requireGroupMember(uuid);
-  const open = isSubmitOpen(group);
+  const submitWindow = await resolveSubmitWindow(group);
+  const open = submitWindow.open;
   const admin = createAdminClient();
-  const yearMonth = currentYearMonth();
+  const yearMonth = submitWindow.yearMonth;
 
-  const { data: month } = await admin
-    .from("months")
-    .select("id")
-    .eq("group_id", uuid)
-    .eq("year_month", yearMonth)
-    .maybeSingle();
+  const { data: month } = yearMonth
+    ? await admin
+        .from("months")
+        .select("id")
+        .eq("group_id", uuid)
+        .eq("year_month", yearMonth)
+        .maybeSingle()
+    : { data: null };
 
   let initialBody = "";
   let existingPhotoCount = 0;

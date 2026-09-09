@@ -41,6 +41,28 @@ export function previousYearMonth(date: ChicagoDate): string {
   return `${date.year}-${String(date.month - 1).padStart(2, "0")}`;
 }
 
+export function nextYearMonth(date: ChicagoDate): string {
+  if (date.month === 12) {
+    return `${date.year + 1}-01`;
+  }
+  return `${date.year}-${String(date.month + 1).padStart(2, "0")}`;
+}
+
+export function parseYearMonth(yearMonth: string): ChicagoDate | null {
+  const match = /^(\d{4})-(\d{2})$/.exec(yearMonth);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  if (month < 1 || month > 12) return null;
+  return { year, month, day: 1 };
+}
+
+export function incrementYearMonth(yearMonth: string): string {
+  const parsed = parseYearMonth(yearMonth);
+  if (!parsed) return yearMonth;
+  return nextYearMonth(parsed);
+}
+
 export function currentYearMonth(now: Date = new Date()): string {
   return yearMonthString(chicagoDate(now));
 }

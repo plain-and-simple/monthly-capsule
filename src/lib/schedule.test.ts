@@ -4,6 +4,8 @@ import {
   compileTargetYearMonth,
   emailTargetYearMonth,
   isSubmitOpen,
+  incrementYearMonth,
+  nextYearMonth,
   previousYearMonth,
   validateSchedule,
   yearMonthString,
@@ -104,5 +106,7 @@ describe("compile and email targets", () => {
   it("rolls year on January compile catch-up", () => {
     expect(previousYearMonth({ year: 2027, month: 1, day: 3 })).toBe("2026-12");
     expect(yearMonthString({ year: 2026, month: 1, day: 1 })).toBe("2026-01");
+    expect(nextYearMonth({ year: 2026, month: 12, day: 20 })).toBe("2027-01");
+    expect(incrementYearMonth("2026-09")).toBe("2026-10");
   });
 });

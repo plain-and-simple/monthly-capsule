@@ -3,7 +3,8 @@ import { leaveGroup } from "@/actions/leave";
 import { GroupChrome } from "@/components/group-chrome";
 import { SaveLoginForm } from "@/components/save-login-form";
 import { GROUP_PRIMARY_SUBMIT, GROUP_PRIMARY_VIEW } from "@/lib/copy";
-import { currentYearMonth, isSubmitOpen, monthLabel } from "@/lib/schedule";
+import { resolveSubmitWindow } from "@/lib/cycle-store";
+import { currentYearMonth, monthLabel } from "@/lib/schedule";
 import { requireGroupMember } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase";
 
@@ -16,7 +17,7 @@ export default async function GroupHomePage({
 }) {
   const { uuid } = await params;
   const { group, member } = await requireGroupMember(uuid);
-  const open = isSubmitOpen(group);
+  const { open } = await resolveSubmitWindow(group);
   const admin = createAdminClient();
 
   const [{ count }, { data: compiled }] = await Promise.all([

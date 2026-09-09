@@ -31,6 +31,10 @@ export function canRegeneratePin(role: Role): boolean {
   return role === "owner";
 }
 
+export function canForceCycle(role: Role): boolean {
+  return role === "owner";
+}
+
 export function groupChromeLinks(role: Role): GroupChromeLink[] {
   const links: GroupChromeLink[] = ["people", "invite"];
   if (canAccessSettings(role)) {
@@ -55,9 +59,14 @@ export function inviteShareText(shareUrl: string, typedPin: string): string {
 }
 
 export const REGEN_CONFIRM_VALUE = "1";
+export const FORCE_CLOSE_CONFIRM_VALUE = "1";
 
 export function regenConfirmAccepted(confirm: FormDataEntryValue | null): boolean {
   return String(confirm ?? "") === REGEN_CONFIRM_VALUE;
+}
+
+export function forceCloseConfirmAccepted(confirm: FormDataEntryValue | null): boolean {
+  return String(confirm ?? "") === FORCE_CLOSE_CONFIRM_VALUE;
 }
 
 export function canMintRegenPin(role: Role, confirmed: boolean): boolean {

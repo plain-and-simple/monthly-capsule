@@ -3,6 +3,12 @@ import {
   ACCOUNT_PASSWORD_LABEL,
   CREATE_SUCCESS_COPY,
   CREATE_SUCCESS_HINT,
+  CYCLE_CLOSE_COMPILE,
+  CYCLE_EMAIL_LATER,
+  CYCLE_NOT_NOW,
+  CYCLE_OPEN_EARLY,
+  CYCLE_SECTION,
+  CYCLE_SEND,
   JOIN_PIN_LABEL,
   LANDING_CREATE_LABEL,
   LANDING_CUT_PHRASES,
@@ -84,6 +90,15 @@ describe("join and manage labels", () => {
     expect(MANAGE_EMPTY_HEADING).toBe("No groups yet");
     expect(MANAGE_EMPTY_HINT).toBe("Have a link? Open it to join.");
     expect(MANAGE_CREATE_LABEL).toBe("Create");
+  });
+
+  it("locks owner force-cycle labels", () => {
+    expect(CYCLE_SECTION).toBe("Capsule cycle");
+    expect(CYCLE_OPEN_EARLY).toBe("Open submit early");
+    expect(CYCLE_CLOSE_COMPILE).toBe("Close & make capsule");
+    expect(CYCLE_SEND).toBe("Send");
+    expect(CYCLE_NOT_NOW).toBe("Not now");
+    expect(CYCLE_EMAIL_LATER).toBe("Email group");
   });
 
   it("never falls back to bare Capsule for a group name", () => {
