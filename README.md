@@ -14,6 +14,7 @@ Friends write a letter (and up to six photos) each month. After the window close
 ## Product locks
 
 - Web join with a group UUID + PIN. PIN is generated at create, shown **once**, stored as a bcrypt hash only, never recovered.
+- Creating a group requires a studio code from `CREATE_GROUP_CODE` (default `plainandsimple` if unset). Compared trim + case-insensitive. Server rejects a missing or wrong code.
 - Owner email required at create. Member email optional; Resend skips members with no email.
 - Photos: max 6 per submission. Client resizes to a 1600px long edge. Server checks MIME + size.
 - Timezone is **America/Chicago** for every group. No picker.
@@ -69,22 +70,25 @@ See `.env.example`.
 | `COOKIE_SECRET` | ≥16 random chars; signs the session JWT |
 | `APP_URL` | Origin, no trailing slash. Local: `http://localhost:3000`. Prod: `https://capsule.plainandsimple.app` |
 | `CRON_SECRET` | Vercel Cron `Authorization: Bearer …` |
+| `CREATE_GROUP_CODE` | Studio code to create a group. Trim + case-insensitive. Default if unset: `plainandsimple`. Set on Vercel for production. |
 
 ## Screens
 
-1. **Create** `/` — optional group name + owner email → UUID + PIN shown once (copy).
-2. **Join** `/join/[uuid]` — PIN + display name + optional email → session.
-3. **Group home** `/g/[uuid]` — name, open/closed, member count, Submit / View capsule.
-4. **Submit** `/g/[uuid]/submit` — letter + ≤6 photos; upsert in window; “Closed.” when shut.
-5. **Capsule** `/g/[uuid]/capsule/[YYYY-MM]` — read-only HTML; session required.
-6. **Owner settings** `/g/[uuid]/settings` — the three day-of-month fields.
+1. **Home** `/` — Create a group, Join a group, and Open your capsule when a session exists.
+2. **Create** `/create` — studio code + optional group name + owner email → UUID + PIN shown once (copy).
+3. **Join** `/join` — join link or group ID + PIN + display name + optional email → session.
+4. **Join link** `/join/[uuid]` — PIN + display name + optional email → session.
+5. **Group home** `/g/[uuid]` — name, open/closed, member count, Submit / View capsule.
+6. **Submit** `/g/[uuid]/submit` — letter + ≤6 photos; upsert in window; “Closed.” when shut.
+7. **Capsule** `/g/[uuid]/capsule/[YYYY-MM]` — read-only HTML; session required.
+8. **Owner settings** `/g/[uuid]/settings` — the three day-of-month fields.
 
 ## Manual check: create then join a second session
 
 e2e is not set up. After env + migration:
 
-1. Browser A: create a group. Copy the join link and PIN. Continue to the group home (owner session).
-2. Browser B (or a private window): open the join link. Enter PIN, a display name, optional email. You land on the same group home as a member.
+1. Browser A: from home, Create a group. Enter the studio code (local default `plainandsimple` if `CREATE_GROUP_CODE` is unset). Copy the join link and PIN. Continue to the group home (owner session). Home then shows Open your capsule.
+2. Browser B (or a private window): Join a group from home — paste the join link or the group ID, plus PIN, a display name, optional email. Or open `/join/[uuid]`. You land on the same group home as a member.
 3. Owner: Settings — change the three day fields; invalid combos (e.g. close ≥ email day) are rejected.
 4. If Chicago’s day is inside the window, submit a letter + photos from either session. Saving again replaces that member’s letter. After the window, Submit shows Closed and the server rejects writes.
 5. Cron (optional, needs the same env):
@@ -109,7 +113,7 @@ Both require `Authorization: Bearer $CRON_SECRET`.
 
 1. **New Vercel project** from this repo (not a path on the marketing project). Framework: Next.js.
 2. Do **not** set `basePath`, `assetPrefix`, or rewrites under `/capsule`.
-3. Add the env vars above. Production `APP_URL=https://capsule.plainandsimple.app`.
+3. Add the env vars above. Production `APP_URL=https://capsule.plainandsimple.app`. Set `CREATE_GROUP_CODE` on Vercel (ops).
 4. Apply `supabase/migrations` to the production Supabase project. Confirm the `capsule-photos` bucket exists and is private.
 5. Attach the domain `capsule.plainandsimple.app` (DNS at the registrar / Vercel). Cookies stay on that host.
 6. Confirm Vercel Cron is enabled (Pro) or call the two routes from an external scheduler with `CRON_SECRET`.

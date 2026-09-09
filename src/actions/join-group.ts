@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { parseGroupId } from "@/lib/group-id";
 import { verifyPin } from "@/lib/pin";
 import { clientIp, pinAttemptsBlocked, recordPinAttempt } from "@/lib/rate-limit";
 import { setSession } from "@/lib/session";
@@ -14,7 +15,7 @@ function normalizeEmail(value: string): string | null {
 }
 
 export async function joinGroup(_prev: JoinState, formData: FormData): Promise<JoinState> {
-  const groupId = String(formData.get("uuid") ?? "").trim();
+  const groupId = parseGroupId(String(formData.get("uuid") ?? "")) ?? "";
   const pin = String(formData.get("pin") ?? "").trim();
   const displayName = String(formData.get("display_name") ?? "").trim();
   const email = normalizeEmail(String(formData.get("email") ?? ""));

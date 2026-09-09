@@ -3,13 +3,20 @@
 import { useActionState } from "react";
 import { joinGroup, type JoinState } from "@/actions/join-group";
 
-export function JoinForm({ uuid }: { uuid: string }) {
+export function JoinForm({ uuid }: { uuid?: string }) {
   const [state, action, pending] = useActionState<JoinState, FormData>(joinGroup, null);
 
   return (
     <form action={action} className="space-y-5">
       <h1 className="font-serif text-4xl leading-tight">Join</h1>
-      <input type="hidden" name="uuid" value={uuid} />
+      {uuid ? (
+        <input type="hidden" name="uuid" value={uuid} />
+      ) : (
+        <div className="field">
+          <label htmlFor="uuid">Join link or group ID</label>
+          <input id="uuid" name="uuid" required autoComplete="off" />
+        </div>
+      )}
       <div className="field">
         <label htmlFor="pin">PIN</label>
         <input
