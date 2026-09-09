@@ -4,15 +4,15 @@ import type { Role } from "@/lib/types";
 
 export function GroupChrome({ uuid, role }: { uuid: string; role: Role }) {
   return (
-    <nav className="flex flex-wrap gap-3" aria-label="Manage">
-      <Link className="btn btn-ghost" href={`/g/${uuid}/people`}>
+    <nav className="flex flex-wrap gap-x-4 gap-y-2" aria-label="Manage">
+      <Link className="link-quiet" href={`/g/${uuid}/people`}>
         People
       </Link>
-      <Link className="btn btn-ghost" href={`/g/${uuid}/invite`}>
+      <Link className="link-quiet" href={`/g/${uuid}/invite`}>
         Invite
       </Link>
       {canAccessSettings(role) ? (
-        <Link className="btn btn-ghost" href={`/g/${uuid}/settings`}>
+        <Link className="link-quiet" href={`/g/${uuid}/settings`}>
           Settings
         </Link>
       ) : null}

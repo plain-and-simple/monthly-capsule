@@ -12,7 +12,7 @@ export function SettingsForm({ group }: { group: Group }) {
 
   return (
     <form action={action} className="space-y-5">
-      <h1 className="font-serif text-4xl leading-tight">Settings</h1>
+      <h1 className="font-serif text-4xl font-medium leading-tight">Settings</h1>
       <p className="text-muted">Days of the month. America/Chicago.</p>
       <input type="hidden" name="groupId" value={group.id} />
       <div className="field">

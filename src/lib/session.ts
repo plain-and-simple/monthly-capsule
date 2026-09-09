@@ -2,6 +2,7 @@ import "server-only";
 import { jwtVerify, SignJWT } from "jose";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { cache } from "react";
 import { ACCOUNT_COOKIE, SESSION_COOKIE } from "@/lib/constants";
 import { cookieSecret } from "@/lib/env";
 import { sessionCookieOptions } from "@/lib/hosting";
@@ -48,10 +49,10 @@ export async function clearSession(): Promise<void> {
   });
 }
 
-export async function requireGroupMember(groupId: string): Promise<{
+export const requireGroupMember = cache(async (groupId: string): Promise<{
   member: Member;
   group: Group;
-}> {
+}> => {
   const session = await getSession();
   if (!session || session.groupId !== groupId) {
     redirect(`/join/${groupId}`);
@@ -71,7 +72,7 @@ export async function requireGroupMember(groupId: string): Promise<{
     member: member as Member,
     group: group as Group,
   };
-}
+});
 
 export async function requireOwner(groupId: string) {
   const ctx = await requireGroupMember(groupId);

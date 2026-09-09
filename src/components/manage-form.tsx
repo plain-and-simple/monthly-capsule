@@ -2,6 +2,11 @@
 
 import { useActionState } from "react";
 import { manageLogin, type ManageLoginState } from "@/actions/manage-login";
+import {
+  ACCOUNT_PASSWORD_LABEL,
+  LANDING_MANAGE_HEADING,
+  LANDING_SIGN_IN,
+} from "@/lib/copy";
 
 export function ManageForm() {
   const [state, action, pending] = useActionState<ManageLoginState, FormData>(
@@ -10,15 +15,17 @@ export function ManageForm() {
   );
 
   return (
-    <form action={action} className="space-y-5">
-      <h1 className="font-serif text-4xl leading-tight">Manage your capsule</h1>
-      <p className="text-muted">Email and password. No phone.</p>
+    <form action={action} className="space-y-4">
+      <div className="space-y-1">
+        <h1 className="font-serif text-3xl font-medium leading-tight">{LANDING_MANAGE_HEADING}</h1>
+        <p className="landing-sign-in">{LANDING_SIGN_IN}</p>
+      </div>
       <div className="field">
         <label htmlFor="email">Email</label>
         <input id="email" name="email" type="email" required autoComplete="email" />
       </div>
       <div className="field">
-        <label htmlFor="password">Password</label>
+        <label htmlFor="password">{ACCOUNT_PASSWORD_LABEL}</label>
         <input
           id="password"
           name="password"

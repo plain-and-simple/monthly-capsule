@@ -10,7 +10,7 @@ import { createAdminClient } from "@/lib/supabase";
 import type { Account } from "@/lib/types";
 
 export type CreateState =
-  | { ok: true; groupId: string; pin: string; shareUrl: string }
+  | { ok: true; groupId: string; groupName: string; pin: string; shareUrl: string }
   | { ok: false; error: string }
   | null;
 
@@ -89,6 +89,7 @@ export async function createGroup(_prev: CreateState, formData: FormData): Promi
     return {
       ok: true,
       groupId: group.id,
+      groupName: name,
       pin,
       shareUrl: `${appUrl()}/join/${group.id}`,
     };
