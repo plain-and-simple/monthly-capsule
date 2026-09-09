@@ -1,6 +1,6 @@
 "use server";
 
-import { canRegeneratePin } from "@/lib/manage";
+import { canRegeneratePin, regenConfirmAccepted } from "@/lib/manage";
 import { generatePin, hashPin } from "@/lib/pin";
 import { requireOwner } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase";
@@ -20,6 +20,9 @@ export async function regeneratePin(
     const { member } = await requireOwner(groupId);
     if (!canRegeneratePin(member.role)) {
       return { ok: false, error: "Owner only." };
+    }
+    if (!regenConfirmAccepted(formData.get("confirm"))) {
+      return { ok: false, error: "Confirm to regenerate." };
     }
 
     const pin = generatePin();

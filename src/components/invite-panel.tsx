@@ -2,9 +2,11 @@
 
 import { useState } from "react";
 import { CopyButton } from "@/components/copy-button";
+import { inviteShareText } from "@/lib/manage";
 
 export function InvitePanel({ shareUrl }: { shareUrl: string }) {
   const [pin, setPin] = useState("");
+  const shareText = inviteShareText(shareUrl, pin);
 
   return (
     <div className="space-y-6">
@@ -33,6 +35,9 @@ export function InvitePanel({ shareUrl }: { shareUrl: string }) {
               <CopyButton text={pin} label="Copy PIN" />
             </div>
           ) : null}
+        </div>
+        <div>
+          <CopyButton text={shareText} label="Copy share text" />
         </div>
       </div>
     </div>

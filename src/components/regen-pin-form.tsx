@@ -1,14 +1,16 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { regeneratePin, type RegenPinState } from "@/actions/regenerate-pin";
 import { CopyButton } from "@/components/copy-button";
+import { REGEN_CONFIRM_VALUE } from "@/lib/manage";
 
 export function RegenPinForm({ groupId }: { groupId: string }) {
   const [state, action, pending] = useActionState<RegenPinState, FormData>(
     regeneratePin,
     null,
   );
+  const [confirming, setConfirming] = useState(false);
 
   if (state?.ok) {
     return (
@@ -26,14 +28,38 @@ export function RegenPinForm({ groupId }: { groupId: string }) {
     );
   }
 
+  if (!confirming) {
+    return (
+      <div className="space-y-4">
+        <h2 className="font-serif text-2xl leading-tight">PIN</h2>
+        {state && !state.ok ? <p className="err">{state.error}</p> : null}
+        <button className="btn btn-ghost" type="button" onClick={() => setConfirming(true)}>
+          Regenerate PIN
+        </button>
+      </div>
+    );
+  }
+
   return (
     <form action={action} className="space-y-4">
       <h2 className="font-serif text-2xl leading-tight">PIN</h2>
+      <p className="text-muted">The current PIN will stop working.</p>
       <input type="hidden" name="groupId" value={groupId} />
+      <input type="hidden" name="confirm" value={REGEN_CONFIRM_VALUE} />
       {state && !state.ok ? <p className="err">{state.error}</p> : null}
-      <button className="btn btn-ghost" type="submit" disabled={pending}>
-        {pending ? "Regenerating…" : "Regenerate PIN"}
-      </button>
+      <div className="flex flex-wrap gap-2">
+        <button
+          className="btn btn-ghost"
+          type="button"
+          disabled={pending}
+          onClick={() => setConfirming(false)}
+        >
+          Cancel
+        </button>
+        <button className="btn" type="submit" disabled={pending}>
+          {pending ? "Regenerating…" : "Regenerate PIN"}
+        </button>
+      </div>
     </form>
   );
 }
