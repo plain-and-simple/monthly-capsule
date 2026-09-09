@@ -10,7 +10,8 @@ import {
   groupDisplayName,
 } from "@/lib/copy";
 import { listAccountGroups } from "@/lib/memberships";
-import { requireAccount, setSession } from "@/lib/session";
+import { decideManageSolo } from "@/lib/session-policy";
+import { requireAccount } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
@@ -18,13 +19,9 @@ export default async function ManagePage() {
   const account = await requireAccount();
   const groups = await listAccountGroups(account.id);
 
-  if (groups.length === 1) {
-    const membership = groups[0]!;
-    await setSession({
-      memberId: membership.member.id,
-      groupId: membership.group.id,
-    });
-    redirect(`/g/${membership.group.id}`);
+  const solo = decideManageSolo(groups.length);
+  if (solo.action === "open_via_route") {
+    redirect(solo.path);
   }
 
   return (

@@ -6,6 +6,7 @@ import { cache } from "react";
 import { ACCOUNT_COOKIE, SESSION_COOKIE } from "@/lib/constants";
 import { cookieSecret } from "@/lib/env";
 import { sessionCookieOptions } from "@/lib/hosting";
+import { decideAccountSession } from "@/lib/session-policy";
 import { createAdminClient } from "@/lib/supabase";
 import type { Account, AccountSessionPayload, Group, Member, SessionPayload } from "@/lib/types";
 
@@ -119,19 +120,31 @@ export async function clearAccountSession(): Promise<void> {
 }
 
 export async function getAccount(): Promise<Account | null> {
+  const jar = await cookies();
+  const cookiePresent = Boolean(jar.get(ACCOUNT_COOKIE)?.value);
   const session = await getAccountSession();
-  if (!session) return null;
 
-  const admin = createAdminClient();
-  const { data: account } = await admin
-    .from("accounts")
-    .select("*")
-    .eq("id", session.accountId)
-    .maybeSingle();
+  let account: Account | null = null;
+  if (session) {
+    const admin = createAdminClient();
+    const { data } = await admin
+      .from("accounts")
+      .select("*")
+      .eq("id", session.accountId)
+      .maybeSingle();
+    account = (data as Account | null) ?? null;
+  }
 
-  if (!account) {
-    await clearAccountSession();
+  const decision = decideAccountSession({
+    cookiePresent,
+    payloadValid: Boolean(session),
+    accountFound: Boolean(account),
+  });
+  if (decision.action === "anonymous") {
     return null;
+  }
+  if (decision.action === "clear_via_route") {
+    redirect(decision.path);
   }
 
   return account as Account;
