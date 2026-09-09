@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { parseGroupId } from "@/lib/group-id";
+import { JOIN_RATE_LIMITED, pinJoinError, pinJoinOutcome } from "@/lib/manage";
 import { verifyPin } from "@/lib/pin";
 import { clientIp, pinAttemptsBlocked, recordPinAttempt } from "@/lib/rate-limit";
 import { setSession } from "@/lib/session";
@@ -35,8 +36,9 @@ export async function joinGroup(_prev: JoinState, formData: FormData): Promise<J
 
   try {
     const ip = await clientIp();
-    if (await pinAttemptsBlocked(groupId, ip)) {
-      return { error: "Too many tries. Wait a bit." };
+    const blocked = await pinAttemptsBlocked(groupId, ip);
+    if (blocked) {
+      return { error: JOIN_RATE_LIMITED };
     }
 
     const admin = createAdminClient();
@@ -47,8 +49,9 @@ export async function joinGroup(_prev: JoinState, formData: FormData): Promise<J
 
     await recordPinAttempt(groupId, ip);
     const ok = await verifyPin(pin, group.pin_hash);
-    if (!ok) {
-      return { error: "Wrong PIN." };
+    const pinError = pinJoinError(pinJoinOutcome(false, ok));
+    if (pinError) {
+      return { error: pinError };
     }
 
     let memberId: string | null = null;

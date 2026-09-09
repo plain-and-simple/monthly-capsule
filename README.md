@@ -14,6 +14,10 @@ Friends write a letter (and up to six photos) each month. After the window close
 ## Product locks
 
 - Web join with a group UUID + PIN. PIN is generated at create, shown **once**, stored as a bcrypt hash only, never recovered.
+- Owner may **Regenerate PIN**. New PIN is shown once. The old PIN dies immediately. Existing sessions stay valid.
+- Invite is the join URL plus an optional PIN the member types. The server never returns a PIN after create/regen.
+- People is any member. Names only — no emails, no PIN hash.
+- Settings (schedule + regen PIN) is owner only.
 - Creating a group requires a studio code from `CREATE_GROUP_CODE` (default `plainandsimple` if unset). Compared trim + case-insensitive. Server rejects a missing or wrong code.
 - Owner email required at create. Member email optional; Resend skips members with no email.
 - Photos: max 6 per submission. Client resizes to a 1600px long edge. Server checks MIME + size.
@@ -27,7 +31,7 @@ Friends write a letter (and up to six photos) each month. After the window close
 - Sessions: httpOnly, Secure (prod), SameSite=Lax, host-only cookie on `capsule.plainandsimple.app` binding `member_id` + `group_id`.
 - Capsules are session-gated. No public unauthenticated pages.
 
-Out of scope: PDF, Apple Sign In / CloudKit, PIN regen, send-now, co-owners, rich editor, video, per-member schedules.
+Out of scope: PDF, Apple Sign In / CloudKit, send-now, co-owners, rich editor, video, per-member schedules.
 
 ## Stack
 
@@ -78,10 +82,12 @@ See `.env.example`.
 2. **Create** `/create` — studio code + optional group name + owner email → UUID + PIN shown once (copy).
 3. **Join** `/join` — join link or group ID + PIN + display name + optional email → session.
 4. **Join link** `/join/[uuid]` — PIN + display name + optional email → session.
-5. **Group home** `/g/[uuid]` — name, open/closed, member count, Submit / View capsule.
-6. **Submit** `/g/[uuid]/submit` — letter + ≤6 photos; upsert in window; “Closed.” when shut.
-7. **Capsule** `/g/[uuid]/capsule/[YYYY-MM]` — read-only HTML; session required.
-8. **Owner settings** `/g/[uuid]/settings` — the three day-of-month fields.
+5. **Group home** `/g/[uuid]` — name, open/closed, member count, Submit / View capsule, People, Invite, Settings (owner).
+6. **People** `/g/[uuid]/people` — display names. Any member.
+7. **Invite** `/g/[uuid]/invite` — copy join URL; optional typed PIN (not from the server).
+8. **Submit** `/g/[uuid]/submit` — letter + ≤6 photos; upsert in window; “Closed.” when shut.
+9. **Capsule** `/g/[uuid]/capsule/[YYYY-MM]` — read-only HTML; session required.
+10. **Owner settings** `/g/[uuid]/settings` — the three day-of-month fields and Regenerate PIN.
 
 ## Manual check: create then join a second session
 
@@ -89,9 +95,10 @@ e2e is not set up. After env + migration:
 
 1. Browser A: from home, Create a group. Enter the studio code (local default `plainandsimple` if `CREATE_GROUP_CODE` is unset). Copy the join link and PIN. Continue to the group home (owner session). Home then shows Open your capsule.
 2. Browser B (or a private window): Join a group from home — paste the join link or the group ID, plus PIN, a display name, optional email. Or open `/join/[uuid]`. You land on the same group home as a member.
-3. Owner: Settings — change the three day fields; invalid combos (e.g. close ≥ email day) are rejected.
-4. If Chicago’s day is inside the window, submit a letter + photos from either session. Saving again replaces that member’s letter. After the window, Submit shows Closed and the server rejects writes.
-5. Cron (optional, needs the same env):
+3. Owner: Settings — change the three day fields; invalid combos (e.g. close ≥ email day) are rejected. Regenerate PIN; the new PIN is shown once; join with the old PIN fails; the owner session still opens the group.
+4. Member: People and Invite work. Settings redirects home. Invite copies the join URL and never shows a stored PIN. People lists names only.
+5. If Chicago’s day is inside the window, submit a letter + photos from either session. Saving again replaces that member’s letter. After the window, Submit shows Closed and the server rejects writes.
+6. Cron (optional, needs the same env):
 
 ```bash
 curl -H "Authorization: Bearer $CRON_SECRET" http://localhost:3000/api/cron/compile
