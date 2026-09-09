@@ -26,6 +26,8 @@ Members: no Settings force actions. Server actions return “Owner only.”
 - `groups.force_open_year_month` text null (`YYYY-MM`)
 - `capsules.email_held` boolean not null default false
 
+Applied to the live Supabase project `monthly-capsule` (`uqqxauszzorzhmngcnvf`) on 2026-09-09. Preview/prod can dogfood without a separate SQL step.
+
 ### Key files
 
 - `src/lib/cycle.ts` — next period, open window, force-close target, owner decisions
