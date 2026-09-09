@@ -1,7 +1,7 @@
 import "server-only";
 import { Resend } from "resend";
 import { appUrl, resendApiKey, resendFromEmail } from "@/lib/env";
-import { emailTargetYearMonth, monthLabel } from "@/lib/schedule";
+import { emailTargetYearMonth } from "@/lib/schedule";
 import { createAdminClient } from "@/lib/supabase";
 import type { Capsule, Group, Member, Month } from "@/lib/types";
 
@@ -59,7 +59,6 @@ async function sendCapsuleEmail(group: Group, month: Month, capsule: Capsule) {
   const recipients = ((members ?? []) as Member[]).filter((member) => member.email);
   const key = resendApiKey();
   const link = `${appUrl()}/g/${group.id}/capsule/${month.year_month}`;
-  const title = `${group.name || "Capsule"} — ${monthLabel(month.year_month)}`;
 
   if (!key) {
     return 0;
@@ -71,7 +70,7 @@ async function sendCapsuleEmail(group: Group, month: Month, capsule: Capsule) {
       await resend.emails.send({
         from: resendFromEmail(),
         to: member.email as string,
-        subject: title,
+        subject: "Your monthly capsule is ready",
         html: `<p>The capsule is ready.</p><p><a href="${link}">Read it</a></p>`,
       });
     }

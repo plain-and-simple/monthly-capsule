@@ -1,4 +1,4 @@
-# Monthly Capsule
+# Plain and Simple Monthly Capsule
 
 Friends write a letter (and up to six photos) each month. After the window closes, Capsule compiles a private HTML page and emails a link.
 

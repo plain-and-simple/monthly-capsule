@@ -11,7 +11,7 @@ export function CreateForm() {
   if (state?.ok) {
     return (
       <div className="space-y-6">
-        <h1 className="font-serif text-4xl leading-tight">Share this once</h1>
+        <h1 className="font-serif text-4xl leading-tight">Join with this link and PIN</h1>
         <p className="text-muted">PIN is shown once. It cannot be recovered.</p>
         <div className="space-y-4 rounded-xl border border-rule bg-card p-5">
           <div>
@@ -38,7 +38,7 @@ export function CreateForm() {
 
   return (
     <form action={action} className="space-y-5">
-      <h1 className="font-serif text-4xl leading-tight">Start a group</h1>
+      <h1 className="font-serif text-4xl leading-tight">Create a group</h1>
       <p className="text-muted">A monthly letter. Photos optional.</p>
       <div className="field">
         <label htmlFor="name">Group name</label>
