@@ -84,3 +84,50 @@ button {
   color: var(--color-accent);
   font-size: 0.95rem;
 }
+
+.landing {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 1fr;
+}
+
+.landing-photo {
+  position: relative;
+  min-height: 42vh;
+  background: #e8dfd2;
+}
+
+.landing-panel {
+  display: flex;
+  flex-direction: column;
+  padding: 1.5rem 1.25rem 2.5rem;
+}
+
+.landing-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.landing-form {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: center;
+  padding-top: 2.5rem;
+}
+
+@media (min-width: 800px) {
+  .landing {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .landing-photo {
+    min-height: 100vh;
+  }
+
+  .landing-panel {
+    padding: 2rem 2.5rem 3rem;
+  }
+}

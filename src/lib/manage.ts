@@ -3,11 +3,11 @@ import type { Role, SessionPayload } from "@/lib/types";
 export const JOIN_WRONG_PIN = "Wrong PIN.";
 export const JOIN_RATE_LIMITED = "Too many tries. Wait a bit.";
 
-export const ROSTER_SELECT = "id, display_name, role, joined_at";
+export const ROSTER_SELECT = "id, preferred_name, role, joined_at";
 
 export type RosterPerson = {
   id: string;
-  display_name: string;
+  preferred_name: string;
   role: Role;
 };
 
@@ -71,13 +71,13 @@ export function payloadHasPinField(payload: object): boolean {
 export function toRoster(
   members: Array<{
     id: string;
-    display_name: string;
+    preferred_name: string;
     role: Role;
     email?: string | null;
     pin_hash?: string;
   }>,
 ): RosterPerson[] {
-  return members.map(({ id, display_name, role }) => ({ id, display_name, role }));
+  return members.map(({ id, preferred_name, role }) => ({ id, preferred_name, role }));
 }
 
 export function rosterLeaksPrivate(people: object[]): boolean {

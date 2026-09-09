@@ -93,7 +93,7 @@ export default async function CapsulePage({
       {letters.length === 0 ? <p>No letters this month.</p> : null}
       {letters.map(({ submission, member, photos }) => (
         <section key={submission.id} className="space-y-4 border-t border-rule pt-8">
-          <h2 className="font-serif text-2xl">{member?.display_name || "Friend"}</h2>
+          <h2 className="font-serif text-2xl">{member?.preferred_name || "Friend"}</h2>
           {submission.body ? (
             <p className="whitespace-pre-wrap font-serif text-lg leading-relaxed">
               {submission.body}

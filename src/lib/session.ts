@@ -2,11 +2,11 @@ import "server-only";
 import { jwtVerify, SignJWT } from "jose";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { SESSION_COOKIE } from "@/lib/constants";
+import { ACCOUNT_COOKIE, SESSION_COOKIE } from "@/lib/constants";
 import { cookieSecret } from "@/lib/env";
 import { sessionCookieOptions } from "@/lib/hosting";
 import { createAdminClient } from "@/lib/supabase";
-import type { Group, Member, SessionPayload } from "@/lib/types";
+import type { Account, AccountSessionPayload, Group, Member, SessionPayload } from "@/lib/types";
 
 export async function setSession(payload: SessionPayload): Promise<void> {
   const token = await new SignJWT({
@@ -79,4 +79,67 @@ export async function requireOwner(groupId: string) {
     redirect(`/g/${groupId}`);
   }
   return ctx;
+}
+
+export async function setAccountSession(payload: AccountSessionPayload): Promise<void> {
+  const token = await new SignJWT({ accountId: payload.accountId })
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuedAt()
+    .setExpirationTime("400d")
+    .sign(cookieSecret());
+
+  const jar = await cookies();
+  jar.set(ACCOUNT_COOKIE, token, sessionCookieOptions(process.env.NODE_ENV === "production"));
+}
+
+export async function getAccountSession(): Promise<AccountSessionPayload | null> {
+  const jar = await cookies();
+  const token = jar.get(ACCOUNT_COOKIE)?.value;
+  if (!token) return null;
+
+  try {
+    const { payload } = await jwtVerify(token, cookieSecret());
+    const accountId = payload.accountId;
+    if (typeof accountId !== "string") {
+      return null;
+    }
+    return { accountId };
+  } catch {
+    return null;
+  }
+}
+
+export async function clearAccountSession(): Promise<void> {
+  const jar = await cookies();
+  jar.set(ACCOUNT_COOKIE, "", {
+    ...sessionCookieOptions(process.env.NODE_ENV === "production"),
+    maxAge: 0,
+  });
+}
+
+export async function getAccount(): Promise<Account | null> {
+  const session = await getAccountSession();
+  if (!session) return null;
+
+  const admin = createAdminClient();
+  const { data: account } = await admin
+    .from("accounts")
+    .select("*")
+    .eq("id", session.accountId)
+    .maybeSingle();
+
+  if (!account) {
+    await clearAccountSession();
+    return null;
+  }
+
+  return account as Account;
+}
+
+export async function requireAccount(): Promise<Account> {
+  const account = await getAccount();
+  if (!account) {
+    redirect("/");
+  }
+  return account;
 }

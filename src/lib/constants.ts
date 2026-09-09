@@ -11,6 +11,10 @@ export const PIN_ATTEMPT_MAX = 5;
 export const PHOTO_BUCKET = "capsule-photos";
 
 export const SESSION_COOKIE = "capsule_session";
+export const ACCOUNT_COOKIE = "capsule_account";
+
+export const LOGIN_ATTEMPT_WINDOW_MS = 15 * 60 * 1000;
+export const LOGIN_ATTEMPT_MAX = 5;
 
 export const DEFAULT_SUBMIT_START_DAY = 1;
 export const DEFAULT_SUBMIT_END_DAY = 8;

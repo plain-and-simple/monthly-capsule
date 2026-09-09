@@ -1,34 +1,27 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { parseJoinIntent, parsePreferredName, wantsSaveLogin } from "@/lib/account";
 import { parseGroupId } from "@/lib/group-id";
 import { JOIN_RATE_LIMITED, pinJoinError, pinJoinOutcome } from "@/lib/manage";
+import { createAccount, linkMembership } from "@/lib/memberships";
 import { verifyPin } from "@/lib/pin";
 import { clientIp, pinAttemptsBlocked, recordPinAttempt } from "@/lib/rate-limit";
-import { setSession } from "@/lib/session";
+import { getAccountSession, setAccountSession, setSession } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase";
+import type { Account } from "@/lib/types";
 
 export type JoinState = { error: string } | null;
-
-function normalizeEmail(value: string): string | null {
-  const email = value.trim().toLowerCase();
-  return email || null;
-}
 
 export async function joinGroup(_prev: JoinState, formData: FormData): Promise<JoinState> {
   const groupId = parseGroupId(String(formData.get("uuid") ?? "")) ?? "";
   const pin = String(formData.get("pin") ?? "").trim();
-  const displayName = String(formData.get("display_name") ?? "").trim();
-  const email = normalizeEmail(String(formData.get("email") ?? ""));
+  const preferredNameInput = String(
+    formData.get("preferred_name") ?? formData.get("display_name") ?? "",
+  );
 
   if (!/^[0-9a-f-]{36}$/i.test(groupId)) {
     return { error: "Unknown group." };
-  }
-  if (!displayName || displayName.length > 40) {
-    return { error: "Display name required." };
-  }
-  if (email && (!email.includes("@") || email.length > 254)) {
-    return { error: "Email looks wrong." };
   }
   if (!/^\d{6}$/.test(pin)) {
     return { error: "PIN is 6 digits." };
@@ -54,36 +47,80 @@ export async function joinGroup(_prev: JoinState, formData: FormData): Promise<J
       return { error: pinError };
     }
 
-    let memberId: string | null = null;
-
-    if (email) {
-      const { data: existing } = await admin
-        .from("members")
-        .select("id")
-        .eq("group_id", groupId)
-        .eq("email", email)
+    const accountSession = await getAccountSession();
+    let account: Account | null = null;
+    if (accountSession) {
+      const { data } = await admin
+        .from("accounts")
+        .select("*")
+        .eq("id", accountSession.accountId)
         .maybeSingle();
-      if (existing) {
-        memberId = existing.id;
-      }
+      account = (data as Account | null) ?? null;
     }
 
-    if (!memberId) {
-      const { data: inserted, error } = await admin
-        .from("members")
-        .insert({
-          group_id: groupId,
-          display_name: displayName,
-          email,
-          role: "member",
-        })
-        .select("id")
-        .single();
+    let memberId: string | null = null;
 
-      if (error || !inserted) {
-        return { error: "Could not join." };
+    if (account) {
+      const preferredName =
+        parsePreferredName(preferredNameInput) ?? account.preferred_name;
+      const member = await linkMembership({
+        account,
+        groupId,
+        preferredName,
+      });
+      if ("error" in member) {
+        return { error: member.error };
       }
-      memberId = inserted.id;
+      memberId = member.id;
+    } else {
+      const intent = parseJoinIntent({
+        preferred_name: preferredNameInput,
+        save_login: wantsSaveLogin(formData.get("save_login")),
+        email: String(formData.get("email") ?? ""),
+        password: String(formData.get("password") ?? ""),
+      });
+      if ("error" in intent) {
+        return { error: intent.error };
+      }
+
+      if (intent.mode === "save_login") {
+        const created = await createAccount({
+          preferredName: intent.preferredName,
+          email: intent.email,
+          password: intent.password,
+        });
+        if ("error" in created) {
+          return { error: created.error };
+        }
+        account = created;
+        const member = await linkMembership({
+          account,
+          groupId,
+          preferredName: intent.preferredName,
+        });
+        if ("error" in member) {
+          return { error: member.error };
+        }
+        memberId = member.id;
+        await setAccountSession({ accountId: account.id });
+      } else {
+        const { data: inserted, error } = await admin
+          .from("members")
+          .insert({
+            group_id: groupId,
+            preferred_name: intent.preferredName,
+            email: null,
+            role: "member",
+            account_id: null,
+          })
+          .select("id")
+          .single();
+
+        if (error || !inserted) {
+          return { error: "Could not join." };
+        }
+        memberId = inserted.id;
+      }
     }
 
     if (!memberId) {

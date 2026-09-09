@@ -11,13 +11,26 @@ export type Group = {
   created_at: string;
 };
 
+export type Account = {
+  id: string;
+  preferred_name: string;
+  email: string;
+  password_hash: string;
+  created_at: string;
+};
+
 export type Member = {
   id: string;
   group_id: string;
-  display_name: string;
+  preferred_name: string;
   email: string | null;
   role: Role;
+  account_id: string | null;
   joined_at: string;
+};
+
+export type AccountSessionPayload = {
+  accountId: string;
 };
 
 export type Month = {
