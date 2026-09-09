@@ -7,12 +7,15 @@ import {
   canAccessInvite,
   canAccessPeople,
   canAccessSettings,
+  canMintRegenPin,
   canRegeneratePin,
   groupChromeLinks,
   invitePayload,
+  inviteShareText,
   payloadHasPinField,
   pinJoinError,
   pinJoinOutcome,
+  regenConfirmAccepted,
   regenPinOnce,
   rosterLeaksPrivate,
   sessionRejoinsGroup,
@@ -157,5 +160,42 @@ describe("manage UI scenarios 1–20", () => {
     expect(pinJoinOutcome(true, true)).toBe("rate_limited");
     expect(pinJoinError("rate_limited")).toBe(JOIN_RATE_LIMITED);
     expect(JOIN_RATE_LIMITED).toBe("Too many tries. Wait a bit.");
+  });
+});
+
+const shareUrl = `https://capsule.plainandsimple.app/join/${groupId}`;
+
+describe("invite share text (scenarios 9–11)", () => {
+  it("9. copy share text is the join URL when the typed PIN is blank", () => {
+    expect(inviteShareText(shareUrl, "")).toBe(shareUrl);
+    expect(inviteShareText(shareUrl, "   ")).toBe(shareUrl);
+  });
+
+  it("10. copy share text includes the typed PIN", () => {
+    expect(inviteShareText(shareUrl, "123456")).toBe(`${shareUrl}\nPIN 123456`);
+  });
+
+  it("11. share text PIN is only what the inviter typed — server payload still has none", () => {
+    const payload = invitePayload("https://capsule.plainandsimple.app", groupId);
+    expect(payloadHasPinField(payload)).toBe(false);
+    expect(inviteShareText(payload.shareUrl, "")).toBe(payload.shareUrl);
+    expect(inviteShareText(payload.shareUrl, "654321")).toContain("654321");
+    expect(inviteShareText(payload.shareUrl, "654321")).not.toContain("pin_hash");
+  });
+});
+
+describe("regen PIN confirm (scenarios 12–13)", () => {
+  it("12. owner must confirm before a new PIN can be minted", () => {
+    expect(regenConfirmAccepted(null)).toBe(false);
+    expect(regenConfirmAccepted("")).toBe(false);
+    expect(regenConfirmAccepted("1")).toBe(true);
+    expect(canMintRegenPin("owner", false)).toBe(false);
+    expect(canMintRegenPin("owner", true)).toBe(true);
+  });
+
+  it("13. members still cannot regen; confirm does not change that", () => {
+    expect(canRegeneratePin("member")).toBe(false);
+    expect(canMintRegenPin("member", true)).toBe(false);
+    expect(canMintRegenPin("member", false)).toBe(false);
   });
 });

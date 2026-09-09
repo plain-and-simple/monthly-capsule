@@ -47,6 +47,23 @@ export function invitePayload(origin: string, groupId: string): { shareUrl: stri
   return { shareUrl: inviteShareUrl(origin, groupId) };
 }
 
+/** Client-only share string. PIN is whatever the inviter typed — never from the server. */
+export function inviteShareText(shareUrl: string, typedPin: string): string {
+  const pin = typedPin.replace(/\D/g, "");
+  if (!pin) return shareUrl;
+  return `${shareUrl}\nPIN ${pin}`;
+}
+
+export const REGEN_CONFIRM_VALUE = "1";
+
+export function regenConfirmAccepted(confirm: FormDataEntryValue | null): boolean {
+  return String(confirm ?? "") === REGEN_CONFIRM_VALUE;
+}
+
+export function canMintRegenPin(role: Role, confirmed: boolean): boolean {
+  return confirmed && canRegeneratePin(role);
+}
+
 export function payloadHasPinField(payload: object): boolean {
   return Object.keys(payload).some((key) => key.toLowerCase().includes("pin"));
 }

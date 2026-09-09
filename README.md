@@ -84,7 +84,7 @@ See `.env.example`.
 4. **Join link** `/join/[uuid]` — PIN + display name + optional email → session.
 5. **Group home** `/g/[uuid]` — name, open/closed, member count, Submit / View capsule, People, Invite, Settings (owner).
 6. **People** `/g/[uuid]/people` — display names. Any member.
-7. **Invite** `/g/[uuid]/invite` — copy join URL; optional typed PIN (not from the server).
+7. **Invite** `/g/[uuid]/invite` — copy join URL, optional typed PIN, and share text (URL + PIN if typed). Server never returns a PIN.
 8. **Submit** `/g/[uuid]/submit` — letter + ≤6 photos; upsert in window; “Closed.” when shut.
 9. **Capsule** `/g/[uuid]/capsule/[YYYY-MM]` — read-only HTML; session required.
 10. **Owner settings** `/g/[uuid]/settings` — the three day-of-month fields and Regenerate PIN.
@@ -95,8 +95,8 @@ e2e is not set up. After env + migration:
 
 1. Browser A: from home, Create a group. Enter the studio code (local default `plainandsimple` if `CREATE_GROUP_CODE` is unset). Copy the join link and PIN. Continue to the group home (owner session). Home then shows Open your capsule.
 2. Browser B (or a private window): Join a group from home — paste the join link or the group ID, plus PIN, a display name, optional email. Or open `/join/[uuid]`. You land on the same group home as a member.
-3. Owner: Settings — change the three day fields; invalid combos (e.g. close ≥ email day) are rejected. Regenerate PIN; the new PIN is shown once; join with the old PIN fails; the owner session still opens the group.
-4. Member: People and Invite work. Settings redirects home. Invite copies the join URL and never shows a stored PIN. People lists names only.
+3. Owner: Settings — change the three day fields; invalid combos (e.g. close ≥ email day) are rejected. Regenerate PIN asks to confirm first; the new PIN is shown once; join with the old PIN fails; the owner session still opens the group.
+4. Member: People and Invite work. Settings redirects home. Invite copies the join URL (and share text with a typed PIN) and never shows a stored PIN. People lists names only.
 5. If Chicago’s day is inside the window, submit a letter + photos from either session. Saving again replaces that member’s letter. After the window, Submit shows Closed and the server rejects writes.
 6. Cron (optional, needs the same env):
 
