@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { leaveGroup } from "@/actions/leave";
+import { GroupChrome } from "@/components/group-chrome";
 import { currentYearMonth, isSubmitOpen, monthLabel } from "@/lib/schedule";
 import { requireGroupMember } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase";
@@ -54,12 +55,8 @@ export default async function GroupHomePage({
             {capsuleMonth !== thisMonth ? ` · ${monthLabel(capsuleMonth)}` : ""}
           </Link>
         ) : null}
-        {member.role === "owner" ? (
-          <Link className="btn btn-ghost" href={`/g/${uuid}/settings`}>
-            Settings
-          </Link>
-        ) : null}
       </div>
+      <GroupChrome uuid={uuid} role={member.role} />
       <form action={leaveGroup}>
         <button type="submit" className="text-sm text-muted underline">
           Leave

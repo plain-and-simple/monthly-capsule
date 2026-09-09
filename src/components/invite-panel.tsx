@@ -1,0 +1,40 @@
+"use client";
+
+import { useState } from "react";
+import { CopyButton } from "@/components/copy-button";
+
+export function InvitePanel({ shareUrl }: { shareUrl: string }) {
+  const [pin, setPin] = useState("");
+
+  return (
+    <div className="space-y-6">
+      <h1 className="font-serif text-4xl leading-tight">Invite</h1>
+      <div className="space-y-4 rounded-xl border border-rule bg-card p-5">
+        <div>
+          <p className="text-xs uppercase tracking-wide text-muted">Join link</p>
+          <p className="mt-1 break-all font-serif text-lg">{shareUrl}</p>
+          <div className="mt-2">
+            <CopyButton text={shareUrl} label="Copy link" />
+          </div>
+        </div>
+        <div className="field">
+          <label htmlFor="typed_pin">PIN</label>
+          <input
+            id="typed_pin"
+            inputMode="numeric"
+            autoComplete="off"
+            maxLength={6}
+            value={pin}
+            onChange={(event) => setPin(event.target.value.replace(/\D/g, "").slice(0, 6))}
+          />
+          <p className="text-sm text-muted">Type it if you have it.</p>
+          {pin ? (
+            <div className="mt-2">
+              <CopyButton text={pin} label="Copy PIN" />
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
