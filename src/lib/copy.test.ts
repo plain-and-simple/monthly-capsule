@@ -23,6 +23,8 @@ import {
   ROLE_MEMBER_LABEL,
   ROLE_OWNER_LABEL,
   GROUP_EARLIER_CAPSULES,
+  GROUP_FIRST_CAPSULE_HEADING,
+  GROUP_NO_PREVIOUS_CAPSULES,
   GROUP_PRIMARY_VIEW,
   SUBMIT_AND_SEND,
   SUBMIT_DRAFT,
@@ -102,6 +104,12 @@ describe("join and manage labels", () => {
 
   it("locks closed-home capsule labels", () => {
     expect(GROUP_PRIMARY_VIEW).toBe("Read the capsule");
+    expect(GROUP_EARLIER_CAPSULES).toBe("Earlier capsules");
+  });
+
+  it("locks first-run and empty-state capsule labels", () => {
+    expect(GROUP_FIRST_CAPSULE_HEADING).toBe("Your first capsule");
+    expect(GROUP_NO_PREVIOUS_CAPSULES).toBe("No previous capsules yet");
     expect(GROUP_EARLIER_CAPSULES).toBe("Earlier capsules");
   });
 
