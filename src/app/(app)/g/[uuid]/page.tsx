@@ -1,7 +1,12 @@
 import Link from "next/link";
 import { GroupChrome } from "@/components/group-chrome";
 import { SaveLoginForm } from "@/components/save-login-form";
-import { GROUP_PRIMARY_EDIT, GROUP_PRIMARY_SUBMIT, GROUP_PRIMARY_VIEW } from "@/lib/copy";
+import {
+  GROUP_EARLIER_CAPSULES,
+  GROUP_PRIMARY_EDIT,
+  GROUP_PRIMARY_SUBMIT,
+  GROUP_PRIMARY_VIEW,
+} from "@/lib/copy";
 import { groupDisplayName } from "@/lib/copy";
 import { nextOpenPhrase, windowClosesPhrase } from "@/lib/group-status";
 import { resolveSubmitWindow } from "@/lib/cycle-store";
@@ -36,7 +41,7 @@ export default async function GroupHomePage({
 
   const total = count ?? 0;
   const latestCapsule = compiledMonths?.[0]?.year_month as string | undefined;
-  const earlier = (compiledMonths ?? []).slice(open ? 0 : 1);
+  const earlier = (compiledMonths ?? []).slice(1);
 
   let myStatus: "none" | "draft" | "submitted" = "none";
   let written = 0;
@@ -160,9 +165,9 @@ export default async function GroupHomePage({
             </div>
           ) : null}
 
-          {!open && earlier.length > 0 ? (
+          {earlier.length > 0 ? (
             <div className="stack stack--tight">
-              <p className="eyebrow">Earlier capsules</p>
+              <p className="eyebrow">{GROUP_EARLIER_CAPSULES}</p>
               <ul className="list">
                 {earlier.map((row) => (
                   <li key={row.year_month}>

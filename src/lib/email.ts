@@ -1,63 +1,80 @@
 import "server-only";
 import { Resend } from "resend";
 import { capsuleEmailHtml, capsuleEmailSubject } from "@/lib/capsule-email";
+import { parseCapsuleArchive } from "@/lib/capsule-archive";
 import { appUrl, resendApiKey, resendFromEmail } from "@/lib/env";
-import { cronShouldSendCapsule, sentEmailUpdate } from "@/lib/email-policy";
+import {
+  capsuleFromHeader,
+  cronShouldSendCapsule,
+  formatCapsuleSendResult,
+  resendSendAccepted,
+  sentEmailUpdate,
+  shouldMarkCapsuleEmailed,
+} from "@/lib/email-policy";
 import { nextOpenPhrase } from "@/lib/group-status";
+import { resolveCapsuleRecipients } from "@/lib/recipients";
 import { emailTargetYearMonth, monthLabel } from "@/lib/schedule";
 import { includedSubmissions } from "@/lib/submit";
 import { createAdminClient } from "@/lib/supabase";
-import type { Capsule, Group, Member, Month, Submission } from "@/lib/types";
+import type { Account, Capsule, Group, Member, Month, Submission } from "@/lib/types";
+
+export type SendGroupMonthResult = {
+  sent: number;
+  skippedNoEmail: number;
+  markedSent: boolean;
+  error: string | null;
+  reason:
+    | "ok"
+    | "no-month"
+    | "no-capsule"
+    | "already-sent"
+    | "held"
+    | "no-resend-key"
+    | "bad-from"
+    | "no-recipients"
+    | "resend-error";
+  message: string;
+};
+
+function sendResult(
+  partial: Omit<SendGroupMonthResult, "message">,
+): SendGroupMonthResult {
+  return { ...partial, message: formatCapsuleSendResult(partial) };
+}
 
 export async function sendDueCapsuleEmails(now: Date = new Date()) {
   const admin = createAdminClient();
   const { data: groups, error } = await admin.from("groups").select("*");
   if (error) throw new Error("Could not list groups");
 
-  const results: { groupId: string; yearMonth: string; sent: number; skipped: string }[] = [];
+  const results: {
+    groupId: string;
+    yearMonth: string;
+    sent: number;
+    skipped: string;
+    error: string | null;
+  }[] = [];
 
   for (const group of (groups ?? []) as Group[]) {
     const yearMonth = emailTargetYearMonth(group, now);
-    const { data: month } = await admin
-      .from("months")
-      .select("*")
-      .eq("group_id", group.id)
-      .eq("year_month", yearMonth)
-      .maybeSingle();
-
-    if (!month) {
-      results.push({ groupId: group.id, yearMonth, sent: 0, skipped: "no-month" });
-      continue;
-    }
-
-    const { data: capsule } = await admin
-      .from("capsules")
-      .select("*")
-      .eq("month_id", month.id)
-      .maybeSingle();
-
-    if (!capsule) {
-      results.push({ groupId: group.id, yearMonth, sent: 0, skipped: "no-capsule" });
-      continue;
-    }
-    if (!cronShouldSendCapsule(capsule as Capsule)) {
-      results.push({
-        groupId: group.id,
-        yearMonth,
-        sent: 0,
-        skipped: capsule.email_sent_at ? "already-sent" : "held",
-      });
-      continue;
-    }
-
-    const sent = await sendCapsuleEmail(group, month as Month, capsule as Capsule);
-    results.push({ groupId: group.id, yearMonth, sent, skipped: sent === 0 ? "no-recipients" : "" });
+    const result = await sendGroupMonthEmail(group, yearMonth, { cron: true });
+    results.push({
+      groupId: group.id,
+      yearMonth,
+      sent: result.sent,
+      skipped: result.reason === "ok" ? "" : result.reason,
+      error: result.error,
+    });
   }
 
   return results;
 }
 
-export async function sendGroupMonthEmail(group: Group, yearMonth: string) {
+export async function sendGroupMonthEmail(
+  group: Group,
+  yearMonth: string,
+  opts: { cron?: boolean } = {},
+) {
   const admin = createAdminClient();
   const { data: month } = await admin
     .from("months")
@@ -66,7 +83,13 @@ export async function sendGroupMonthEmail(group: Group, yearMonth: string) {
     .eq("year_month", yearMonth)
     .maybeSingle();
   if (!month) {
-    return { sent: 0, skipped: "no-month" as const };
+    return sendResult({
+      sent: 0,
+      skippedNoEmail: 0,
+      markedSent: false,
+      error: null,
+      reason: "no-month",
+    });
   }
 
   const { data: capsule } = await admin
@@ -75,14 +98,34 @@ export async function sendGroupMonthEmail(group: Group, yearMonth: string) {
     .eq("month_id", month.id)
     .maybeSingle();
   if (!capsule) {
-    return { sent: 0, skipped: "no-capsule" as const };
+    return sendResult({
+      sent: 0,
+      skippedNoEmail: 0,
+      markedSent: false,
+      error: null,
+      reason: "no-capsule",
+    });
+  }
+  if (opts.cron && !cronShouldSendCapsule(capsule as Capsule)) {
+    return sendResult({
+      sent: 0,
+      skippedNoEmail: 0,
+      markedSent: false,
+      error: null,
+      reason: capsule.email_sent_at ? "already-sent" : "held",
+    });
   }
   if (capsule.email_sent_at) {
-    return { sent: 0, skipped: "already-sent" as const };
+    return sendResult({
+      sent: 0,
+      skippedNoEmail: 0,
+      markedSent: false,
+      error: null,
+      reason: "already-sent",
+    });
   }
 
-  const sent = await sendCapsuleEmail(group, month as Month, capsule as Capsule);
-  return { sent, skipped: sent === 0 ? ("no-recipients" as const) : ("" as const) };
+  return sendCapsuleEmail(group, month as Month, capsule as Capsule);
 }
 
 export async function holdGroupMonthEmail(groupId: string, yearMonth: string) {
@@ -115,19 +158,52 @@ export async function holdGroupMonthEmail(groupId: string, yearMonth: string) {
 async function sendCapsuleEmail(group: Group, month: Month, capsule: Capsule) {
   const admin = createAdminClient();
   const { data: members } = await admin.from("members").select("*").eq("group_id", group.id);
-
   const roster = (members ?? []) as Member[];
-  const recipients = roster.filter((member) => member.email);
-  const key = resendApiKey();
+
+  const accountIds = [
+    ...new Set(roster.map((member) => member.account_id).filter((id): id is string => Boolean(id))),
+  ];
+  const accountEmailById = new Map<string, string>();
+  if (accountIds.length > 0) {
+    const { data: accounts } = await admin.from("accounts").select("id, email").in("id", accountIds);
+    for (const account of (accounts ?? []) as Pick<Account, "id" | "email">[]) {
+      accountEmailById.set(account.id, account.email);
+    }
+  }
+
+  const resolved = resolveCapsuleRecipients(
+    roster.map((member) => ({
+      memberEmail: member.email,
+      accountEmail: member.account_id ? accountEmailById.get(member.account_id) ?? null : null,
+    })),
+  );
+
+  const from = capsuleFromHeader(group.name, resendFromEmail());
+  if (!from.ok) {
+    return sendResult({
+      sent: 0,
+      skippedNoEmail: resolved.skippedNoEmail,
+      markedSent: false,
+      error: from.error,
+      reason: "bad-from",
+    });
+  }
+
   const link = `${appUrl()}/g/${group.id}/capsule/${month.year_month}`;
-  const { data: submissionRows } = await admin.from("submissions").select("*").eq("month_id", month.id);
-  const letters = includedSubmissions((submissionRows ?? []) as Submission[]).map((row) => {
-    const author = roster.find((member) => member.id === row.member_id);
-    return {
-      name: author?.preferred_name || "Friend",
-      body: row.body,
-    };
-  });
+  const archive = parseCapsuleArchive(capsule.archive);
+  let letters = archive
+    ? archive.letters.map((letter) => ({ name: letter.preferred_name, body: letter.body }))
+    : null;
+  if (!letters) {
+    const { data: submissionRows } = await admin.from("submissions").select("*").eq("month_id", month.id);
+    letters = includedSubmissions((submissionRows ?? []) as Submission[]).map((row) => {
+      const author = roster.find((member) => member.id === row.member_id);
+      return {
+        name: author?.preferred_name || "Friend",
+        body: row.body,
+      };
+    });
+  }
   const html = capsuleEmailHtml({
     groupName: group.name,
     monthLabel: monthLabel(month.year_month),
@@ -137,27 +213,70 @@ async function sendCapsuleEmail(group: Group, month: Month, capsule: Capsule) {
   });
   const subject = capsuleEmailSubject(group.name, monthLabel(month.year_month));
 
+  const key = resendApiKey();
   if (!key) {
-    return 0;
+    return sendResult({
+      sent: 0,
+      skippedNoEmail: resolved.skippedNoEmail,
+      markedSent: false,
+      error: "Email is not configured.",
+      reason: "no-resend-key",
+    });
   }
 
-  if (recipients.length > 0) {
-    const resend = new Resend(key);
-    for (const member of recipients) {
-      await resend.emails.send({
-        from: resendFromEmail(),
-        to: member.email as string,
+  if (resolved.emails.length === 0) {
+    return sendResult({
+      sent: 0,
+      skippedNoEmail: resolved.skippedNoEmail,
+      markedSent: false,
+      error: null,
+      reason: "no-recipients",
+    });
+  }
+
+  const resend = new Resend(key);
+  let accepted = 0;
+  let error: string | null = null;
+  for (const to of resolved.emails) {
+    try {
+      const result = await resend.emails.send({
+        from: from.from,
+        to,
         subject,
         html,
       });
+      const interpreted = resendSendAccepted(result);
+      if (interpreted.ok) {
+        accepted += 1;
+      } else {
+        error = interpreted.message;
+      }
+    } catch (caught) {
+      error = caught instanceof Error ? caught.message : "Resend failed";
     }
   }
 
-  await admin
-    .from("capsules")
-    .update(sentEmailUpdate(new Date().toISOString()))
-    .eq("id", capsule.id)
-    .is("email_sent_at", null);
+  if (error) {
+    console.error("capsule email resend rejected", error);
+  }
 
-  return recipients.length;
+  const markedSent = shouldMarkCapsuleEmailed({
+    attempted: resolved.emails.length,
+    accepted,
+  });
+  if (markedSent) {
+    await admin
+      .from("capsules")
+      .update(sentEmailUpdate(new Date().toISOString()))
+      .eq("id", capsule.id)
+      .is("email_sent_at", null);
+  }
+
+  return sendResult({
+    sent: accepted,
+    skippedNoEmail: resolved.skippedNoEmail,
+    markedSent,
+    error,
+    reason: error && accepted === 0 ? "resend-error" : "ok",
+  });
 }

@@ -132,9 +132,18 @@ export async function emailGroupNow(
     if (decision === "already_sent") return { error: CYCLE_ALREADY_SENT };
 
     const result = await sendGroupMonthEmail(group, yearMonth);
-    if (result.skipped === "already-sent") return { error: CYCLE_ALREADY_SENT };
+    if (result.reason === "already-sent") return { error: CYCLE_ALREADY_SENT };
+    if (result.reason === "no-capsule" || result.reason === "no-month") {
+      return { error: CYCLE_NO_CAPSULE };
+    }
+    if (result.reason === "no-resend-key" || result.reason === "bad-from") {
+      return { error: result.error || result.message };
+    }
+    if (result.reason === "resend-error" && result.sent === 0) {
+      return { error: result.message };
+    }
     revalidateGroup(groupId, yearMonth);
-    return { ok: true, message: CYCLE_SENT };
+    return { ok: true, message: result.message || CYCLE_SENT };
   } catch (error) {
     if (isRedirectError(error)) throw error;
     return { error: "Could not send." };

@@ -69,6 +69,7 @@ export type Capsule = {
   compiled_at: string;
   email_sent_at: string | null;
   email_held: boolean;
+  archive?: unknown;
 };
 
 export type SessionPayload = {

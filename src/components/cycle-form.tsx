@@ -174,6 +174,8 @@ export function CycleForm({
               <p className="err">{openState.error}</p>
             ) : null}
             {closeState?.ok && closeState.message ? <p className="small">{closeState.message}</p> : null}
+            {emailState?.ok ? <p className="small">{emailState.message}</p> : null}
+            {emailState?.error && !laterYearMonth ? <p className="err">{emailState.error}</p> : null}
           </div>
         </div>
       </section>

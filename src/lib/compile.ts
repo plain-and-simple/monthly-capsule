@@ -1,7 +1,15 @@
 import "server-only";
+import {
+  buildCapsuleArchive,
+  capsuleHasArchive,
+  parseCapsuleArchive,
+  type CapsuleArchive,
+  type CapsuleArchiveLetter,
+} from "@/lib/capsule-archive";
 import { compileTargetYearMonth } from "@/lib/schedule";
+import { includedSubmissions } from "@/lib/submit";
 import { createAdminClient } from "@/lib/supabase";
-import type { Group } from "@/lib/types";
+import type { Group, Photo, Submission } from "@/lib/types";
 
 export async function ensureMonth(groupId: string, yearMonth: string, status: string) {
   const admin = createAdminClient();
@@ -75,40 +83,137 @@ export async function findGroupCapsule(groupId: string, yearMonth: string) {
   return { month, capsule };
 }
 
+export async function snapshotMonthArchive(
+  group: Group,
+  yearMonth: string,
+  monthId: string,
+): Promise<CapsuleArchive> {
+  const admin = createAdminClient();
+  const [{ data: submissions }, { count: memberCount }] = await Promise.all([
+    admin
+      .from("submissions")
+      .select("*")
+      .eq("month_id", monthId)
+      .order("submitted_at", { ascending: true }),
+    admin.from("members").select("id", { count: "exact", head: true }).eq("group_id", group.id),
+  ]);
+
+  const included = includedSubmissions((submissions ?? []) as Submission[]);
+  const memberIds = included.map((row) => row.member_id);
+  const { data: members } =
+    memberIds.length > 0
+      ? await admin.from("members").select("id, preferred_name").in("id", memberIds)
+      : { data: [] };
+  const nameById = new Map(
+    ((members ?? []) as Array<{ id: string; preferred_name: string }>).map((row) => [
+      row.id,
+      row.preferred_name,
+    ]),
+  );
+
+  const letters: CapsuleArchiveLetter[] = [];
+  for (const submission of included) {
+    const { data: photos } = await admin
+      .from("photos")
+      .select("storage_path, width, height, sort_order")
+      .eq("submission_id", submission.id)
+      .order("sort_order", { ascending: true });
+    letters.push({
+      preferred_name: nameById.get(submission.member_id) || "Friend",
+      body: submission.body,
+      photos: ((photos ?? []) as Pick<Photo, "storage_path" | "width" | "height" | "sort_order">[]).map(
+        (photo, index) => ({
+          storage_path: photo.storage_path,
+          width: photo.width,
+          height: photo.height,
+          sort_order: photo.sort_order ?? index,
+        }),
+      ),
+    });
+  }
+
+  return buildCapsuleArchive({
+    yearMonth,
+    groupName: group.name,
+    letters,
+    memberCount: memberCount ?? 0,
+  });
+}
+
+async function writeCapsuleArchive(capsuleId: string, archive: CapsuleArchive) {
+  const admin = createAdminClient();
+  const { error } = await admin.from("capsules").update({ archive }).eq("id", capsuleId);
+  return !error;
+}
+
+export async function ensureCapsuleArchive(
+  group: Group,
+  yearMonth: string,
+  monthId: string,
+  capsule: { id: string; archive?: unknown },
+): Promise<CapsuleArchive> {
+  const existing = parseCapsuleArchive(capsule.archive);
+  if (existing) return existing;
+  const archive = await snapshotMonthArchive(group, yearMonth, monthId);
+  await writeCapsuleArchive(capsule.id, archive);
+  return archive;
+}
+
+async function finishCompile(group: Group, yearMonth: string, monthId: string, created: boolean) {
+  const admin = createAdminClient();
+  await admin.from("months").update({ status: "compiled" }).eq("id", monthId);
+  await clearForceOpenIfMatch(group, yearMonth);
+  return { monthId, created };
+}
+
 export async function compileGroupMonth(group: Group, yearMonth: string) {
   const admin = createAdminClient();
   const month = await ensureMonth(group.id, yearMonth, "closed");
+  const monthId = month.id as string;
+  const archive = await snapshotMonthArchive(group, yearMonth, monthId);
 
   const { data: existing } = await admin
     .from("capsules")
-    .select("id")
-    .eq("month_id", month.id)
+    .select("*")
+    .eq("month_id", monthId)
     .maybeSingle();
 
   if (existing) {
-    if (month.status !== "compiled") {
-      await admin.from("months").update({ status: "compiled" }).eq("id", month.id);
+    if (!capsuleHasArchive(existing.archive)) {
+      await writeCapsuleArchive(existing.id as string, archive);
     }
-    await clearForceOpenIfMatch(group, yearMonth);
-    return { monthId: month.id as string, created: false };
+    return finishCompile(group, yearMonth, monthId, false);
   }
 
-  const { error } = await admin.from("capsules").insert({ month_id: month.id });
-  if (error) {
-    const { data: raced } = await admin
-      .from("capsules")
-      .select("id")
-      .eq("month_id", month.id)
-      .maybeSingle();
-    if (!raced) throw new Error("Could not compile capsule");
-    await admin.from("months").update({ status: "compiled" }).eq("id", month.id);
-    await clearForceOpenIfMatch(group, yearMonth);
-    return { monthId: month.id as string, created: false };
+  const withArchive = await admin
+    .from("capsules")
+    .insert({ month_id: monthId, archive })
+    .select("id")
+    .maybeSingle();
+  if (!withArchive.error && withArchive.data) {
+    return finishCompile(group, yearMonth, monthId, true);
   }
 
-  await admin.from("months").update({ status: "compiled" }).eq("id", month.id);
-  await clearForceOpenIfMatch(group, yearMonth);
-  return { monthId: month.id as string, created: true };
+  const withoutArchive = await admin
+    .from("capsules")
+    .insert({ month_id: monthId })
+    .select("id")
+    .maybeSingle();
+  if (!withoutArchive.error && withoutArchive.data) {
+    await writeCapsuleArchive(withoutArchive.data.id as string, archive);
+    return finishCompile(group, yearMonth, monthId, true);
+  }
+
+  const { data: raced } = await admin
+    .from("capsules")
+    .select("id, archive")
+    .eq("month_id", monthId)
+    .maybeSingle();
+  if (!raced) throw new Error("Could not compile capsule");
+  if (!capsuleHasArchive(raced.archive)) {
+    await writeCapsuleArchive(raced.id as string, archive);
+  }
+  return finishCompile(group, yearMonth, monthId, false);
 }
 
 export async function latestUnsentYearMonth(groupId: string): Promise<string | null> {
