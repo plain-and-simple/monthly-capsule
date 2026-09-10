@@ -7,6 +7,12 @@ set -euo pipefail
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_DIR"
 
+# Serialize concurrent invocations. The environment's `start` phase and the
+# next-dev terminal may both call this script on boot; the lock makes the second
+# caller wait for the first, then fast-path over an already-running stack.
+exec 9>/tmp/monthly-capsule-start.lock
+flock 9
+
 echo "[start] Starting Docker daemon (if needed) ..."
 if ! docker info >/dev/null 2>&1; then
   sudo nohup dockerd >/tmp/dockerd.log 2>&1 &
