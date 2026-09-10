@@ -1,4 +1,5 @@
 import "server-only";
+import { DEFAULT_RESEND_FROM } from "@/lib/email-policy";
 import { resolveCreateGroupCode } from "@/lib/studio-code";
 
 function required(name: string): string {
@@ -38,7 +39,7 @@ export function resendApiKey(): string | null {
 }
 
 export function resendFromEmail(): string {
-  return process.env.RESEND_FROM_EMAIL || "Capsule <capsule@plainandsimple.app>";
+  return process.env.RESEND_FROM_EMAIL || DEFAULT_RESEND_FROM;
 }
 
 export function createGroupCode(): string {

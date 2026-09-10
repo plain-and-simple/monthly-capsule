@@ -1,65 +1,62 @@
-# Handoff — designer UI + submit model A
+# Handoff — email accept + stored capsule archive
 
-Shipped on branch `cursor/capsule-ui-submit-model-a-2a49` · PR #10 into `main`.
+Shipped on branch `cursor/fix-capsule-email-archive-70b8`.
 
-## What changed
+## Production facts (verified on `uqqxauszzorzhmngcnvf`)
 
-The live app now follows `design/capsule-drafts/` (paper, deep green, serif letters, one primary action). Invented draft content is not copied; real group names, dates, and counts are wired through.
+Group **stepppy**, month `2026-10`, status `compiled`. Capsule row exists. `email_sent_at` is set, `email_held` is false. `capsules` has no HTML — only a marker row. Owner seat is Chacha / `chanfans@gmail.com` (also the only account). Chandler confirmed that address did **not** receive the mail.
 
-**Submit model A (required)**
+Curtis / Chan are on a different group (`steppy`) and are out of scope.
 
-| Action | Stored | In compiled capsule / email |
-| --- | --- | --- |
-| Save as draft | yes | no |
-| Save and submit | yes | yes |
+## Root cause
 
-After submit the letter stays editable until the window closes. Existing rows default to `submitted`.
+`resend.emails.send()` returns `{ data, error }` and does **not** throw on a normal API failure (unverified domain, bad from, rejected key). `sendCapsuleEmail` ignored that object and always wrote `email_sent_at` whenever `RESEND_API_KEY` was present. The app then hid Email group and told the owner it worked.
 
-## Product locks kept
+Likely live From mismatch:
 
-- Brand: Plain and Simple Monthly Capsule
-- Promise: Friends write once a month. You get one capsule.
-- Studio create still gated by `CREATE_GROUP_CODE`
-- Late writers: **count only** — People does not say who has not written
-- Timezone: America/Chicago
-- Invite: any member. Settings / regen / force-cycle: owner only
-- Empty force-close still compiles
-- Header: **Sign out** (not Leave)
-- Multi-group: Your groups with Open / Capsule ready / Resting; names never UUIDs; 1 group auto-enters
-- Force-cycle labels: Open submit early / Close & make capsule / Send / Not now / Email group
+- Code fallback was `Capsule <capsule@plainandsimple.app>` (singular).
+- Designer mail is `capsules@plainandsimple.app` (plural).
+- Resend only accepts a **verified** domain. This agent cannot see the Capsule Vercel project (MCP only lists marketing `plainandsimple`), so CoS must confirm `RESEND_API_KEY` + `RESEND_FROM_EMAIL` on that project.
 
-## Apply this migration
+## Fix 1 — honest email send
 
-`supabase/migrations/20260910010000_submission_status.sql` adds `submissions.status` (`draft` | `submitted`, default `submitted`). Apply it on the Supabase project before dogfooding or compile will not know drafts.
+- Recipients: `members.email`, else linked `accounts.email`. Deduped. Invalid / empty skipped.
+- Stamp `email_sent_at` only when Resend returns an id for **every** attempted recipient.
+- Owner sees `Sent N. Skipped M with no email.` and/or `Resend error: …`.
+- From header is `{Group} via Plain and Simple <verified@mailbox>`. Default mailbox is `capsules@plainandsimple.app`.
 
-## Dogfood
+## Fix 2 — stored archive
 
-e2e is not set up. After env + **all** migrations (init, accounts, force-cycle, **submission_status**):
+Compile writes `capsules.archive` (jsonb): letters, names, photo `storage_path`s, HTML snapshot without signed URLs. View serves that archive and signs photos at read time. First view of an old marker row backfills the snapshot. Closed home already has **Read the capsule** + **Earlier capsules**.
 
-1. **Landing.** `/` is paper: promise, Sign in, Create a capsule group. No photo split. No Forgot password.
-2. **Create.** Studio code → account (skip if already signed in) → group name + Submit opens / Submit closes / Email capsule → show-once link + PIN. Copy both. Continue to group home.
-3. **Manage.** 0 groups → Nothing here yet + create/join hint. 1 → group home. Many → Your groups with Open / Capsule ready / Resting. Header Sign out.
-4. **Join.** Link + PIN + preferred name. Save login optional.
-5. **Open group home.** Write your letter. Count only (“Three of six have written”). People / Invite / Settings are text links.
-6. **Submit model A.** Save as draft → status “Saved as draft”; group home still invites you to write/continue. Save and submit → “Your letter is in” + Edit until the window closes. Edit again and re-submit.
-7. **People.** Preferred names only. No Written / Not yet.
-8. **Invite.** Copy link, type PIN, copy message. Server never returns a PIN.
-9. **Owner settings.** Cycle days (locked labels), Open submit early / Close & make capsule (confirm), Email Send | Not now, Email group later, Make a new PIN (confirm, show once).
-10. **Compile.** Force-close (even with zero letters) still makes a capsule. Draft letters must **not** appear. Submitted letters must. Colophon states a missed **count**, not names.
-11. **Email.** Subject `{Group} — {Month}`. Body has letters + Read the whole capsule. Cron still skips `email_held`.
+## Apply on live Supabase `uqqxauszzorzhmngcnvf`
+
+1. `supabase/migrations/20260910024800_capsule_archive.sql` (and `20260910010000_submission_status.sql` if not already applied).
+2. Confirm Resend: domain `plainandsimple.app` verified; `RESEND_FROM_EMAIL` is that verified address (recommend `Plain and Simple <capsules@plainandsimple.app>`).
+3. Unstick the false success so the owner can Send again:
+
+```sql
+update public.capsules
+set email_sent_at = null, email_held = false
+where id = '5a06b0fa-cc80-4db5-8b5a-fac361adfaf2';
+```
+
+Apply the migration **before or with** deploy. After deploy, opening `/g/{stepppy}/capsule/2026-10` backfills `archive` for the October row.
+
+## Verify
 
 ```bash
 npm test
 npm run typecheck
 ```
 
+Owner Settings → Email group on 2026-10 after the SQL unstick. Expect either a real inbox message or a visible Resend error — never a silent `email_sent_at`.
+
 ## Key files
 
-- `src/app/globals.css` — designer tokens and layout
-- `src/components/app-header.tsx` — brand + Sign out
-- `src/lib/submit.ts` + `src/actions/submit.ts` — draft vs submitted
-- `src/lib/group-status.ts` — Open / Capsule ready / Resting
-- `src/lib/capsule-email.ts` — email HTML
-- `supabase/migrations/20260910010000_submission_status.sql`
-
-Designer HTML remains at `design/capsule-drafts/` as the visual reference.
+- `src/lib/recipients.ts` — member + account emails, dedupe
+- `src/lib/email-policy.ts` — Resend accept, stamp rule, From header, owner copy
+- `src/lib/email.ts` — send path
+- `src/lib/capsule-archive.ts` + `src/lib/compile.ts` — snapshot
+- `src/app/(app)/g/[uuid]/capsule/[yearMonth]/page.tsx` — serve archive
+- `supabase/migrations/20260910024800_capsule_archive.sql`

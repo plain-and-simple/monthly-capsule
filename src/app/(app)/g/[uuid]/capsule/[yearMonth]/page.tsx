@@ -1,15 +1,16 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { EmailGroupForm } from "@/components/email-group-form";
+import { parseCapsuleArchive } from "@/lib/capsule-archive";
+import { ensureCapsuleArchive } from "@/lib/compile";
 import { groupDisplayName } from "@/lib/copy";
 import { initials } from "@/lib/group-status";
 import { canForceCycle } from "@/lib/manage";
+import { signedPhotoUrl } from "@/lib/photos";
 import { monthLabel } from "@/lib/schedule";
 import { requireGroupMember } from "@/lib/session";
-import { signedPhotoUrl } from "@/lib/photos";
-import { includedSubmissions, missedCountPhrase, writtenCount } from "@/lib/submit";
+import { missedCountPhrase } from "@/lib/submit";
 import { createAdminClient } from "@/lib/supabase";
-import type { Member, Photo, Submission } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -37,7 +38,7 @@ export default async function CapsulePage({
 
   const { data: capsule } = await admin
     .from("capsules")
-    .select("id, email_sent_at")
+    .select("*")
     .eq("month_id", month.id)
     .maybeSingle();
   if (!capsule) {
@@ -55,40 +56,22 @@ export default async function CapsulePage({
     );
   }
 
-  const [{ data: submissions }, { count: memberCount }] = await Promise.all([
-    admin.from("submissions").select("*").eq("month_id", month.id).order("submitted_at", { ascending: true }),
-    admin.from("members").select("id", { count: "exact", head: true }).eq("group_id", uuid),
-  ]);
-
-  const included = includedSubmissions((submissions ?? []) as Submission[]);
-  const memberIds = included.map((row) => row.member_id);
-  const { data: members } =
-    memberIds.length > 0
-      ? await admin.from("members").select("*").in("id", memberIds)
-      : { data: [] };
-
-  const memberById = new Map(((members ?? []) as Member[]).map((row) => [row.id, row]));
-  const missed = Math.max(0, (memberCount ?? 0) - writtenCount(included));
+  const archive =
+    parseCapsuleArchive(capsule.archive) ??
+    (await ensureCapsuleArchive(group, yearMonth, month.id, capsule));
 
   const letters = await Promise.all(
-    included.map(async (submission) => {
-      const { data: photos } = await admin
-        .from("photos")
-        .select("*")
-        .eq("submission_id", submission.id)
-        .order("sort_order", { ascending: true });
-      const withUrls = await Promise.all(
-        ((photos ?? []) as Photo[]).map(async (photo) => ({
+    archive.letters.map(async (letter, index) => ({
+      key: `${letter.preferred_name}-${index}`,
+      preferred_name: letter.preferred_name,
+      body: letter.body,
+      photos: await Promise.all(
+        letter.photos.map(async (photo) => ({
           ...photo,
           url: await signedPhotoUrl(photo.storage_path),
         })),
-      );
-      return {
-        submission,
-        member: memberById.get(submission.member_id),
-        photos: withUrls,
-      };
-    }),
+      ),
+    })),
   );
 
   return (
@@ -110,13 +93,13 @@ export default async function CapsulePage({
               <p className="muted small">
                 {letters.length} {letters.length === 1 ? "letter" : "letters"}
                 {letters.length > 0
-                  ? ` from ${letters.map(({ member }) => member?.preferred_name || "Friend").join(", ")}`
+                  ? ` from ${letters.map((letter) => letter.preferred_name).join(", ")}`
                   : ""}
               </p>
               {letters.length > 0 ? (
                 <ul className="capsule__contents">
-                  {letters.map(({ member, submission }) => (
-                    <li key={submission.id}>{member?.preferred_name || "Friend"}</li>
+                  {letters.map((letter) => (
+                    <li key={letter.key}>{letter.preferred_name}</li>
                   ))}
                 </ul>
               ) : null}
@@ -124,20 +107,20 @@ export default async function CapsulePage({
 
             {letters.length === 0 ? <p className="center muted">No letters this month.</p> : null}
 
-            {letters.map(({ submission, member, photos }) => (
-              <section className="letter" key={submission.id}>
+            {letters.map((letter) => (
+              <section className="letter" key={letter.key}>
                 <div className="letter__head">
-                  <span className="avatar">{initials(member?.preferred_name || "Friend")}</span>
+                  <span className="avatar">{initials(letter.preferred_name)}</span>
                   <div>
-                    <div className="letter__name">{member?.preferred_name || "Friend"}</div>
+                    <div className="letter__name">{letter.preferred_name}</div>
                   </div>
                 </div>
-                {submission.body ? <div className="letter__body">{submission.body}</div> : null}
-                {photos.length > 0 ? (
+                {letter.body ? <div className="letter__body">{letter.body}</div> : null}
+                {letter.photos.length > 0 ? (
                   <div className="letter__photos">
-                    {photos.map((photo) =>
+                    {letter.photos.map((photo) =>
                       photo.url ? (
-                        <div className="photo" key={photo.id}>
+                        <div className="photo" key={photo.storage_path}>
                           <img
                             src={photo.url}
                             alt=""
@@ -153,7 +136,7 @@ export default async function CapsulePage({
             ))}
 
             <div className="capsule__colophon">
-              <p>{missedCountPhrase(missed)}</p>
+              <p>{missedCountPhrase(archive.missed_count)}</p>
             </div>
           </article>
         </div>

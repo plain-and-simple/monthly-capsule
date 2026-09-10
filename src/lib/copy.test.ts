@@ -20,6 +20,8 @@ import {
   MANAGE_EMPTY_HINT,
   PREFERRED_NAME_LABEL,
   PRODUCT_NAME,
+  GROUP_EARLIER_CAPSULES,
+  GROUP_PRIMARY_VIEW,
   SUBMIT_AND_SEND,
   SUBMIT_DRAFT,
   UNTITLED_GROUP,
@@ -92,6 +94,11 @@ describe("join and manage labels", () => {
     expect(MANAGE_EMPTY_HEADING).toBe("No groups yet");
     expect(MANAGE_EMPTY_HINT).toBe("Have a link? Open it to join.");
     expect(MANAGE_CREATE_LABEL).toBe("Create");
+  });
+
+  it("locks closed-home capsule labels", () => {
+    expect(GROUP_PRIMARY_VIEW).toBe("Read the capsule");
+    expect(GROUP_EARLIER_CAPSULES).toBe("Earlier capsules");
   });
 
   it("locks submit model A labels", () => {

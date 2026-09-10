@@ -27,6 +27,7 @@ export const INVITE_HELPER =
 
 export const GROUP_PRIMARY_SUBMIT = "Write your letter";
 export const GROUP_PRIMARY_VIEW = "Read the capsule";
+export const GROUP_EARLIER_CAPSULES = "Earlier capsules";
 export const GROUP_PRIMARY_EDIT = "Edit until the window closes";
 export const SUBMIT_DRAFT = "Save as draft";
 export const SUBMIT_AND_SEND = "Save and submit";
