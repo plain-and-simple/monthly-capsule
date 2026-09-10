@@ -7,7 +7,10 @@ import {
   initials,
   manageGroupStatus,
   membershipRoleLabel,
+  nextOpenDateLabel,
   nextOpenPhrase,
+  shortMonthDay,
+  shortMonthDayYear,
   windowClosesPhrase,
 } from "./group-status";
 
@@ -64,6 +67,49 @@ describe("manage group status", () => {
     });
     expect(row.status).toBe(GROUP_STATUS_READY);
     expect(row.meta).toMatch(/September 2026 capsule is ready to read/);
+  });
+
+  it("keeps the resting meta on a short date with no year", () => {
+    const row = decorateManagedGroup(group, {
+      closedYearMonths: [],
+      compiledYearMonths: [],
+      now: new Date("2026-09-10T17:00:00Z"),
+    });
+    expect(row.status).toBe(GROUP_STATUS_RESTING);
+    expect(row.meta).toBe("Opens Oct 1");
+    expect(row.meta).not.toMatch(/2026|2027/);
+    expect(shortMonthDay("2026-10", 1)).toBe("Oct 1");
+  });
+});
+
+describe("next open date label", () => {
+  it("rolls to the next month once the start day has passed", () => {
+    expect(nextOpenDateLabel(group, [], new Date("2026-09-10T17:00:00Z"))).toBe("Oct 1, 2026");
+  });
+
+  it("stays in the current month when the start day is still ahead", () => {
+    expect(
+      nextOpenDateLabel({ ...group, submit_start_day: 20 }, [], new Date("2026-09-10T17:00:00Z")),
+    ).toBe("Sep 20, 2026");
+  });
+
+  it("rolls the year over in December", () => {
+    expect(nextOpenDateLabel(group, [], new Date("2026-12-15T18:00:00Z"))).toBe("Jan 1, 2027");
+  });
+
+  it("skips a closed current month even before the start day", () => {
+    expect(
+      nextOpenDateLabel(
+        { ...group, submit_start_day: 20 },
+        ["2026-09"],
+        new Date("2026-09-10T17:00:00Z"),
+      ),
+    ).toBe("Oct 20, 2026");
+  });
+
+  it("formats a short month, day, and year", () => {
+    expect(shortMonthDayYear("2026-10", 1)).toBe("Oct 1, 2026");
+    expect(shortMonthDayYear("2027-01", 9)).toBe("Jan 9, 2027");
   });
 });
 

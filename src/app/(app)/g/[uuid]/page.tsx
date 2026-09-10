@@ -3,12 +3,14 @@ import { GroupChrome } from "@/components/group-chrome";
 import { SaveLoginForm } from "@/components/save-login-form";
 import {
   GROUP_EARLIER_CAPSULES,
+  GROUP_FIRST_CAPSULE_HEADING,
+  GROUP_NO_PREVIOUS_CAPSULES,
   GROUP_PRIMARY_EDIT,
   GROUP_PRIMARY_SUBMIT,
   GROUP_PRIMARY_VIEW,
 } from "@/lib/copy";
 import { groupDisplayName } from "@/lib/copy";
-import { nextOpenPhrase, windowClosesPhrase } from "@/lib/group-status";
+import { nextOpenDateLabel, windowClosesPhrase } from "@/lib/group-status";
 import { resolveSubmitWindow } from "@/lib/cycle-store";
 import { capsuleHref, capsuleTitle, normalizeMonthVersion } from "@/lib/month-version";
 import { monthLabel } from "@/lib/schedule";
@@ -26,7 +28,7 @@ export default async function GroupHomePage({
 }) {
   const { uuid } = await params;
   const { group, member } = await requireGroupMember(uuid);
-  const { open, yearMonth, version } = await resolveSubmitWindow(group);
+  const { open, yearMonth, version, closed } = await resolveSubmitWindow(group);
   const admin = createAdminClient();
   const name = groupDisplayName(group.name);
 
@@ -80,9 +82,7 @@ export default async function GroupHomePage({
       ? capsuleTitle(monthLabel(latestCapsule.yearMonth), latestCapsule.version)
       : name;
   const closes = featuredMonth ? windowClosesPhrase(featuredMonth, group.submit_end_day) : "";
-  const nextOpen = featuredMonth
-    ? nextOpenPhrase(featuredMonth, group.submit_start_day)
-    : `the ${group.submit_start_day}`;
+  const nextOpenDate = nextOpenDateLabel(group, closed);
 
   return (
     <main className="main">
@@ -94,6 +94,8 @@ export default async function GroupHomePage({
             </Link>
             <h1>{name}</h1>
           </div>
+
+          <GroupChrome uuid={uuid} role={member.role} />
 
           <div className={`card card--pad-lg${myStatus === "submitted" && open ? " center" : ""}`}>
             <div className="stack">
@@ -128,14 +130,15 @@ export default async function GroupHomePage({
                       The {capsuleTitle(monthLabel(latestCapsule.yearMonth), latestCapsule.version)}{" "}
                       capsule is ready
                     </h2>
-                    <p className="muted small">Writing opens again on {nextOpen}.</p>
+                    <p className="muted small">Writing opens again on {nextOpenDate}.</p>
                   </>
                 ) : (
                   <>
                     <h2 className="serif" style={{ fontSize: "1.5rem" }}>
-                      Resting
+                      {GROUP_FIRST_CAPSULE_HEADING}
                     </h2>
-                    <p className="muted small">Writing opens again on {nextOpen}.</p>
+                    <p className="muted small">Writing opens on {nextOpenDate}.</p>
+                    <p className="muted tiny">{GROUP_NO_PREVIOUS_CAPSULES}</p>
                   </>
                 )}
               </div>
@@ -161,7 +164,7 @@ export default async function GroupHomePage({
                   >
                     {GROUP_PRIMARY_VIEW}
                   </Link>
-                  <p className="btn-note">Writing opens again on {nextOpen}.</p>
+                  <p className="btn-note">Writing opens again on {nextOpenDate}.</p>
                 </>
               ) : null}
             </div>
@@ -199,22 +202,27 @@ export default async function GroupHomePage({
                 ))}
               </ul>
             </div>
+          ) : compiled.length > 0 ? (
+            <div className="stack stack--tight">
+              <p className="eyebrow">{GROUP_EARLIER_CAPSULES}</p>
+              <p className="muted small">{GROUP_NO_PREVIOUS_CAPSULES}</p>
+            </div>
           ) : null}
 
-          <hr className="rule" />
-
-          <div className="stack">
-            <GroupChrome uuid={uuid} role={member.role} />
-            {open && latestCapsule ? (
-              <p className="small muted">
-                Last month:{" "}
-                <Link href={capsuleHref(uuid, latestCapsule.yearMonth, latestCapsule.version)}>
-                  the {capsuleTitle(monthLabel(latestCapsule.yearMonth), latestCapsule.version)}{" "}
-                  capsule
-                </Link>
-              </p>
-            ) : null}
-          </div>
+          {open && latestCapsule ? (
+            <>
+              <hr className="rule" />
+              <div className="stack">
+                <p className="small muted">
+                  Last month:{" "}
+                  <Link href={capsuleHref(uuid, latestCapsule.yearMonth, latestCapsule.version)}>
+                    the {capsuleTitle(monthLabel(latestCapsule.yearMonth), latestCapsule.version)}{" "}
+                    capsule
+                  </Link>
+                </p>
+              </div>
+            </>
+          ) : null}
 
           {member.account_id ? null : <SaveLoginForm groupId={uuid} />}
         </div>
