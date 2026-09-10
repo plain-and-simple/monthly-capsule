@@ -76,7 +76,12 @@ export function decorateManagedGroup(
   };
 }
 
-function nextOpenShort(
+/**
+ * Year-month whose submit_start_day is the next writing open date.
+ * The current month still counts while today is before submit_start_day
+ * and that month has not already been closed.
+ */
+function nextOpenYearMonth(
   group: CycleGroup,
   now: Date,
   closedYearMonths: readonly string[],
@@ -85,15 +90,41 @@ function nextOpenShort(
   const current = yearMonthString(date);
   const closed = new Set(closedYearMonths);
   if (date.day < group.submit_start_day && !closed.has(current)) {
-    return shortMonthDay(current, group.submit_start_day);
+    return current;
   }
-  return shortMonthDay(incrementYearMonth(current), group.submit_start_day);
+  return incrementYearMonth(current);
+}
+
+function nextOpenShort(
+  group: CycleGroup,
+  now: Date,
+  closedYearMonths: readonly string[],
+): string {
+  return shortMonthDay(nextOpenYearMonth(group, now, closedYearMonths), group.submit_start_day);
+}
+
+/** e.g. "Oct 1, 2026" — the next date writing opens for this group. */
+export function nextOpenDateLabel(
+  group: CycleGroup,
+  closedYearMonths: readonly string[],
+  now: Date = new Date(),
+): string {
+  return shortMonthDayYear(
+    nextOpenYearMonth(group, now, closedYearMonths),
+    group.submit_start_day,
+  );
 }
 
 export function shortMonthDay(yearMonth: string, day: number): string {
   const parsed = parseYearMonth(yearMonth);
   if (!parsed) return `the ${ordinal(day)}`;
   return `${monthName(parsed.month).slice(0, 3)} ${day}`;
+}
+
+export function shortMonthDayYear(yearMonth: string, day: number): string {
+  const parsed = parseYearMonth(yearMonth);
+  if (!parsed) return `the ${ordinal(day)}`;
+  return `${monthName(parsed.month).slice(0, 3)} ${day}, ${parsed.year}`;
 }
 
 export function windowClosesPhrase(yearMonth: string, endDay: number): string {
