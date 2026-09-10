@@ -1,9 +1,15 @@
 "use server";
 
 import { parseCreateAccount } from "@/lib/account";
+import {
+  DEFAULT_EMAIL_DAY,
+  DEFAULT_SUBMIT_END_DAY,
+  DEFAULT_SUBMIT_START_DAY,
+} from "@/lib/constants";
 import { appUrl, createGroupCode } from "@/lib/env";
 import { createAccount, linkMembership } from "@/lib/memberships";
 import { generatePin, hashPin } from "@/lib/pin";
+import { validateSchedule } from "@/lib/schedule";
 import { getAccountSession, setAccountSession, setSession } from "@/lib/session";
 import { rejectInvalidStudioCode } from "@/lib/studio-code";
 import { createAdminClient } from "@/lib/supabase";
@@ -26,6 +32,14 @@ export async function createGroup(_prev: CreateState, formData: FormData): Promi
   const name = String(formData.get("name") ?? "").trim();
   if (name.length > 40) {
     return { ok: false, error: "Name is too long." };
+  }
+
+  const start = Number(formData.get("submit_start_day") || DEFAULT_SUBMIT_START_DAY);
+  const end = Number(formData.get("submit_end_day") || DEFAULT_SUBMIT_END_DAY);
+  const email = Number(formData.get("email_day") || DEFAULT_EMAIL_DAY);
+  const scheduleError = validateSchedule(start, end, email);
+  if (scheduleError) {
+    return { ok: false, error: scheduleError };
   }
 
   try {
@@ -65,7 +79,13 @@ export async function createGroup(_prev: CreateState, formData: FormData): Promi
 
     const { data: group, error: groupError } = await admin
       .from("groups")
-      .insert({ name, pin_hash: pinHash })
+      .insert({
+        name,
+        pin_hash: pinHash,
+        submit_start_day: start,
+        submit_end_day: end,
+        email_day: email,
+      })
       .select("id")
       .single();
 

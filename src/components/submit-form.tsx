@@ -1,8 +1,10 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useRef, useState } from "react";
 import { submitLetter, type SubmitState } from "@/actions/submit";
 import { MAX_PHOTO_EDGE_PX, MAX_PHOTOS } from "@/lib/constants";
+import { SUBMIT_AND_SEND, SUBMIT_DRAFT } from "@/lib/copy";
+import type { SubmitStatus } from "@/lib/submit";
 
 type PreparedPhoto = {
   blob: Blob;
@@ -46,14 +48,21 @@ export function SubmitForm({
   closed,
   initialBody,
   existingPhotoCount,
+  initialStatus,
+  title,
+  closesPhrase,
 }: {
   groupId: string;
   closed: boolean;
   initialBody: string;
   existingPhotoCount: number;
+  initialStatus: SubmitStatus | null;
+  title: string;
+  closesPhrase: string;
 }) {
   const [photos, setPhotos] = useState<PreparedPhoto[]>([]);
   const [state, action, pending] = useActionState<SubmitState, FormData>(submitLetter, null);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   async function onFiles(list: FileList | null) {
     const files = Array.from(list ?? []).slice(0, MAX_PHOTOS);
@@ -64,10 +73,22 @@ export function SubmitForm({
     });
   }
 
+  const status = state?.status ?? initialStatus;
+  const statusLine =
+    state?.ok && status === "draft"
+      ? "Saved as draft"
+      : state?.ok && status === "submitted"
+        ? "Submitted"
+        : status === "draft"
+          ? "Draft saved"
+          : status === "submitted"
+            ? "Submitted — still editable"
+            : null;
+
   if (closed) {
     return (
-      <div className="space-y-4">
-        <h1 className="font-serif text-4xl leading-tight">Submit</h1>
+      <div className="stack">
+        <h1>Your letter</h1>
         <p>Closed.</p>
       </div>
     );
@@ -75,7 +96,7 @@ export function SubmitForm({
 
   return (
     <form
-      className="space-y-5"
+      className="stack stack--loose"
       action={async (formData) => {
         formData.set("groupId", groupId);
         photos.forEach((photo) => {
@@ -86,48 +107,100 @@ export function SubmitForm({
         await action(formData);
       }}
     >
-      <h1 className="font-serif text-4xl leading-tight">Submit</h1>
-      <div className="field">
-        <label htmlFor="body">Letter</label>
+      <div className="stack stack--tight">
+        <div className="row row--between">
+          <h1>{title}</h1>
+          {statusLine ? (
+            <span className="status">
+              <span className="dot" />
+              {statusLine}
+            </span>
+          ) : null}
+        </div>
+        <p className="muted small">
+          Open until {closesPhrase}. A draft stays hidden from the capsule until you submit.
+        </p>
+      </div>
+
+      <label className="field">
+        <span className="field__label">Letter</span>
         <textarea
-          id="body"
+          className="textarea"
           name="body"
           defaultValue={initialBody}
           maxLength={20000}
-          className="font-serif text-lg leading-relaxed"
+          placeholder="What has this month been like?"
         />
-      </div>
+        <span className="field__hint">No length rule. Three lines is a letter too.</span>
+      </label>
+
       <div className="field">
-        <label htmlFor="photos">Photos</label>
+        <span className="field__label">Photos</span>
+        <div className="photos" style={{ marginTop: "0.5rem" }}>
+          {photos.map((photo) => (
+            <div className="photo" key={photo.preview}>
+              <img src={photo.preview} alt="" />
+              <button
+                className="photo__remove"
+                type="button"
+                aria-label="Remove photo"
+                onClick={() => {
+                  setPhotos((current) => {
+                    const next = current.filter((item) => item.preview !== photo.preview);
+                    URL.revokeObjectURL(photo.preview);
+                    return next;
+                  });
+                }}
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+          {photos.length < MAX_PHOTOS ? (
+            <button className="photo photo--add" type="button" onClick={() => fileRef.current?.click()}>
+              Add
+            </button>
+          ) : null}
+        </div>
         <input
-          id="photos"
+          ref={fileRef}
           type="file"
           accept="image/jpeg,image/png,image/webp"
           multiple
+          hidden
           onChange={(event) => void onFiles(event.target.files)}
         />
-        <p className="text-sm text-muted">
+        <p className="field__hint">
           Up to {MAX_PHOTOS}. New photos replace the last set
           {existingPhotoCount > 0 ? ` (${existingPhotoCount} saved)` : ""}.
         </p>
       </div>
-      {photos.length > 0 ? (
-        <div className="grid grid-cols-3 gap-2">
-          {photos.map((photo) => (
-            <img
-              key={photo.preview}
-              src={photo.preview}
-              alt=""
-              className="h-24 w-full rounded-md object-cover"
-            />
-          ))}
-        </div>
-      ) : null}
+
       {state?.error ? <p className="err">{state.error}</p> : null}
-      {state?.ok ? <p>Saved.</p> : null}
-      <button className="btn" type="submit" disabled={pending}>
-        {pending ? "Saving…" : "Save"}
-      </button>
+      <div className="stack stack--tight">
+        <button
+          className="btn btn--primary btn--block btn--lg"
+          type="submit"
+          name="intent"
+          value="submit"
+          disabled={pending}
+        >
+          {pending ? "Saving…" : SUBMIT_AND_SEND}
+        </button>
+        <button
+          className="btn btn--secondary btn--block"
+          type="submit"
+          name="intent"
+          value="draft"
+          disabled={pending}
+        >
+          {SUBMIT_DRAFT}
+        </button>
+        <p className="btn-note">
+          Save as draft to keep it hidden. After you submit, you can still edit until the window
+          closes.
+        </p>
+      </div>
     </form>
   );
 }

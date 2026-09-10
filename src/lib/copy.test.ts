@@ -20,6 +20,8 @@ import {
   MANAGE_EMPTY_HINT,
   PREFERRED_NAME_LABEL,
   PRODUCT_NAME,
+  SUBMIT_AND_SEND,
+  SUBMIT_DRAFT,
   UNTITLED_GROUP,
   createSuccessHero,
   groupDisplayName,
@@ -90,6 +92,11 @@ describe("join and manage labels", () => {
     expect(MANAGE_EMPTY_HEADING).toBe("No groups yet");
     expect(MANAGE_EMPTY_HINT).toBe("Have a link? Open it to join.");
     expect(MANAGE_CREATE_LABEL).toBe("Create");
+  });
+
+  it("locks submit model A labels", () => {
+    expect(SUBMIT_DRAFT).toBe("Save as draft");
+    expect(SUBMIT_AND_SEND).toBe("Save and submit");
   });
 
   it("locks owner force-cycle labels", () => {

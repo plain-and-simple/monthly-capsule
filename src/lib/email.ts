@@ -1,10 +1,13 @@
 import "server-only";
 import { Resend } from "resend";
+import { capsuleEmailHtml, capsuleEmailSubject } from "@/lib/capsule-email";
 import { appUrl, resendApiKey, resendFromEmail } from "@/lib/env";
 import { cronShouldSendCapsule, sentEmailUpdate } from "@/lib/email-policy";
-import { emailTargetYearMonth } from "@/lib/schedule";
+import { nextOpenPhrase } from "@/lib/group-status";
+import { emailTargetYearMonth, monthLabel } from "@/lib/schedule";
+import { includedSubmissions } from "@/lib/submit";
 import { createAdminClient } from "@/lib/supabase";
-import type { Capsule, Group, Member, Month } from "@/lib/types";
+import type { Capsule, Group, Member, Month, Submission } from "@/lib/types";
 
 export async function sendDueCapsuleEmails(now: Date = new Date()) {
   const admin = createAdminClient();
@@ -111,15 +114,28 @@ export async function holdGroupMonthEmail(groupId: string, yearMonth: string) {
 
 async function sendCapsuleEmail(group: Group, month: Month, capsule: Capsule) {
   const admin = createAdminClient();
-  const { data: members } = await admin
-    .from("members")
-    .select("*")
-    .eq("group_id", group.id)
-    .not("email", "is", null);
+  const { data: members } = await admin.from("members").select("*").eq("group_id", group.id);
 
-  const recipients = ((members ?? []) as Member[]).filter((member) => member.email);
+  const roster = (members ?? []) as Member[];
+  const recipients = roster.filter((member) => member.email);
   const key = resendApiKey();
   const link = `${appUrl()}/g/${group.id}/capsule/${month.year_month}`;
+  const { data: submissionRows } = await admin.from("submissions").select("*").eq("month_id", month.id);
+  const letters = includedSubmissions((submissionRows ?? []) as Submission[]).map((row) => {
+    const author = roster.find((member) => member.id === row.member_id);
+    return {
+      name: author?.preferred_name || "Friend",
+      body: row.body,
+    };
+  });
+  const html = capsuleEmailHtml({
+    groupName: group.name,
+    monthLabel: monthLabel(month.year_month),
+    link,
+    letters,
+    nextOpen: nextOpenPhrase(month.year_month, group.submit_start_day),
+  });
+  const subject = capsuleEmailSubject(group.name, monthLabel(month.year_month));
 
   if (!key) {
     return 0;
@@ -131,8 +147,8 @@ async function sendCapsuleEmail(group: Group, month: Month, capsule: Capsule) {
       await resend.emails.send({
         from: resendFromEmail(),
         to: member.email as string,
-        subject: "Your monthly capsule is ready",
-        html: `<p>The capsule is ready.</p><p><a href="${link}">Read it</a></p>`,
+        subject,
+        html,
       });
     }
   }

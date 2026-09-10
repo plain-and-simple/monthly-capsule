@@ -17,7 +17,7 @@ export const metadata: Metadata = {
     default: "Plain and Simple Monthly Capsule",
     template: "%s · Plain and Simple Monthly Capsule",
   },
-  description: "A monthly letter for friends.",
+  description: "Friends write once a month. You get one capsule.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

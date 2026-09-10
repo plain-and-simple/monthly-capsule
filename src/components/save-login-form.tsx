@@ -7,33 +7,33 @@ export function SaveLoginForm({ groupId }: { groupId: string }) {
   const [state, action, pending] = useActionState<SaveLoginState, FormData>(saveLogin, null);
 
   if (state?.ok) {
-    return <p className="text-sm text-muted">Login saved. Manage will find this group.</p>;
+    return <p className="small muted">Login saved. Manage will find this group.</p>;
   }
 
   return (
-    <form action={action} className="space-y-4 rounded-xl border border-rule bg-card p-5">
-      <p className="font-serif text-xl">Save login</p>
-      <p className="text-sm text-muted">
-        Optional. Email and password so Manage can find this group later.
-      </p>
-      <input type="hidden" name="groupId" value={groupId} />
-      <div className="field">
-        <label htmlFor="save_email">Email</label>
-        <input id="save_email" name="email" type="email" required autoComplete="email" />
+    <form action={action} className="card stack">
+      <div className="stack stack--tight">
+        <h2>Save login</h2>
+        <p className="muted small">Optional. Email and password so Manage can find this group later.</p>
       </div>
-      <div className="field">
-        <label htmlFor="save_password">Password</label>
+      <input type="hidden" name="groupId" value={groupId} />
+      <label className="field">
+        <span className="field__label">Email</span>
+        <input className="input" name="email" type="email" required autoComplete="email" />
+      </label>
+      <label className="field">
+        <span className="field__label">Password</span>
         <input
-          id="save_password"
+          className="input"
           name="password"
           type="password"
           required
           minLength={8}
           autoComplete="new-password"
         />
-      </div>
+      </label>
       {state?.error ? <p className="err">{state.error}</p> : null}
-      <button className="btn btn-ghost" type="submit" disabled={pending}>
+      <button className="btn btn--secondary" type="submit" disabled={pending}>
         {pending ? "Saving…" : "Save login"}
       </button>
     </form>
