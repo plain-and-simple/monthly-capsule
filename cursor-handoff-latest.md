@@ -1,62 +1,68 @@
-# Handoff — email accept + stored capsule archive
+# Handoff — Same-month capsule versions
 
-Shipped on branch `cursor/fix-capsule-email-archive-70b8`.
+Shipped on branch `cursor/same-month-capsule-versions-1caa`.
 
-## Production facts (verified on `uqqxauszzorzhmngcnvf`)
+## Product
 
-Group **stepppy**, month `2026-10`, status `compiled`. Capsule row exists. `email_sent_at` is set, `email_held` is false. `capsules` has no HTML — only a marker row. Owner seat is Chacha / `chanfans@gmail.com` (also the only account). Chandler confirmed that address did **not** receive the mail.
+Force-open used to walk calendar months (Sep → Oct → Nov) on each dogfood open/close. Chandler wants **this Chicago month**, and if that month is already compiled, a **new edition** (v2, v3) of the same month — not the next calendar month.
 
-Curtis / Chan are on a different group (`steppy`) and are out of scope.
+Calendar day numbers still drive cron. Force open/close stay owner-only overrides.
 
-## Root cause
+## Behavior
 
-`resend.emails.send()` returns `{ data, error }` and does **not** throw on a normal API failure (unverified domain, bad from, rejected key). `sendCapsuleEmail` ignored that object and always wrote `email_sent_at` whenever `RESEND_API_KEY` was present. The app then hid Email group and told the owner it worked.
+| Situation (America/Chicago) | Force-open |
+| --- | --- |
+| This month not open / still needs writing | Open **this** month (v1 if none) |
+| This month already compiled | Open **v2 / v3** of this month (empty submissions) |
+| Submit already open | “Already open.” |
+| Hard cap (24 editions) | “This month cannot take another version.” |
 
-Likely live From mismatch:
+Force-open stays active through the **rest of that Chicago calendar month**, including days after `submit_end_day` (mid-month writing after the window).
 
-- Code fallback was `Capsule <capsule@plainandsimple.app>` (singular).
-- Designer mail is `capsules@plainandsimple.app` (plural).
-- Resend only accepts a **verified** domain. This agent cannot see the Capsule Vercel project (MCP only lists marketing `plainandsimple`), so CoS must confirm `RESEND_API_KEY` + `RESEND_FROM_EMAIL` on that project.
+Closing v1 freezes those letters on that `month_id`. Opening v2 creates a new `months` row. Submissions are unique on `(month_id, member_id)` — nothing is copied.
 
-## Fix 1 — honest email send
+## Schema
 
-- Recipients: `members.email`, else linked `accounts.email`. Deduped. Invalid / empty skipped.
-- Stamp `email_sent_at` only when Resend returns an id for **every** attempted recipient.
-- Owner sees `Sent N. Skipped M with no email.` and/or `Resend error: …`.
-- From header is `{Group} via Plain and Simple <verified@mailbox>`. Default mailbox is `capsules@plainandsimple.app`.
+`months.version integer not null default 1`
 
-## Fix 2 — stored archive
+- Unique: `(group_id, year_month, version)` (replaces `(group_id, year_month)`)
+- Partial unique: one `open` row per group
+- Existing rows (including live October 2026) become v1
+- Capsule archive JSON gains `month_version` (schema `version` stays 1)
 
-Compile writes `capsules.archive` (jsonb): letters, names, photo `storage_path`s, HTML snapshot without signed URLs. View serves that archive and signs photos at read time. First view of an old marker row backfills the snapshot. Closed home already has **Read the capsule** + **Earlier capsules**.
+### Live SQL for CoS (`uqqxauszzorzhmngcnvf`)
 
-## Apply on live Supabase `uqqxauszzorzhmngcnvf`
+Apply `supabase/migrations/20260910120000_month_versions.sql` in the SQL editor **before** relying on force-open in production. Do not skip. This agent did not apply it.
 
-1. `supabase/migrations/20260910024800_capsule_archive.sql` (and `20260910010000_submission_status.sql` if not already applied).
-2. Confirm Resend: domain `plainandsimple.app` verified; `RESEND_FROM_EMAIL` is that verified address (recommend `Plain and Simple <capsules@plainandsimple.app>`).
-3. Unstick the false success so the owner can Send again:
+After apply: `/g/…/capsule/2026-10` still works (v1). Force-open in September opens **September**, not another October.
 
-```sql
-update public.capsules
-set email_sent_at = null, email_held = false
-where id = '5a06b0fa-cc80-4db5-8b5a-fac361adfaf2';
-```
+## URLs / UI
 
-Apply the migration **before or with** deploy. After deploy, opening `/g/{stepppy}/capsule/2026-10` backfills `archive` for the October row.
-
-## Verify
-
-```bash
-npm test
-npm run typecheck
-```
-
-Owner Settings → Email group on 2026-10 after the SQL unstick. Expect either a real inbox message or a visible Resend error — never a silent `email_sent_at`.
+- v1: `/g/{id}/capsule/2026-09`
+- v2+: `/g/{id}/capsule/2026-09/v2`
+- Group home primary CTA = latest compiled (`year_month desc, version desc`)
+- Earlier capsules lists the rest, labeled `September 2026 · v2` when version > 1
+- Email link + subject target the edition being sent
 
 ## Key files
 
-- `src/lib/recipients.ts` — member + account emails, dedupe
-- `src/lib/email-policy.ts` — Resend accept, stamp rule, From header, owner copy
-- `src/lib/email.ts` — send path
-- `src/lib/capsule-archive.ts` + `src/lib/compile.ts` — snapshot
-- `src/app/(app)/g/[uuid]/capsule/[yearMonth]/page.tsx` — serve archive
-- `supabase/migrations/20260910024800_capsule_archive.sql`
+- `src/lib/month-version.ts` — `planForceOpen`, paths, labels
+- `src/lib/cycle.ts` — `forceOpenYearMonth`, force-open lasts the calendar month
+- `src/lib/compile.ts` — version-aware `ensureMonth` / compile / find
+- `src/actions/cycle.ts` — force-open uses current month + plan
+- `src/lib/email.ts` — send/hold by edition
+- `src/app/(app)/g/[uuid]/capsule/view.tsx` + `[yearMonth]/[edition]/page.tsx`
+- `src/app/(app)/g/[uuid]/page.tsx` — earlier capsules + versioned hrefs
+
+## How to verify
+
+1. `npm test` and `npm run typecheck`
+2. Apply the month_versions migration on the target DB
+3. After the window (e.g. Sept 10): Settings → Open submit early → **September** opens
+4. Submit a letter. Close & make capsule. View `/capsule/2026-09`
+5. Open submit early again → September **v2**, submit page empty (no v1 letter)
+6. Close v2 → `/capsule/2026-09/v2` distinct from v1; earlier capsules lists both
+7. Email group from the v2 view — mail goes to that URL
+8. Cron compile/email still key off calendar days; they compile/send the open or latest edition of the target month
+
+No live migration was applied from this agent.

@@ -1,11 +1,16 @@
 import {
   chicagoDate,
   compileTargetYearMonth,
-  incrementYearMonth,
   parseYearMonth,
   yearMonthString,
   type ScheduleDays,
 } from "@/lib/schedule";
+import {
+  DEFAULT_MONTH_VERSION,
+  latestEdition,
+  openEdition,
+  type CycleMonthRow,
+} from "@/lib/month-version";
 
 export type CycleGroup = ScheduleDays & {
   force_open_year_month: string | null;
@@ -21,10 +26,20 @@ export const CYCLE_SENT = "Sent.";
 export const CYCLE_ALREADY_SENT = "Already sent.";
 export const CYCLE_SKIPPED = "Not now.";
 export const CYCLE_NO_CAPSULE = "No capsule yet.";
+export const CYCLE_VERSION_CAP = "This month cannot take another version.";
 
+export type CycleTarget = {
+  yearMonth: string;
+  version: number;
+};
+
+/**
+ * Owner force-open stays active for that Chicago calendar month,
+ * including days after submit_end_day (mid-month writing / re-open).
+ */
 export function forceOpenStillActive(
   forceYearMonth: string,
-  schedule: Pick<ScheduleDays, "submit_end_day">,
+  _schedule?: Pick<ScheduleDays, "submit_end_day">,
   now: Date = new Date(),
 ): boolean {
   const parsed = parseYearMonth(forceYearMonth);
@@ -36,35 +51,30 @@ export function forceOpenStillActive(
   if (date.month !== parsed.month) {
     return date.month < parsed.month;
   }
-  return date.day <= schedule.submit_end_day;
+  return true;
 }
 
 /**
- * Calendar month that would next go closed → open.
- * Walks forward past compiled/closed months (no duplicate month).
+ * Force-open always targets this Chicago calendar month.
+ * Same-month compiled editions become v2+; we do not walk to next month.
  */
+export function forceOpenYearMonth(now: Date = new Date()): string {
+  return yearMonthString(chicagoDate(now));
+}
+
+/** @deprecated Use forceOpenYearMonth — kept so older tests/callers compile during the rename. */
 export function nextClosedToOpenYearMonth(
-  schedule: ScheduleDays,
-  closedYearMonths: readonly string[],
+  _schedule: ScheduleDays,
+  _closedYearMonths: readonly string[],
   now: Date = new Date(),
 ): string {
-  const date = chicagoDate(now);
-  const closed = new Set(closedYearMonths);
-  let yearMonth =
-    date.day <= schedule.submit_end_day ? yearMonthString(date) : incrementYearMonth(yearMonthString(date));
-
-  let guard = 0;
-  while (closed.has(yearMonth) && guard < 24) {
-    yearMonth = incrementYearMonth(yearMonth);
-    guard += 1;
-  }
-  return yearMonth;
+  return forceOpenYearMonth(now);
 }
 
 /**
  * Year-month members may submit to, or null when the window is shut.
- * Force-open wins while that month is still active and not compiled.
- * A compiled/closed current month does not reopen on calendar days.
+ * Force-open wins for that Chicago month even if an earlier edition is compiled.
+ * Calendar days never reopen a compiled/closed month (that takes force-open → v2).
  */
 export function openSubmitYearMonth(
   group: CycleGroup,
@@ -76,7 +86,7 @@ export function openSubmitYearMonth(
   const closed = new Set(closedYearMonths);
   const forceYM = group.force_open_year_month;
 
-  if (forceYM && !closed.has(forceYM) && forceOpenStillActive(forceYM, group, now)) {
+  if (forceYM && forceOpenStillActive(forceYM, group, now)) {
     return forceYM;
   }
 
@@ -106,6 +116,19 @@ export function forceCloseYearMonth(
   now: Date = new Date(),
 ): string {
   return openSubmitYearMonth(group, closedYearMonths, now) ?? compileTargetYearMonth(group, now);
+}
+
+export function forceCloseTarget(
+  group: CycleGroup,
+  rows: readonly CycleMonthRow[],
+  closedYearMonths: readonly string[],
+  now: Date = new Date(),
+): CycleTarget {
+  const yearMonth = forceCloseYearMonth(group, closedYearMonths, now);
+  const open = openEdition(rows, yearMonth);
+  if (open) return { yearMonth, version: open.version };
+  const latest = latestEdition(rows, yearMonth);
+  return { yearMonth, version: latest?.version ?? DEFAULT_MONTH_VERSION };
 }
 
 export type ForceOpenDecision = "ok" | "already_open" | "forbidden";

@@ -10,6 +10,7 @@ import {
 import { groupDisplayName } from "@/lib/copy";
 import { nextOpenPhrase, windowClosesPhrase } from "@/lib/group-status";
 import { resolveSubmitWindow } from "@/lib/cycle-store";
+import { capsuleHref, capsuleTitle, normalizeMonthVersion } from "@/lib/month-version";
 import { monthLabel } from "@/lib/schedule";
 import { requireGroupMember } from "@/lib/session";
 import { writtenCount, writtenCountPhrase } from "@/lib/submit";
@@ -25,7 +26,7 @@ export default async function GroupHomePage({
 }) {
   const { uuid } = await params;
   const { group, member } = await requireGroupMember(uuid);
-  const { open, yearMonth } = await resolveSubmitWindow(group);
+  const { open, yearMonth, version } = await resolveSubmitWindow(group);
   const admin = createAdminClient();
   const name = groupDisplayName(group.name);
 
@@ -33,24 +34,30 @@ export default async function GroupHomePage({
     admin.from("members").select("id", { count: "exact", head: true }).eq("group_id", uuid),
     admin
       .from("months")
-      .select("id, year_month")
+      .select("id, year_month, version")
       .eq("group_id", uuid)
       .eq("status", "compiled")
-      .order("year_month", { ascending: false }),
+      .order("year_month", { ascending: false })
+      .order("version", { ascending: false }),
   ]);
 
   const total = count ?? 0;
-  const latestCapsule = compiledMonths?.[0]?.year_month as string | undefined;
-  const earlier = (compiledMonths ?? []).slice(1);
+  const compiled = (compiledMonths ?? []).map((row) => ({
+    yearMonth: row.year_month as string,
+    version: normalizeMonthVersion(row.version),
+  }));
+  const latestCapsule = compiled[0];
+  const earlier = compiled.slice(1);
 
   let myStatus: "none" | "draft" | "submitted" = "none";
   let written = 0;
-  if (yearMonth) {
+  if (yearMonth && version != null) {
     const { data: month } = await admin
       .from("months")
       .select("id")
       .eq("group_id", uuid)
       .eq("year_month", yearMonth)
+      .eq("version", version)
       .maybeSingle();
     if (month) {
       const { data: submissions } = await admin
@@ -66,7 +73,12 @@ export default async function GroupHomePage({
     }
   }
 
-  const featuredMonth = open ? yearMonth : latestCapsule;
+  const featuredMonth = open ? yearMonth : latestCapsule?.yearMonth;
+  const featuredLabel = open && yearMonth
+    ? capsuleTitle(monthLabel(yearMonth), version ?? 1)
+    : latestCapsule
+      ? capsuleTitle(monthLabel(latestCapsule.yearMonth), latestCapsule.version)
+      : name;
   const closes = featuredMonth ? windowClosesPhrase(featuredMonth, group.submit_end_day) : "";
   const nextOpen = featuredMonth
     ? nextOpenPhrase(featuredMonth, group.submit_start_day)
@@ -92,7 +104,7 @@ export default async function GroupHomePage({
           <div className={`card card--pad-lg${myStatus === "submitted" && open ? " center" : ""}`}>
             <div className="stack">
               <div className="stack stack--tight">
-                <p className="eyebrow">{featuredMonth ? monthLabel(featuredMonth) : name}</p>
+                <p className="eyebrow">{featuredLabel}</p>
                 {open && myStatus === "submitted" ? (
                   <>
                     <h2 className="serif" style={{ fontSize: "1.5rem" }}>
@@ -113,7 +125,8 @@ export default async function GroupHomePage({
                 ) : latestCapsule ? (
                   <>
                     <h2 className="serif" style={{ fontSize: "1.5rem" }}>
-                      The {monthLabel(latestCapsule)} capsule is ready
+                      The {capsuleTitle(monthLabel(latestCapsule.yearMonth), latestCapsule.version)}{" "}
+                      capsule is ready
                     </h2>
                     <p className="muted small">Writing opens again on {nextOpen}.</p>
                   </>
@@ -144,7 +157,7 @@ export default async function GroupHomePage({
                 <>
                   <Link
                     className="btn btn--primary btn--block btn--lg"
-                    href={`/g/${uuid}/capsule/${latestCapsule}`}
+                    href={capsuleHref(uuid, latestCapsule.yearMonth, latestCapsule.version)}
                   >
                     {GROUP_PRIMARY_VIEW}
                   </Link>
@@ -170,10 +183,15 @@ export default async function GroupHomePage({
               <p className="eyebrow">{GROUP_EARLIER_CAPSULES}</p>
               <ul className="list">
                 {earlier.map((row) => (
-                  <li key={row.year_month}>
-                    <Link className="listitem" href={`/g/${uuid}/capsule/${row.year_month}`}>
+                  <li key={`${row.yearMonth}-${row.version}`}>
+                    <Link
+                      className="listitem"
+                      href={capsuleHref(uuid, row.yearMonth, row.version)}
+                    >
                       <span className="listitem__body">
-                        <span className="listitem__title">{monthLabel(row.year_month)}</span>
+                        <span className="listitem__title">
+                          {capsuleTitle(monthLabel(row.yearMonth), row.version)}
+                        </span>
                       </span>
                       <span className="listitem__end">Read</span>
                     </Link>
@@ -190,8 +208,9 @@ export default async function GroupHomePage({
             {open && latestCapsule ? (
               <p className="small muted">
                 Last month:{" "}
-                <Link href={`/g/${uuid}/capsule/${latestCapsule}`}>
-                  the {monthLabel(latestCapsule)} capsule
+                <Link href={capsuleHref(uuid, latestCapsule.yearMonth, latestCapsule.version)}>
+                  the {capsuleTitle(monthLabel(latestCapsule.yearMonth), latestCapsule.version)}{" "}
+                  capsule
                 </Link>
               </p>
             ) : null}

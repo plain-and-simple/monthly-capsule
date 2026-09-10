@@ -15,6 +15,7 @@ export type CapsuleArchiveLetter = {
 
 export type CapsuleArchive = {
   version: typeof CAPSULE_ARCHIVE_VERSION;
+  month_version: number;
   year_month: string;
   group_name: string;
   html: string;
@@ -63,15 +64,20 @@ export function parseCapsuleArchive(value: unknown): CapsuleArchive | null {
   const missedCount = Number.isFinite(row.missed_count)
     ? Number(row.missed_count)
     : Math.max(0, memberCount - letters.length);
+  const monthVersion = Number.isInteger(row.month_version) && Number(row.month_version) >= 1
+    ? Number(row.month_version)
+    : 1;
 
   return {
     version: CAPSULE_ARCHIVE_VERSION,
+    month_version: monthVersion,
     year_month: row.year_month,
     group_name: row.group_name,
     html: typeof row.html === "string" ? row.html : renderArchiveHtml({
       year_month: row.year_month,
       group_name: row.group_name,
       letters,
+      month_version: monthVersion,
     }),
     letters,
     member_count: memberCount,
@@ -84,7 +90,12 @@ export function buildCapsuleArchive(input: {
   groupName: string;
   letters: CapsuleArchiveLetter[];
   memberCount: number;
+  monthVersion?: number;
 }): CapsuleArchive {
+  const monthVersion =
+    Number.isInteger(input.monthVersion) && Number(input.monthVersion) >= 1
+      ? Number(input.monthVersion)
+      : 1;
   const letters = input.letters.map((letter) => ({
     preferred_name: letter.preferred_name,
     body: letter.body,
@@ -99,6 +110,7 @@ export function buildCapsuleArchive(input: {
     year_month: input.yearMonth,
     group_name: input.groupName,
     letters,
+    month_version: monthVersion,
   };
   return {
     version: CAPSULE_ARCHIVE_VERSION,
@@ -124,6 +136,7 @@ export function renderArchiveHtml(input: {
   year_month: string;
   group_name: string;
   letters: CapsuleArchiveLetter[];
+  month_version?: number;
 }): string {
   const sections = input.letters
     .map((letter) => {
@@ -137,7 +150,11 @@ export function renderArchiveHtml(input: {
       return `<section><h2>${escapeHtml(letter.preferred_name)}</h2><p>${body}</p>${photos}</section>`;
     })
     .join("");
-  return `<article data-year-month="${escapeAttr(input.year_month)}"><h1>${escapeHtml(input.group_name)}</h1>${sections}</article>`;
+  const monthVersion =
+    Number.isInteger(input.month_version) && Number(input.month_version) >= 1
+      ? Number(input.month_version)
+      : 1;
+  return `<article data-year-month="${escapeAttr(input.year_month)}" data-month-version="${monthVersion}"><h1>${escapeHtml(input.group_name)}</h1>${sections}</article>`;
 }
 
 function escapeHtml(value: string): string {

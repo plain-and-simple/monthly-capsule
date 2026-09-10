@@ -17,16 +17,19 @@ export default async function SubmitPage({ params }: { params: Promise<{ uuid: s
   const open = submitWindow.open;
   const admin = createAdminClient();
   const yearMonth = submitWindow.yearMonth;
+  const version = submitWindow.version;
   const name = groupDisplayName(group.name);
 
-  const { data: month } = yearMonth
-    ? await admin
-        .from("months")
-        .select("id")
-        .eq("group_id", uuid)
-        .eq("year_month", yearMonth)
-        .maybeSingle()
-    : { data: null };
+  const { data: month } =
+    yearMonth && version != null
+      ? await admin
+          .from("months")
+          .select("id")
+          .eq("group_id", uuid)
+          .eq("year_month", yearMonth)
+          .eq("version", version)
+          .maybeSingle()
+      : { data: null };
 
   let initialBody = "";
   let existingPhotoCount = 0;

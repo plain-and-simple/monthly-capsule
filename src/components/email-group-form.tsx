@@ -4,13 +4,22 @@ import { useActionState } from "react";
 import { emailGroupNow, type CycleEmailState } from "@/actions/cycle";
 import { CYCLE_EMAIL_LATER } from "@/lib/copy";
 
-export function EmailGroupForm({ groupId, yearMonth }: { groupId: string; yearMonth: string }) {
+export function EmailGroupForm({
+  groupId,
+  yearMonth,
+  version,
+}: {
+  groupId: string;
+  yearMonth: string;
+  version?: number;
+}) {
   const [state, action, pending] = useActionState<CycleEmailState, FormData>(emailGroupNow, null);
 
   return (
     <form action={action} className="stack stack--tight">
       <input type="hidden" name="groupId" value={groupId} />
       <input type="hidden" name="yearMonth" value={yearMonth} />
+      {version != null ? <input type="hidden" name="version" value={String(version)} /> : null}
       {state?.error ? <p className="err">{state.error}</p> : null}
       {state?.ok ? <p>{state.message}</p> : null}
       <button className="btn btn--secondary" type="submit" disabled={pending}>

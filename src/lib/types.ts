@@ -39,6 +39,7 @@ export type Month = {
   id: string;
   group_id: string;
   year_month: string;
+  version: number;
   status: MonthStatus;
   created_at: string;
 };
