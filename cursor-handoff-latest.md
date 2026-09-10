@@ -1,52 +1,65 @@
-# Handoff — GET /manage cookie-write 500
+# Handoff — designer UI + submit model A
 
-Shipped on branch `cursor/fix-manage-cookie-write-edbd`.
+Shipped on branch `cursor/capsule-ui-submit-model-a-2a49` · PR #10 into `main`.
 
-## Production bug
+## What changed
 
-Signed-in `GET /manage` returned 500 (`digest: 1808042703`):
+The live app now follows `design/capsule-drafts/` (paper, deep green, serif letters, one primary action). Invented draft content is not copied; real group names, dates, and counts are wired through.
 
-```
-Error: Cookies can only be modified in a Server Action or Route Handler.
-```
+**Submit model A (required)**
 
-Next.js forbids `cookies().set` during Server Component render. Two render paths wrote cookies:
-
-1. **`/manage` with exactly one group** called `setSession()` then redirected to the group home.
-2. **`getAccount()`** called `clearAccountSession()` when the account JWT was present but the account row was gone (also hit from `/` and other pages that read the account).
-
-Catching the error would still leave sessions wrong. Writes moved to Route Handlers.
-
-## Fix
-
-| Render situation | Before (illegal write) | After |
+| Action | Stored | In compiled capsule / email |
 | --- | --- | --- |
-| Valid account, 1 group on `GET /manage` | `setSession` in the page | `redirect("/api/session/open-solo")` — Route Handler sets the group cookie, then `redirect(/g/…)` |
-| Cookie present, JWT invalid or account missing | `clearAccountSession` in `getAccount` | `redirect("/api/session/clear")` — Route Handler expires the account cookie, then `redirect(/)` |
-| Valid account, 0 or many groups | render | unchanged (read-only) |
-| No account cookie on `/manage` | `redirect(/)` | unchanged |
+| Save as draft | yes | no |
+| Save and submit | yes | yes |
 
-`getAccount()` is read-only. Invalid sessions become a signed-out landing page without a 500. The stale cookie is actually expired, not left behind.
+After submit the letter stays editable until the window closes. Existing rows default to `submitted`.
 
-Login (`manageLogin`) and the group pick-list (`openManagedGroup`) already set cookies in Server Actions and are unchanged.
+## Product locks kept
+
+- Brand: Plain and Simple Monthly Capsule
+- Promise: Friends write once a month. You get one capsule.
+- Studio create still gated by `CREATE_GROUP_CODE`
+- Late writers: **count only** — People does not say who has not written
+- Timezone: America/Chicago
+- Invite: any member. Settings / regen / force-cycle: owner only
+- Empty force-close still compiles
+- Header: **Sign out** (not Leave)
+- Multi-group: Your groups with Open / Capsule ready / Resting; names never UUIDs; 1 group auto-enters
+- Force-cycle labels: Open submit early / Close & make capsule / Send / Not now / Email group
+
+## Apply this migration
+
+`supabase/migrations/20260910010000_submission_status.sql` adds `submissions.status` (`draft` | `submitted`, default `submitted`). Apply it on the Supabase project before dogfooding or compile will not know drafts.
+
+## Dogfood
+
+e2e is not set up. After env + **all** migrations (init, accounts, force-cycle, **submission_status**):
+
+1. **Landing.** `/` is paper: promise, Sign in, Create a capsule group. No photo split. No Forgot password.
+2. **Create.** Studio code → account (skip if already signed in) → group name + Submit opens / Submit closes / Email capsule → show-once link + PIN. Copy both. Continue to group home.
+3. **Manage.** 0 groups → Nothing here yet + create/join hint. 1 → group home. Many → Your groups with Open / Capsule ready / Resting. Header Sign out.
+4. **Join.** Link + PIN + preferred name. Save login optional.
+5. **Open group home.** Write your letter. Count only (“Three of six have written”). People / Invite / Settings are text links.
+6. **Submit model A.** Save as draft → status “Saved as draft”; group home still invites you to write/continue. Save and submit → “Your letter is in” + Edit until the window closes. Edit again and re-submit.
+7. **People.** Preferred names only. No Written / Not yet.
+8. **Invite.** Copy link, type PIN, copy message. Server never returns a PIN.
+9. **Owner settings.** Cycle days (locked labels), Open submit early / Close & make capsule (confirm), Email Send | Not now, Email group later, Make a new PIN (confirm, show once).
+10. **Compile.** Force-close (even with zero letters) still makes a capsule. Draft letters must **not** appear. Submitted letters must. Colophon states a missed **count**, not names.
+11. **Email.** Subject `{Group} — {Month}`. Body has letters + Read the whole capsule. Cron still skips `email_held`.
+
+```bash
+npm test
+npm run typecheck
+```
 
 ## Key files
 
-- `src/lib/session-policy.ts` — when a write is allowed; stale-session and solo-group decisions
-- `src/lib/session.ts` — `getAccount` no longer calls `clearAccountSession`
-- `src/app/(app)/manage/page.tsx` — no `setSession` during render
-- `src/app/api/session/clear/route.ts`
-- `src/app/api/session/open-solo/route.ts`
-- `src/lib/session-policy.test.ts`
+- `src/app/globals.css` — designer tokens and layout
+- `src/components/app-header.tsx` — brand + Sign out
+- `src/lib/submit.ts` + `src/actions/submit.ts` — draft vs submitted
+- `src/lib/group-status.ts` — Open / Capsule ready / Resting
+- `src/lib/capsule-email.ts` — email HTML
+- `supabase/migrations/20260910010000_submission_status.sql`
 
-## How to verify
-
-1. `npm test` — includes cookie-write policy + RSC source regression.
-2. Anonymous `GET /` → 200 landing.
-3. Anonymous `GET /manage` → redirect `/` (not 500).
-4. `GET /api/session/clear` → expires `capsule_account`, redirect `/`.
-5. Signed-in, **one** group: `/manage` → `/api/session/open-solo` → group home with `capsule_session` set.
-6. Signed-in, **many** groups: `/manage` renders the pick list (no cookie write).
-7. Garbage or orphaned `capsule_account` on `/` or `/manage` → `/api/session/clear` → landing, signed out, no 500.
-
-No schema change. Force-cycle from PR #8 is untouched.
+Designer HTML remains at `design/capsule-drafts/` as the visual reference.
