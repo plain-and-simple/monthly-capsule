@@ -37,6 +37,7 @@ export type ManageSoloDecision =
   | { action: "open_via_route"; path: typeof OPEN_SOLO_GROUP_PATH };
 
 /** GET /manage always lists groups so Your groups and Create stay reachable. */
-export function decideManageSolo(_groupCount: number): ManageSoloDecision {
+export function decideManageSolo(groupCount: number): ManageSoloDecision {
+  void groupCount;
   return { action: "render" };
 }
