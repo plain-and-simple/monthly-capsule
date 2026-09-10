@@ -27,7 +27,7 @@ Friends write a letter (and up to six photos) each month. After the window close
 - Schedule fields: `submit_start_day` (default 1), `submit_end_day` (default 8), `email_day` (default 9).
   - Rule: `1 ≤ start ≤ end ≤ 28` **and** `end < email_day ≤ 28`.
 - One submission per member per month. In-window save upserts. **Save as draft** is stored but hidden from the compiled capsule. **Save and submit** includes it. After submit the letter stays editable until the window closes. Server rejects when the window is closed.
-- Compile job runs after `submit_end_day` ends (Chicago). Idempotent `capsules` row plus a durable `archive` snapshot (letters, names, photo storage paths, HTML). The view page serves that archive so later edits do not rewrite history.
+- Compile job runs after `submit_end_day` ends (Chicago). Idempotent `capsules` row plus a durable `archive` snapshot (letters, names, photo storage paths, HTML) and a PDF keepsake (letters + photos) stored in private Storage. The view page serves that archive so later edits do not rewrite history; members can download the PDF, and the monthly email attaches it when available.
 - Email job runs on `email_day`. Sends only if a capsule exists, `email_sent_at` is null, and `email_held` is false. Recipients are `members.email` or, when that is null, the linked `accounts.email`. Addresses are deduped. Resend skips seats with no address. `email_sent_at` is set only after Resend accepts every attempted send.
 - Owner settings labels are exactly: **Submit opens**, **Submit closes**, **Email capsule**.
 - Owner **Capsule cycle** (force, unused = calendar path unchanged):
@@ -39,7 +39,7 @@ Friends write a letter (and up to six photos) each month. After the window close
 - Sessions: httpOnly, Secure (prod), SameSite=Lax, host-only cookies on `capsule.plainandsimple.app`. `capsule_session` binds `member_id` + `group_id`. `capsule_account` binds `account_id`.
 - Capsules are session-gated. No public unauthenticated pages.
 
-Out of scope: PDF, phone / SMS OTP, first/last name, Apple Sign In / CloudKit, co-owners, rich editor, video, per-member schedules.
+Out of scope: phone / SMS OTP, first/last name, Apple Sign In / CloudKit, co-owners, rich editor, video, per-member schedules.
 
 ## Stack
 
@@ -61,7 +61,7 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
-Apply the SQL in `supabase/migrations/` to your Supabase project (SQL editor, or `supabase db push` if you use the CLI). The first migration creates tables, indexes, RLS, and the private storage bucket. The accounts migration adds `accounts`, `login_attempts`, `members.account_id`, and renames `display_name` → `preferred_name`. The force-cycle migration adds `groups.force_open_year_month` and `capsules.email_held`. The submission_status migration adds `submissions.status`. The capsule_archive migration adds `capsules.archive`. The month_versions migration adds `months.version` and unique `(group_id, year_month, version)`.
+Apply the SQL in `supabase/migrations/` to your Supabase project (SQL editor, or `supabase db push` if you use the CLI). The first migration creates tables, indexes, RLS, and the private storage bucket. The accounts migration adds `accounts`, `login_attempts`, `members.account_id`, and renames `display_name` → `preferred_name`. The force-cycle migration adds `groups.force_open_year_month` and `capsules.email_held`. The submission_status migration adds `submissions.status`. The capsule_archive migration adds `capsules.archive`. The month_versions migration adds `months.version` and unique `(group_id, year_month, version)`. The capsule_pdf migration adds `capsules.pdf_storage_path` and allows `application/pdf` in the photos bucket.
 
 ```bash
 npm run typecheck
@@ -95,12 +95,12 @@ See `.env.example`.
 7. **People** `/g/[uuid]/people` — preferred names. Any member. No emails.
 8. **Invite** `/g/[uuid]/invite` — copy join URL, optional typed PIN, and share text (URL + PIN if typed). Server never returns a PIN.
 9. **Submit** `/g/[uuid]/submit` — letter + ≤6 photos; Save as draft (hidden from capsule) or Save and submit (included); still editable until the window closes; “Closed.” when shut.
-10. **Capsule** `/g/[uuid]/capsule/[YYYY-MM]` — first edition (v1). Later same-month compiles: `/g/[uuid]/capsule/[YYYY-MM]/v2`. Read-only archive; session required. Any member.
+10. **Capsule** `/g/[uuid]/capsule/[YYYY-MM]` — first edition (v1). Later same-month compiles: `/g/[uuid]/capsule/[YYYY-MM]/v2`. Read-only archive; session required. Any member. **Download PDF** at `/…/pdf` (same path + `/pdf`).
 11. **Owner settings** `/g/[uuid]/settings` — the three day-of-month fields, Capsule cycle (open early / close & make / email), and Regenerate PIN.
 
 ## Dogfood path
 
-e2e is not set up. After env + **all** migrations (init, accounts, force-cycle, submission_status, capsule_archive, **month_versions**):
+e2e is not set up. After env + **all** migrations (init, accounts, force-cycle, submission_status, capsule_archive, **month_versions**, **capsule_pdf**):
 
 1. **Create (GWT B).** Open `/`. Upper-right Create Capsule Group. Studio code (local default `plainandsimple` if `CREATE_GROUP_CODE` is unset). Preferred name, email, password (8+). Copy the join link and PIN. Continue to the group home. You are the owner.
 2. **Manage (GWT A).** Private window. `/` → Manage your capsule with that email + password. No SMS. One group → group home. Your groups (and the brand mark) open `/manage` even with one group, so you can create another. Sign out from `/manage`.

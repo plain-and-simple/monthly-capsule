@@ -71,6 +71,7 @@ export type Capsule = {
   email_sent_at: string | null;
   email_held: boolean;
   archive?: unknown;
+  pdf_storage_path?: string | null;
 };
 
 export type SessionPayload = {
