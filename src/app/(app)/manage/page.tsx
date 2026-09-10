@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { openManagedGroup } from "@/actions/open-group";
 import { AppHeader } from "@/components/app-header";
 import {
@@ -8,9 +7,8 @@ import {
   MANAGE_EMPTY_TITLE,
   groupDisplayName,
 } from "@/lib/copy";
-import { decorateManagedGroup, initials } from "@/lib/group-status";
+import { decorateManagedGroup, initials, membershipRoleLabel } from "@/lib/group-status";
 import { listAccountGroups } from "@/lib/memberships";
-import { decideManageSolo } from "@/lib/session-policy";
 import { requireAccount } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase";
 import type { Group } from "@/lib/types";
@@ -20,11 +18,6 @@ export const dynamic = "force-dynamic";
 export default async function ManagePage() {
   const account = await requireAccount();
   const groups = await listAccountGroups(account.id);
-
-  const solo = decideManageSolo(groups.length);
-  if (solo.action === "open_via_route") {
-    redirect(solo.path);
-  }
 
   const admin = createAdminClient();
   const groupIds = groups.map(({ group }) => group.id);
@@ -89,7 +82,7 @@ export default async function ManagePage() {
             ) : (
               <>
                 <ul className="list">
-                  {groups.map(({ group }) => {
+                  {groups.map(({ group, member }) => {
                     const decorated = decorateManagedGroup(group as Group, {
                       closedYearMonths: closedByGroup.get(group.id) ?? [],
                       compiledYearMonths: compiledByGroup.get(group.id) ?? [],
@@ -102,7 +95,10 @@ export default async function ManagePage() {
                           <button className="listitem" type="submit">
                             <span className="avatar avatar--lg">{initials(name)}</span>
                             <span className="listitem__body">
-                              <span className="listitem__title">{name}</span>
+                              <span className="listitem__heading">
+                                <span className="listitem__title">{name}</span>
+                                <span className="badge">{membershipRoleLabel(member.role)}</span>
+                              </span>
                               <span className="listitem__meta">{decorated.meta}</span>
                             </span>
                             <span className="listitem__end">

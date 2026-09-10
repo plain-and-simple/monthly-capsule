@@ -1,5 +1,7 @@
+import { ROLE_MEMBER_LABEL, ROLE_OWNER_LABEL } from "@/lib/copy";
 import { openSubmitYearMonth, type CycleGroup } from "@/lib/cycle";
 import { chicagoWeekdayTheDay, monthName, ordinal } from "@/lib/dates";
+import type { Role } from "@/lib/types";
 import {
   chicagoDate,
   compileTargetYearMonth,
@@ -12,6 +14,10 @@ import {
 export const GROUP_STATUS_OPEN = "Open";
 export const GROUP_STATUS_READY = "Capsule ready";
 export const GROUP_STATUS_RESTING = "Resting";
+
+export function membershipRoleLabel(role: Role): string {
+  return role === "owner" ? ROLE_OWNER_LABEL : ROLE_MEMBER_LABEL;
+}
 
 export type ManageGroupStatus =
   | typeof GROUP_STATUS_OPEN

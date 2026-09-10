@@ -20,6 +20,8 @@ import {
   MANAGE_EMPTY_HINT,
   PREFERRED_NAME_LABEL,
   PRODUCT_NAME,
+  ROLE_MEMBER_LABEL,
+  ROLE_OWNER_LABEL,
   GROUP_EARLIER_CAPSULES,
   GROUP_PRIMARY_VIEW,
   SUBMIT_AND_SEND,
@@ -94,6 +96,8 @@ describe("join and manage labels", () => {
     expect(MANAGE_EMPTY_HEADING).toBe("No groups yet");
     expect(MANAGE_EMPTY_HINT).toBe("Have a link? Open it to join.");
     expect(MANAGE_CREATE_LABEL).toBe("Create");
+    expect(ROLE_OWNER_LABEL).toBe("Owner");
+    expect(ROLE_MEMBER_LABEL).toBe("Member");
   });
 
   it("locks closed-home capsule labels", () => {

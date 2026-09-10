@@ -92,19 +92,19 @@ export default async function GroupHomePage({
             <Link className="backlink" href="/manage">
               ← Your groups
             </Link>
-            <div className="row row--between">
-              <h1>{name}</h1>
-              <span className={open ? "badge badge--open" : "badge badge--closed"}>
-                <span className="dot" />
-                {open ? "Open" : "Closed"}
-              </span>
-            </div>
+            <h1>{name}</h1>
           </div>
 
           <div className={`card card--pad-lg${myStatus === "submitted" && open ? " center" : ""}`}>
             <div className="stack">
               <div className="stack stack--tight">
-                <p className="eyebrow">{featuredLabel}</p>
+                <div className="row row--between">
+                  <p className="eyebrow">{featuredLabel}</p>
+                  <span className={open ? "badge badge--open" : "badge badge--closed"}>
+                    <span className="dot" />
+                    {open ? "Open" : "Closed"}
+                  </span>
+                </div>
                 {open && myStatus === "submitted" ? (
                   <>
                     <h2 className="serif" style={{ fontSize: "1.5rem" }}>

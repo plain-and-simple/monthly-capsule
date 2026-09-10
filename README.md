@@ -87,7 +87,7 @@ See `.env.example`.
 ## Screens
 
 1. **Home** `/` — left picture; right **Manage your capsule** (email → password → Continue). Upper-right **Create Capsule Group**. No three equal CTAs. No phone.
-2. **Manage** `/manage` — account groups. Empty + join hint, a pick list, or (after login with exactly one group) the group home.
+2. **Manage** `/manage` — account groups. Empty + join hint, or a pick list (including one group) with owner/member. After login with exactly one group, go to group home. Your groups always returns to this list.
 3. **Create** `/create` — studio code → preferred name + email + password + optional group name → UUID + PIN shown once (copy). Account owns the group.
 4. **Join** `/join` — join link or group ID + PIN + preferred name. Optional Save login (email + password). Skip → group session only.
 5. **Join link** `/join/[uuid]` — PIN + preferred name + optional Save login.
@@ -103,7 +103,7 @@ See `.env.example`.
 e2e is not set up. After env + **all** migrations (init, accounts, force-cycle, submission_status, capsule_archive, **month_versions**):
 
 1. **Create (GWT B).** Open `/`. Upper-right Create Capsule Group. Studio code (local default `plainandsimple` if `CREATE_GROUP_CODE` is unset). Preferred name, email, password (8+). Copy the join link and PIN. Continue to the group home. You are the owner.
-2. **Manage (GWT A).** Private window. `/` → Manage your capsule with that email + password. No SMS. One group → group home. Sign out from `/manage` (Leave, then Your capsules, or open `/manage` directly).
+2. **Manage (GWT A).** Private window. `/` → Manage your capsule with that email + password. No SMS. One group → group home. Your groups (and the brand mark) open `/manage` even with one group, so you can create another. Sign out from `/manage`.
 3. **Join without save (GWT C).** Another private window. Open the join link. Preferred name. Leave Save login unchecked. You land in the group. Manage with a *new* email does not list this group. The owner’s Manage still does.
 4. **Join with save (GWT D).** Preferred name + check Save login + email + password. That account’s Manage finds the group. Or Save login from group home after a skip.
 5. **People (GWT E).** People shows preferred names only — no emails.

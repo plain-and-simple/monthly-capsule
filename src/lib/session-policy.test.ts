@@ -67,17 +67,14 @@ describe("invalid / missing account cookie", () => {
 });
 
 describe("single-group manage redirect", () => {
-  it("0 or many groups render /manage (no cookie write)", () => {
+  it("0, 1, or many groups render /manage (no cookie write)", () => {
     expect(decideManageSolo(0)).toEqual({ action: "render" });
+    expect(decideManageSolo(1)).toEqual({ action: "render" });
     expect(decideManageSolo(2)).toEqual({ action: "render" });
     expect(decideManageSolo(5)).toEqual({ action: "render" });
   });
 
-  it("exactly one group opens via the Route Handler that may set the group cookie", () => {
-    expect(decideManageSolo(1)).toEqual({
-      action: "open_via_route",
-      path: OPEN_SOLO_GROUP_PATH,
-    });
+  it("keeps the solo Route Handler for login, but GET /manage never uses it", () => {
     expect(OPEN_SOLO_GROUP_PATH).toBe("/api/session/open-solo");
   });
 });
@@ -88,9 +85,9 @@ describe("RSC cookie-write regression", () => {
     expect(page).not.toMatch(/\bsetSession\b/);
     expect(page).not.toMatch(/\bclearAccountSession\b/);
     expect(page).not.toMatch(/\bclearSession\b/);
-    expect(page).toContain("decideManageSolo");
-    expect(page).toContain("open_via_route");
-    expect(page).toContain("solo.path");
+    expect(page).not.toContain("decideManageSolo");
+    expect(page).not.toContain("open_via_route");
+    expect(page).not.toContain("solo.path");
   });
 
   it("getAccount does not write cookies; stale sessions redirect to the clearer", () => {
