@@ -1,8 +1,12 @@
 import Link from "next/link";
 import { SubmitForm } from "@/components/submit-form";
+import { groupDisplayName } from "@/lib/copy";
+import { windowClosesPhrase } from "@/lib/group-status";
 import { resolveSubmitWindow } from "@/lib/cycle-store";
+import { monthLabel } from "@/lib/schedule";
 import { requireGroupMember } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase";
+import type { SubmitStatus } from "@/lib/submit";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +17,7 @@ export default async function SubmitPage({ params }: { params: Promise<{ uuid: s
   const open = submitWindow.open;
   const admin = createAdminClient();
   const yearMonth = submitWindow.yearMonth;
+  const name = groupDisplayName(group.name);
 
   const { data: month } = yearMonth
     ? await admin
@@ -25,16 +30,18 @@ export default async function SubmitPage({ params }: { params: Promise<{ uuid: s
 
   let initialBody = "";
   let existingPhotoCount = 0;
+  let initialStatus: SubmitStatus | null = null;
 
   if (month) {
     const { data: submission } = await admin
       .from("submissions")
-      .select("id, body")
+      .select("id, body, status")
       .eq("month_id", month.id)
       .eq("member_id", member.id)
       .maybeSingle();
     if (submission) {
       initialBody = submission.body ?? "";
+      initialStatus = ((submission.status as SubmitStatus | null) ?? "submitted") as SubmitStatus;
       const { count } = await admin
         .from("photos")
         .select("id", { count: "exact", head: true })
@@ -43,17 +50,27 @@ export default async function SubmitPage({ params }: { params: Promise<{ uuid: s
     }
   }
 
+  const title = yearMonth ? `Your ${monthLabel(yearMonth).replace(/ \d{4}$/, "")} letter` : "Your letter";
+  const closes = yearMonth ? windowClosesPhrase(yearMonth, group.submit_end_day) : "the window closes";
+
   return (
-    <div className="space-y-6">
-      <Link href={`/g/${uuid}`} className="link-quiet">
-        Back
-      </Link>
-      <SubmitForm
-        groupId={uuid}
-        closed={!open}
-        initialBody={initialBody}
-        existingPhotoCount={existingPhotoCount}
-      />
-    </div>
+    <main className="main">
+      <div className="wrap">
+        <div className="stack stack--loose">
+          <Link href={`/g/${uuid}`} className="backlink">
+            ← {name}
+          </Link>
+          <SubmitForm
+            groupId={uuid}
+            closed={!open}
+            initialBody={initialBody}
+            existingPhotoCount={existingPhotoCount}
+            initialStatus={initialStatus}
+            title={title}
+            closesPhrase={closes}
+          />
+        </div>
+      </div>
+    </main>
   );
 }

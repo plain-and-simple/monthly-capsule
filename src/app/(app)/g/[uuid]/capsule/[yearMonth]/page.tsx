@@ -2,10 +2,12 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { EmailGroupForm } from "@/components/email-group-form";
 import { groupDisplayName } from "@/lib/copy";
+import { initials } from "@/lib/group-status";
 import { canForceCycle } from "@/lib/manage";
 import { monthLabel } from "@/lib/schedule";
 import { requireGroupMember } from "@/lib/session";
 import { signedPhotoUrl } from "@/lib/photos";
+import { includedSubmissions, missedCountPhrase, writtenCount } from "@/lib/submit";
 import { createAdminClient } from "@/lib/supabase";
 import type { Member, Photo, Submission } from "@/lib/types";
 
@@ -21,8 +23,9 @@ export default async function CapsulePage({
     notFound();
   }
 
-  const { member: viewer } = await requireGroupMember(uuid);
+  const { member: viewer, group } = await requireGroupMember(uuid);
   const admin = createAdminClient();
+  const name = groupDisplayName(group.name);
 
   const { data: month } = await admin
     .from("months")
@@ -39,32 +42,36 @@ export default async function CapsulePage({
     .maybeSingle();
   if (!capsule) {
     return (
-      <div className="space-y-4">
-        <Link href={`/g/${uuid}`} className="link-quiet">
-          Back
-        </Link>
-        <h1 className="font-serif text-4xl">Not ready</h1>
-      </div>
+      <main className="main">
+        <div className="wrap">
+          <div className="stack">
+            <Link href={`/g/${uuid}`} className="backlink">
+              ← {name}
+            </Link>
+            <h1>Not ready</h1>
+          </div>
+        </div>
+      </main>
     );
   }
 
-  const { data: group } = await admin.from("groups").select("name").eq("id", uuid).single();
-  const { data: submissions } = await admin
-    .from("submissions")
-    .select("*")
-    .eq("month_id", month.id)
-    .order("submitted_at", { ascending: true });
+  const [{ data: submissions }, { count: memberCount }] = await Promise.all([
+    admin.from("submissions").select("*").eq("month_id", month.id).order("submitted_at", { ascending: true }),
+    admin.from("members").select("id", { count: "exact", head: true }).eq("group_id", uuid),
+  ]);
 
-  const memberIds = (submissions ?? []).map((row) => row.member_id);
+  const included = includedSubmissions((submissions ?? []) as Submission[]);
+  const memberIds = included.map((row) => row.member_id);
   const { data: members } =
     memberIds.length > 0
       ? await admin.from("members").select("*").in("id", memberIds)
       : { data: [] };
 
-  const memberById = new Map(((members ?? []) as Member[]).map((member) => [member.id, member]));
+  const memberById = new Map(((members ?? []) as Member[]).map((row) => [row.id, row]));
+  const missed = Math.max(0, (memberCount ?? 0) - writtenCount(included));
 
   const letters = await Promise.all(
-    ((submissions ?? []) as Submission[]).map(async (submission) => {
+    included.map(async (submission) => {
       const { data: photos } = await admin
         .from("photos")
         .select("*")
@@ -85,46 +92,72 @@ export default async function CapsulePage({
   );
 
   return (
-    <article className="space-y-10">
-      <Link href={`/g/${uuid}`} className="link-quiet">
-        Back
-      </Link>
-      <header>
-        <p className="text-xs uppercase tracking-wide text-muted">{monthLabel(yearMonth)}</p>
-        <h1 className="font-serif text-4xl font-medium leading-tight">
-          {groupDisplayName(group?.name)}
-        </h1>
-      </header>
-      {canForceCycle(viewer.role) && !capsule.email_sent_at ? (
-        <EmailGroupForm groupId={uuid} yearMonth={yearMonth} />
-      ) : null}
-      {letters.length === 0 ? <p>No letters this month.</p> : null}
-      {letters.map(({ submission, member, photos }) => (
-        <section key={submission.id} className="space-y-4 border-t border-rule pt-8">
-          <h2 className="font-serif text-2xl">{member?.preferred_name || "Friend"}</h2>
-          {submission.body ? (
-            <p className="whitespace-pre-wrap font-serif text-lg leading-relaxed">
-              {submission.body}
-            </p>
+    <main className="main">
+      <div className="wrap wrap--wide">
+        <div className="stack stack--loose">
+          <Link href={`/g/${uuid}`} className="backlink">
+            ← {name}
+          </Link>
+
+          {canForceCycle(viewer.role) && !capsule.email_sent_at ? (
+            <EmailGroupForm groupId={uuid} yearMonth={yearMonth} />
           ) : null}
-          {photos.length > 0 ? (
-            <div className="grid grid-cols-2 gap-3">
-              {photos.map((photo) =>
-                photo.url ? (
-                  <img
-                    key={photo.id}
-                    src={photo.url}
-                    alt=""
-                    width={photo.width}
-                    height={photo.height}
-                    className="w-full rounded-md"
-                  />
-                ) : null,
-              )}
+
+          <article className="capsule">
+            <header className="capsule__masthead">
+              <p className="eyebrow">{name}</p>
+              <h1 className="capsule__title">{monthLabel(yearMonth)}</h1>
+              <p className="muted small">
+                {letters.length} {letters.length === 1 ? "letter" : "letters"}
+                {letters.length > 0
+                  ? ` from ${letters.map(({ member }) => member?.preferred_name || "Friend").join(", ")}`
+                  : ""}
+              </p>
+              {letters.length > 0 ? (
+                <ul className="capsule__contents">
+                  {letters.map(({ member, submission }) => (
+                    <li key={submission.id}>{member?.preferred_name || "Friend"}</li>
+                  ))}
+                </ul>
+              ) : null}
+            </header>
+
+            {letters.length === 0 ? <p className="center muted">No letters this month.</p> : null}
+
+            {letters.map(({ submission, member, photos }) => (
+              <section className="letter" key={submission.id}>
+                <div className="letter__head">
+                  <span className="avatar">{initials(member?.preferred_name || "Friend")}</span>
+                  <div>
+                    <div className="letter__name">{member?.preferred_name || "Friend"}</div>
+                  </div>
+                </div>
+                {submission.body ? <div className="letter__body">{submission.body}</div> : null}
+                {photos.length > 0 ? (
+                  <div className="letter__photos">
+                    {photos.map((photo) =>
+                      photo.url ? (
+                        <div className="photo" key={photo.id}>
+                          <img
+                            src={photo.url}
+                            alt=""
+                            width={photo.width}
+                            height={photo.height}
+                          />
+                        </div>
+                      ) : null,
+                    )}
+                  </div>
+                ) : null}
+              </section>
+            ))}
+
+            <div className="capsule__colophon">
+              <p>{missedCountPhrase(missed)}</p>
             </div>
-          ) : null}
-        </section>
-      ))}
-    </article>
+          </article>
+        </div>
+      </div>
+    </main>
   );
 }

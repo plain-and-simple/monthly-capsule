@@ -1,12 +1,15 @@
 import Link from "next/link";
-import { leaveGroup } from "@/actions/leave";
 import { GroupChrome } from "@/components/group-chrome";
 import { SaveLoginForm } from "@/components/save-login-form";
-import { GROUP_PRIMARY_SUBMIT, GROUP_PRIMARY_VIEW } from "@/lib/copy";
+import { GROUP_PRIMARY_EDIT, GROUP_PRIMARY_SUBMIT, GROUP_PRIMARY_VIEW } from "@/lib/copy";
+import { groupDisplayName } from "@/lib/copy";
+import { nextOpenPhrase, windowClosesPhrase } from "@/lib/group-status";
 import { resolveSubmitWindow } from "@/lib/cycle-store";
-import { currentYearMonth, monthLabel } from "@/lib/schedule";
+import { monthLabel } from "@/lib/schedule";
 import { requireGroupMember } from "@/lib/session";
+import { writtenCount, writtenCountPhrase } from "@/lib/submit";
 import { createAdminClient } from "@/lib/supabase";
+import type { Submission } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -17,55 +20,181 @@ export default async function GroupHomePage({
 }) {
   const { uuid } = await params;
   const { group, member } = await requireGroupMember(uuid);
-  const { open } = await resolveSubmitWindow(group);
+  const { open, yearMonth } = await resolveSubmitWindow(group);
   const admin = createAdminClient();
+  const name = groupDisplayName(group.name);
 
-  const [{ count }, { data: compiled }] = await Promise.all([
+  const [{ count }, { data: compiledMonths }] = await Promise.all([
     admin.from("members").select("id", { count: "exact", head: true }).eq("group_id", uuid),
     admin
       .from("months")
-      .select("year_month")
+      .select("id, year_month")
       .eq("group_id", uuid)
       .eq("status", "compiled")
-      .order("year_month", { ascending: false })
-      .limit(1)
-      .maybeSingle(),
+      .order("year_month", { ascending: false }),
   ]);
 
-  const capsuleMonth = compiled?.year_month as string | undefined;
-  const thisMonth = currentYearMonth();
+  const total = count ?? 0;
+  const latestCapsule = compiledMonths?.[0]?.year_month as string | undefined;
+  const earlier = (compiledMonths ?? []).slice(open ? 0 : 1);
+
+  let myStatus: "none" | "draft" | "submitted" = "none";
+  let written = 0;
+  if (yearMonth) {
+    const { data: month } = await admin
+      .from("months")
+      .select("id")
+      .eq("group_id", uuid)
+      .eq("year_month", yearMonth)
+      .maybeSingle();
+    if (month) {
+      const { data: submissions } = await admin
+        .from("submissions")
+        .select("member_id, status")
+        .eq("month_id", month.id);
+      written = writtenCount((submissions ?? []) as Array<{ status?: string | null }>);
+      const mine = (submissions ?? []).find((row) => row.member_id === member.id) as
+        | Pick<Submission, "status">
+        | undefined;
+      if (mine?.status === "submitted") myStatus = "submitted";
+      else if (mine) myStatus = "draft";
+    }
+  }
+
+  const featuredMonth = open ? yearMonth : latestCapsule;
+  const closes = featuredMonth ? windowClosesPhrase(featuredMonth, group.submit_end_day) : "";
+  const nextOpen = featuredMonth
+    ? nextOpenPhrase(featuredMonth, group.submit_start_day)
+    : `the ${group.submit_start_day}`;
 
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="font-serif text-4xl font-medium leading-tight">{open ? "Open" : "Closed"}</h1>
-        <p className="mt-2 text-muted">
-          {count ?? 0} {count === 1 ? "member" : "members"}
-        </p>
+    <main className="main">
+      <div className="wrap">
+        <div className="stack stack--loose">
+          <div className="stack stack--tight">
+            <Link className="backlink" href="/manage">
+              ← Your groups
+            </Link>
+            <div className="row row--between">
+              <h1>{name}</h1>
+              <span className={open ? "badge badge--open" : "badge badge--closed"}>
+                <span className="dot" />
+                {open ? "Open" : "Closed"}
+              </span>
+            </div>
+          </div>
+
+          <div className={`card card--pad-lg${myStatus === "submitted" && open ? " center" : ""}`}>
+            <div className="stack">
+              <div className="stack stack--tight">
+                <p className="eyebrow">{featuredMonth ? monthLabel(featuredMonth) : name}</p>
+                {open && myStatus === "submitted" ? (
+                  <>
+                    <h2 className="serif" style={{ fontSize: "1.5rem" }}>
+                      Your letter is in
+                    </h2>
+                    <p className="muted small">
+                      {writtenCountPhrase(written, total)}. The capsule is made after the window
+                      closes.
+                    </p>
+                  </>
+                ) : open ? (
+                  <>
+                    <h2 className="serif" style={{ fontSize: "1.5rem" }}>
+                      Writing is open until {closes}
+                    </h2>
+                    <p className="muted small">A few paragraphs is plenty.</p>
+                  </>
+                ) : latestCapsule ? (
+                  <>
+                    <h2 className="serif" style={{ fontSize: "1.5rem" }}>
+                      The {monthLabel(latestCapsule)} capsule is ready
+                    </h2>
+                    <p className="muted small">Writing opens again on {nextOpen}.</p>
+                  </>
+                ) : (
+                  <>
+                    <h2 className="serif" style={{ fontSize: "1.5rem" }}>
+                      Resting
+                    </h2>
+                    <p className="muted small">Writing opens again on {nextOpen}.</p>
+                  </>
+                )}
+              </div>
+
+              {open && myStatus === "submitted" ? (
+                <div className="row" style={{ justifyContent: "center" }}>
+                  <Link className="btn btn--secondary" href={`/g/${uuid}/submit`}>
+                    {GROUP_PRIMARY_EDIT}
+                  </Link>
+                </div>
+              ) : open ? (
+                <>
+                  <Link className="btn btn--primary btn--block btn--lg" href={`/g/${uuid}/submit`}>
+                    {myStatus === "draft" ? "Continue your draft" : GROUP_PRIMARY_SUBMIT}
+                  </Link>
+                  <p className="btn-note">You can keep editing until the window closes.</p>
+                </>
+              ) : latestCapsule ? (
+                <>
+                  <Link
+                    className="btn btn--primary btn--block btn--lg"
+                    href={`/g/${uuid}/capsule/${latestCapsule}`}
+                  >
+                    {GROUP_PRIMARY_VIEW}
+                  </Link>
+                  <p className="btn-note">Writing opens again on {nextOpen}.</p>
+                </>
+              ) : null}
+            </div>
+          </div>
+
+          {open ? (
+            <div className="panel">
+              <div className="stack stack--tight">
+                <p className="small">
+                  <b>{writtenCountPhrase(written, total)}</b>
+                </p>
+                <p className="muted tiny">Nobody is named. It is just a count.</p>
+              </div>
+            </div>
+          ) : null}
+
+          {!open && earlier.length > 0 ? (
+            <div className="stack stack--tight">
+              <p className="eyebrow">Earlier capsules</p>
+              <ul className="list">
+                {earlier.map((row) => (
+                  <li key={row.year_month}>
+                    <Link className="listitem" href={`/g/${uuid}/capsule/${row.year_month}`}>
+                      <span className="listitem__body">
+                        <span className="listitem__title">{monthLabel(row.year_month)}</span>
+                      </span>
+                      <span className="listitem__end">Read</span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+
+          <hr className="rule" />
+
+          <div className="stack">
+            <GroupChrome uuid={uuid} role={member.role} />
+            {open && latestCapsule ? (
+              <p className="small muted">
+                Last month:{" "}
+                <Link href={`/g/${uuid}/capsule/${latestCapsule}`}>
+                  the {monthLabel(latestCapsule)} capsule
+                </Link>
+              </p>
+            ) : null}
+          </div>
+
+          {member.account_id ? null : <SaveLoginForm groupId={uuid} />}
+        </div>
       </div>
-      {open ? (
-        <Link className="btn" href={`/g/${uuid}/submit`}>
-          {GROUP_PRIMARY_SUBMIT}
-        </Link>
-      ) : capsuleMonth ? (
-        <Link className="btn" href={`/g/${uuid}/capsule/${capsuleMonth}`}>
-          {GROUP_PRIMARY_VIEW}
-          {capsuleMonth !== thisMonth ? ` · ${monthLabel(capsuleMonth)}` : ""}
-        </Link>
-      ) : null}
-      <GroupChrome uuid={uuid} role={member.role} />
-      {member.account_id ? (
-        <Link href="/manage" className="link-quiet">
-          Your capsules
-        </Link>
-      ) : (
-        <SaveLoginForm groupId={uuid} />
-      )}
-      <form action={leaveGroup}>
-        <button type="submit" className="link-quiet">
-          Leave
-        </button>
-      </form>
-    </div>
+    </main>
   );
 }

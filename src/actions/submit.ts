@@ -6,9 +6,14 @@ import { ensureMonth } from "@/lib/compile";
 import { deleteStoredPhotos, validatePhotoList } from "@/lib/photos";
 import { resolveSubmitWindow } from "@/lib/cycle-store";
 import { requireGroupMember } from "@/lib/session";
+import { nextSubmissionWrite, parseSubmitIntent, type SubmitStatus } from "@/lib/submit";
 import { createAdminClient } from "@/lib/supabase";
 
-export type SubmitState = { error?: string; ok?: boolean } | null;
+export type SubmitState = {
+  error?: string;
+  ok?: boolean;
+  status?: SubmitStatus;
+} | null;
 
 export async function submitLetter(
   _prev: SubmitState,
@@ -16,6 +21,7 @@ export async function submitLetter(
 ): Promise<SubmitState> {
   const groupId = String(formData.get("groupId") ?? "");
   const body = String(formData.get("body") ?? "").trim();
+  const intent = parseSubmitIntent(formData.get("intent"));
   const files = formData.getAll("photos").filter((value): value is File => value instanceof File && value.size > 0);
   const widths = formData.getAll("widths").map((value) => Number(value));
   const heights = formData.getAll("heights").map((value) => Number(value));
@@ -47,13 +53,16 @@ export async function submitLetter(
     .maybeSingle();
 
   const now = new Date().toISOString();
+  const patch = nextSubmissionWrite({
+    existing: existing ? { status: (existing.status as string | null) ?? null } : null,
+    body,
+    intent,
+    now,
+  });
   let submissionId: string;
 
   if (existing) {
-    const { error } = await admin
-      .from("submissions")
-      .update({ body, updated_at: now })
-      .eq("id", existing.id);
+    const { error } = await admin.from("submissions").update(patch).eq("id", existing.id);
     if (error) return { error: "Could not save." };
     submissionId = existing.id;
   } else {
@@ -62,9 +71,7 @@ export async function submitLetter(
       .insert({
         month_id: month.id,
         member_id: member.id,
-        body,
-        submitted_at: now,
-        updated_at: now,
+        ...patch,
       })
       .select("id")
       .single();
@@ -101,12 +108,10 @@ export async function submitLetter(
       const storagePath = `${groupId}/${month.id}/${submissionId}/${i}.${ext}`;
       const buffer = Buffer.from(await file.arrayBuffer());
 
-      const { error: uploadError } = await admin.storage
-        .from(PHOTO_BUCKET)
-        .upload(storagePath, buffer, {
-          contentType: file.type,
-          upsert: true,
-        });
+      const { error: uploadError } = await admin.storage.from(PHOTO_BUCKET).upload(storagePath, buffer, {
+        contentType: file.type,
+        upsert: true,
+      });
       if (uploadError) {
         return { error: "Could not store photo." };
       }
@@ -129,5 +134,5 @@ export async function submitLetter(
 
   revalidatePath(`/g/${groupId}`);
   revalidatePath(`/g/${groupId}/submit`);
-  return { ok: true };
+  return { ok: true, status: intent };
 }

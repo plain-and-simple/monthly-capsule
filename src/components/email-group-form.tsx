@@ -8,12 +8,12 @@ export function EmailGroupForm({ groupId, yearMonth }: { groupId: string; yearMo
   const [state, action, pending] = useActionState<CycleEmailState, FormData>(emailGroupNow, null);
 
   return (
-    <form action={action} className="space-y-2">
+    <form action={action} className="stack stack--tight">
       <input type="hidden" name="groupId" value={groupId} />
       <input type="hidden" name="yearMonth" value={yearMonth} />
       {state?.error ? <p className="err">{state.error}</p> : null}
       {state?.ok ? <p>{state.message}</p> : null}
-      <button className="btn btn-ghost" type="submit" disabled={pending}>
+      <button className="btn btn--secondary" type="submit" disabled={pending}>
         {pending ? "Sending…" : CYCLE_EMAIL_LATER}
       </button>
     </form>

@@ -1,5 +1,4 @@
-import { SiteHeader } from "@/components/site-header";
-import { groupDisplayName } from "@/lib/copy";
+import { AppHeader } from "@/components/app-header";
 import { requireGroupMember } from "@/lib/session";
 
 export default async function GroupLayout({
@@ -10,11 +9,11 @@ export default async function GroupLayout({
   params: Promise<{ uuid: string }>;
 }) {
   const { uuid } = await params;
-  const { group } = await requireGroupMember(uuid);
+  const { member } = await requireGroupMember(uuid);
 
   return (
     <>
-      <SiteHeader href={`/g/${uuid}`} title={groupDisplayName(group.name)} />
+      <AppHeader name={member.preferred_name} showSignOut homeHref="/manage" />
       {children}
     </>
   );

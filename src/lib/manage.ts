@@ -58,6 +58,16 @@ export function inviteShareText(shareUrl: string, typedPin: string): string {
   return `${shareUrl}\nPIN ${pin}`;
 }
 
+export function inviteMessage(shareUrl: string, typedPin: string, groupName: string): string {
+  const pin = typedPin.replace(/\D/g, "");
+  return [
+    `Join ${groupName} on Plain and Simple Monthly Capsule.`,
+    "",
+    `Link: ${shareUrl}`,
+    `Group PIN: ${pin || "——————"}`,
+  ].join("\n");
+}
+
 export const REGEN_CONFIRM_VALUE = "1";
 export const FORCE_CLOSE_CONFIRM_VALUE = "1";
 

@@ -1,5 +1,6 @@
 export type Role = "owner" | "member";
 export type MonthStatus = "open" | "closed" | "compiled";
+export type SubmitStatus = "draft" | "submitted";
 
 export type Group = {
   id: string;
@@ -47,6 +48,7 @@ export type Submission = {
   month_id: string;
   member_id: string;
   body: string;
+  status: SubmitStatus;
   submitted_at: string;
   updated_at: string;
 };

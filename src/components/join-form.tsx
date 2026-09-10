@@ -1,95 +1,131 @@
 "use client";
 
 import { useActionState, useState } from "react";
+import Link from "next/link";
 import { joinGroup, type JoinState } from "@/actions/join-group";
-import { ACCOUNT_PASSWORD_LABEL, JOIN_PIN_LABEL, PREFERRED_NAME_LABEL } from "@/lib/copy";
+import { ACCOUNT_PASSWORD_LABEL, JOIN_PIN_LABEL, PREFERRED_NAME_LABEL, groupDisplayName } from "@/lib/copy";
 
 export function JoinForm({
   uuid,
   signedInAs,
+  groupName,
+  memberCount,
 }: {
   uuid?: string;
   signedInAs?: string | null;
+  groupName?: string | null;
+  memberCount?: number;
 }) {
   const [state, action, pending] = useActionState<JoinState, FormData>(joinGroup, null);
   const [saveLogin, setSaveLogin] = useState(false);
+  const title = groupName ? `Join ${groupDisplayName(groupName)}` : "Join";
 
   return (
-    <form action={action} className="space-y-5">
-      <h1 className="font-serif text-4xl font-medium leading-tight">Join</h1>
-      {uuid ? (
-        <input type="hidden" name="uuid" value={uuid} />
-      ) : (
-        <div className="field">
-          <label htmlFor="uuid">Join link or group ID</label>
-          <input id="uuid" name="uuid" required autoComplete="off" />
+    <div className="wrap wrap--narrow">
+      <div className="stack stack--loose">
+        <div className="stack stack--tight">
+          <p className="eyebrow">You have been invited</p>
+          <h1>{title}</h1>
+          <p className="lede">
+            {memberCount
+              ? `${memberCount} ${memberCount === 1 ? "person" : "people"} so far. One letter each, once a month.`
+              : "One letter each, once a month."}
+          </p>
         </div>
-      )}
-      <div className="field">
-        <label htmlFor="pin">{JOIN_PIN_LABEL}</label>
-        <input
-          id="pin"
-          name="pin"
-          inputMode="numeric"
-          autoComplete="one-time-code"
-          maxLength={6}
-          required
-        />
+
+        <div className="card card--pad-lg">
+          <form action={action} className="stack">
+            {uuid ? (
+              <input type="hidden" name="uuid" value={uuid} />
+            ) : (
+              <label className="field">
+                <span className="field__label">Join link or group ID</span>
+                <input className="input" name="uuid" required autoComplete="off" />
+              </label>
+            )}
+            <label className="field">
+              <span className="field__label">{JOIN_PIN_LABEL}</span>
+              <input
+                className="input input--pin"
+                name="pin"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                maxLength={6}
+                required
+                placeholder="XXXXXX"
+                spellCheck={false}
+              />
+              <span className="field__hint">From whoever sent you the link.</span>
+            </label>
+
+            <hr className="rule" />
+
+            <label className="field">
+              <span className="field__label">{PREFERRED_NAME_LABEL}</span>
+              <input
+                className="input"
+                name="preferred_name"
+                maxLength={40}
+                required
+                defaultValue={signedInAs ?? ""}
+                autoComplete="nickname"
+              />
+              <span className="field__hint">
+                {groupName ? `How ${groupDisplayName(groupName)} will see you.` : "How the group will see you."}
+              </span>
+            </label>
+
+            {signedInAs ? (
+              <p className="small muted">Signed in as {signedInAs}. This group will appear in Manage.</p>
+            ) : (
+              <>
+                <label className="check">
+                  <input
+                    type="checkbox"
+                    name="save_login"
+                    value="1"
+                    checked={saveLogin}
+                    onChange={(event) => setSaveLogin(event.target.checked)}
+                  />
+                  <span>Save my login so Manage can find this group</span>
+                </label>
+                {saveLogin ? (
+                  <>
+                    <label className="field">
+                      <span className="field__label">Email</span>
+                      <input className="input" name="email" type="email" required autoComplete="email" />
+                    </label>
+                    <label className="field">
+                      <span className="field__label">{ACCOUNT_PASSWORD_LABEL}</span>
+                      <input
+                        className="input"
+                        name="password"
+                        type="password"
+                        required
+                        minLength={8}
+                        autoComplete="new-password"
+                      />
+                    </label>
+                  </>
+                ) : (
+                  <p className="formnote">
+                    Skip to join this capsule only. Manage will not list it until you save a login.
+                  </p>
+                )}
+              </>
+            )}
+
+            {state?.error ? <p className="err">{state.error}</p> : null}
+            <button className="btn btn--primary btn--block btn--lg" type="submit" disabled={pending}>
+              {pending ? "Joining…" : title}
+            </button>
+          </form>
+        </div>
+
+        <p className="center small muted">
+          Already in this group? <Link href="/">Sign in</Link>
+        </p>
       </div>
-      <div className="field">
-        <label htmlFor="preferred_name">{PREFERRED_NAME_LABEL}</label>
-        <input
-          id="preferred_name"
-          name="preferred_name"
-          maxLength={40}
-          required
-          defaultValue={signedInAs ?? ""}
-        />
-      </div>
-      {signedInAs ? (
-        <p className="text-sm text-muted">Signed in as {signedInAs}. This group will appear in Manage.</p>
-      ) : (
-        <>
-          <label className="flex items-start gap-3 text-sm">
-            <input
-              type="checkbox"
-              name="save_login"
-              value="1"
-              checked={saveLogin}
-              onChange={(event) => setSaveLogin(event.target.checked)}
-              className="mt-1"
-            />
-            <span>Save login so Manage can find this group</span>
-          </label>
-          {saveLogin ? (
-            <>
-              <div className="field">
-                <label htmlFor="email">Email</label>
-                <input id="email" name="email" type="email" required autoComplete="email" />
-              </div>
-              <div className="field">
-                <label htmlFor="password">{ACCOUNT_PASSWORD_LABEL}</label>
-                <input
-                  id="password"
-                  name="password"
-                  type="password"
-                  required
-                  minLength={8}
-                  autoComplete="new-password"
-                />
-              </div>
-            </>
-          ) : (
-            <p className="text-sm text-muted">
-              Skip to join this capsule only. Manage will not list it until you save a login.
-            </p>
-          )}
-        </>
-      )}
-      {state?.error ? <p className="err">{state.error}</p> : null}
-      <button className="btn" type="submit" disabled={pending}>
-        {pending ? "Joining…" : "Join"}
-      </button>
-    </form>
+    </div>
   );
 }

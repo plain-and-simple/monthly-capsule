@@ -1,18 +1,14 @@
-import Link from "next/link";
-import { PRODUCT_NAME } from "@/lib/copy";
+import { AppHeader } from "@/components/app-header";
 
 export function SiteHeader({
   href = "/",
-  title = PRODUCT_NAME,
+  name,
+  showSignOut,
 }: {
   href?: string;
   title?: string;
+  name?: string | null;
+  showSignOut?: boolean;
 }) {
-  return (
-    <header className="mb-10">
-      <Link href={href} className="brand-mark">
-        {title}
-      </Link>
-    </header>
-  );
+  return <AppHeader homeHref={href} name={name} showSignOut={showSignOut} />;
 }

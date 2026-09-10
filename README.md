@@ -26,7 +26,7 @@ Friends write a letter (and up to six photos) each month. After the window close
 - Timezone is **America/Chicago** for every group. No picker.
 - Schedule fields: `submit_start_day` (default 1), `submit_end_day` (default 8), `email_day` (default 9).
   - Rule: `1 ≤ start ≤ end ≤ 28` **and** `end < email_day ≤ 28`.
-- One submission per member per month. In-window save upserts. Server rejects when the window is closed.
+- One submission per member per month. In-window save upserts. **Save as draft** is stored but hidden from the compiled capsule. **Save and submit** includes it. After submit the letter stays editable until the window closes. Server rejects when the window is closed.
 - Compile job runs after `submit_end_day` ends (Chicago). Idempotent `capsules` row + HTML page.
 - Email job runs on `email_day`. Sends only if a capsule exists, `email_sent_at` is null, and `email_held` is false. Resend skips members with no email.
 - Owner settings labels are exactly: **Submit opens**, **Submit closes**, **Email capsule**.
@@ -93,7 +93,7 @@ See `.env.example`.
 6. **Group home** `/g/[uuid]` — name, open/closed, member count, Submit / View capsule, People, Invite, Settings (owner). Save login if this seat has no account.
 7. **People** `/g/[uuid]/people` — preferred names. Any member. No emails.
 8. **Invite** `/g/[uuid]/invite` — copy join URL, optional typed PIN, and share text (URL + PIN if typed). Server never returns a PIN.
-9. **Submit** `/g/[uuid]/submit` — letter + ≤6 photos; upsert in window; “Closed.” when shut.
+9. **Submit** `/g/[uuid]/submit` — letter + ≤6 photos; Save as draft (hidden from capsule) or Save and submit (included); still editable until the window closes; “Closed.” when shut.
 10. **Capsule** `/g/[uuid]/capsule/[YYYY-MM]` — read-only HTML; session required.
 11. **Owner settings** `/g/[uuid]/settings` — the three day-of-month fields, Capsule cycle (open early / close & make / email), and Regenerate PIN.
 

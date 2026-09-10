@@ -1,16 +1,20 @@
 import Link from "next/link";
-import { SiteHeader } from "@/components/site-header";
+import { AppHeader } from "@/components/app-header";
 
 export default function NotFound() {
   return (
-    <div className="mx-auto flex min-h-screen max-w-xl flex-col px-5 py-8">
-      <SiteHeader />
-      <div className="space-y-3">
-        <h1 className="font-serif text-4xl font-medium">Not found</h1>
-        <Link href="/" className="link-quiet">
-          Home
-        </Link>
-      </div>
+    <div className="page">
+      <AppHeader />
+      <main className="main">
+        <div className="wrap">
+          <div className="stack">
+            <h1>Not found</h1>
+            <Link href="/" className="backlink">
+              ← Home
+            </Link>
+          </div>
+        </div>
+      </main>
     </div>
   );
 }

@@ -1,5 +1,5 @@
+import { AppHeader } from "@/components/app-header";
 import { CreateForm } from "@/components/create-form";
-import { SiteHeader } from "@/components/site-header";
 import { getAccount } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
@@ -8,8 +8,14 @@ export default async function CreatePage() {
   const account = await getAccount();
   return (
     <>
-      <SiteHeader />
-      <CreateForm signedInAs={account?.preferred_name ?? null} />
+      <AppHeader
+        name={account?.preferred_name ?? null}
+        showSignOut={Boolean(account)}
+        homeHref={account ? "/manage" : "/"}
+      />
+      <main className="main main--centered">
+        <CreateForm signedInAs={account?.preferred_name ?? null} />
+      </main>
     </>
   );
 }
