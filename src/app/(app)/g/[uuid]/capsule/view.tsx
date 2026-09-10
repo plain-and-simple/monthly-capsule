@@ -37,11 +37,20 @@ export async function CapsuleView({
     return (
       <main className="main">
         <div className="wrap">
-          <div className="stack">
+          <div className="stack stack--loose">
             <Link href={`/g/${uuid}`} className="backlink">
               ← {name}
             </Link>
-            <h1>Not ready</h1>
+            <div className="stack stack--tight">
+              <h1>Capsule not ready yet</h1>
+              <p className="muted small">
+                This month has not been compiled. Come back after the writing window closes, or ask
+                the owner to close and make the capsule.
+              </p>
+            </div>
+            <Link className="btn btn--secondary" href={`/g/${uuid}`}>
+              Back to the group
+            </Link>
           </div>
         </div>
       </main>

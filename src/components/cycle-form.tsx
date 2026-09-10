@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useActionState, useState } from "react";
 import {
   emailGroupNow,
@@ -17,10 +18,11 @@ import {
   CYCLE_OPEN_EARLY,
   CYCLE_SECTION,
   CYCLE_SEND,
+  GROUP_PRIMARY_VIEW,
 } from "@/lib/copy";
 import { CYCLE_EMAIL_PROMPT, CYCLE_OPENED } from "@/lib/cycle";
 import { FORCE_CLOSE_CONFIRM_VALUE } from "@/lib/manage";
-import { capsuleTitle } from "@/lib/month-version";
+import { capsuleHref, capsuleTitle } from "@/lib/month-version";
 import { monthLabel } from "@/lib/schedule";
 
 export function CycleForm({
@@ -61,6 +63,7 @@ export function CycleForm({
   const later = showEmailPrompt ? null : unsent;
 
   if (showEmailPrompt && askYearMonth) {
+    const editionLabel = capsuleTitle(monthLabel(askYearMonth), askVersion ?? 1);
     return (
       <div className="scrim">
         <div className="dialog">
@@ -68,12 +71,22 @@ export function CycleForm({
             <div className="stack stack--tight">
               <p className="eyebrow">Made just now</p>
               <h2 className="serif" style={{ fontSize: "1.3rem" }}>
-                The {capsuleTitle(monthLabel(askYearMonth), askVersion ?? 1)} capsule is ready
+                The {editionLabel} capsule is ready
               </h2>
-              <p className="muted small">{CYCLE_EMAIL_PROMPT}</p>
+              <p className="muted small">
+                {writtenPhrase ? `${writtenPhrase}. ` : ""}
+                {CYCLE_EMAIL_PROMPT}
+              </p>
             </div>
             {emailState?.error ? <p className="err">{emailState.error}</p> : null}
+            {emailState?.ok ? <p className="small">{emailState.message}</p> : null}
             {skipState?.error ? <p className="err">{skipState.error}</p> : null}
+            <Link
+              className="btn btn--secondary btn--block"
+              href={capsuleHref(groupId, askYearMonth, askVersion ?? 1)}
+            >
+              {GROUP_PRIMARY_VIEW}
+            </Link>
             <form action={emailAction}>
               <input type="hidden" name="groupId" value={groupId} />
               <input type="hidden" name="yearMonth" value={askYearMonth} />
@@ -94,7 +107,10 @@ export function CycleForm({
                 {skipPending ? "Saving…" : CYCLE_NOT_NOW}
               </button>
             </form>
-            <p className="btn-note">If not now, Settings will keep offering it until you do.</p>
+            <p className="btn-note">
+              Email goes to everyone with an address. If not now, Settings will keep offering it until
+              you do.
+            </p>
           </div>
         </div>
       </div>
@@ -112,7 +128,9 @@ export function CycleForm({
                 The {capsuleTitle(monthLabel(later.yearMonth), later.version)} capsule was never
                 emailed
               </h2>
-              <p className="muted small">Everyone can read it on the site.</p>
+              <p className="muted small">
+                Everyone can read it on the site. Send only reaches people who saved an email.
+              </p>
             </div>
             <div className="row">
               <form action={emailAction}>
@@ -125,6 +143,12 @@ export function CycleForm({
                   {emailPending ? "Sending…" : CYCLE_EMAIL_LATER}
                 </button>
               </form>
+              <Link
+                className="btn btn--secondary"
+                href={capsuleHref(groupId, later.yearMonth, later.version)}
+              >
+                {GROUP_PRIMARY_VIEW}
+              </Link>
             </div>
           </div>
         </div>
@@ -140,9 +164,16 @@ export function CycleForm({
               {writtenPhrase ? `. ${writtenPhrase}.` : "."}
             </p>
             <div className="row">
-              {confirming && !closeState?.ok ? (
+              {!submitOpen ? (
+                <span className="btn btn--quiet" aria-disabled="true">
+                  {CYCLE_CLOSE_COMPILE}
+                </span>
+              ) : confirming && !closeState?.ok ? (
                 <form action={closeAction} className="stack">
-                  <p className="muted small">Closes submit and makes the capsule.</p>
+                  <p className="muted small">
+                    Closing early is final for this version. Letters freeze, and the capsule is made
+                    now.
+                  </p>
                   <input type="hidden" name="groupId" value={groupId} />
                   <input type="hidden" name="confirm" value={FORCE_CLOSE_CONFIRM_VALUE} />
                   {closeState?.error ? <p className="err">{closeState.error}</p> : null}
@@ -186,7 +217,9 @@ export function CycleForm({
               </p>
             ) : openState?.error ? (
               <p className="err">{openState.error}</p>
-            ) : null}
+            ) : (
+              <p className="muted tiny">Open again to start a new version of this month.</p>
+            )}
             {closeState?.ok && closeState.message ? <p className="small">{closeState.message}</p> : null}
             {emailState?.ok ? <p className="small">{emailState.message}</p> : null}
             {emailState?.error && !later ? <p className="err">{emailState.error}</p> : null}

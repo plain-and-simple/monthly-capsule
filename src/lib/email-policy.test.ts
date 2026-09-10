@@ -82,6 +82,22 @@ describe("Resend accept vs stamp", () => {
         error: "The domain is not verified.",
       }),
     ).toBe("Sent 0. Resend error: The domain is not verified.");
+    expect(
+      formatCapsuleSendResult({
+        sent: 0,
+        skippedNoEmail: 2,
+        error: "Email is not configured.",
+        reason: "no-resend-key",
+      }),
+    ).toBe("Email is not configured (missing Resend API key). Nothing was sent.");
+    expect(
+      formatCapsuleSendResult({
+        sent: 0,
+        skippedNoEmail: 3,
+        error: null,
+        reason: "no-recipients",
+      }),
+    ).toBe("Nobody has an email yet. Skipped 3 with no address.");
   });
 
   it("uses the designer capsules@ mailbox and a group display From", () => {
@@ -109,6 +125,7 @@ describe("send path must not stamp blindly", () => {
     expect(source).toContain("resolveCapsuleRecipients");
     expect(source).toContain("resendSendAccepted");
     expect(source).toContain("shouldMarkCapsuleEmailed");
+    expect(source).toContain("replyTo");
     expect(source.indexOf("shouldMarkCapsuleEmailed")).toBeLessThan(source.lastIndexOf("sentEmailUpdate"));
   });
 });

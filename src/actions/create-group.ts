@@ -20,6 +20,14 @@ export type CreateState =
   | { ok: false; error: string }
   | null;
 
+export type StudioCodeState = { ok: true } | { ok: false; error: string };
+
+export async function checkStudioCode(code: string): Promise<StudioCodeState> {
+  const codeError = rejectInvalidStudioCode(code, createGroupCode());
+  if (codeError) return codeError;
+  return { ok: true };
+}
+
 export async function createGroup(_prev: CreateState, formData: FormData): Promise<CreateState> {
   const codeError = rejectInvalidStudioCode(
     String(formData.get("studio_code") ?? ""),

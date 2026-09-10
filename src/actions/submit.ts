@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { MAX_PHOTOS, PHOTO_BUCKET } from "@/lib/constants";
 import { ensureMonth } from "@/lib/compile";
 import { deleteStoredPhotos, validatePhotoList } from "@/lib/photos";
+import { parseKeepPhotoIds, planPhotoUpdate } from "@/lib/photo-update";
 import { resolveSubmitWindow } from "@/lib/cycle-store";
 import { requireGroupMember } from "@/lib/session";
 import { nextSubmissionWrite, parseSubmitIntent, type SubmitStatus } from "@/lib/submit";
@@ -25,6 +26,8 @@ export async function submitLetter(
   const files = formData.getAll("photos").filter((value): value is File => value instanceof File && value.size > 0);
   const widths = formData.getAll("widths").map((value) => Number(value));
   const heights = formData.getAll("heights").map((value) => Number(value));
+  const photosTouched = String(formData.get("photosTouched") ?? "") === "1";
+  const keepIds = parseKeepPhotoIds(formData.getAll("keepPhotoIds"));
 
   if (body.length > 20_000) {
     return { error: "Letter is too long." };
@@ -79,56 +82,88 @@ export async function submitLetter(
     submissionId = created.id;
   }
 
-  if (files.length > 0) {
+  if (photosTouched || files.length > 0) {
     const { data: oldPhotos } = await admin
       .from("photos")
-      .select("id, storage_path")
-      .eq("submission_id", submissionId);
+      .select("id, storage_path, sort_order")
+      .eq("submission_id", submissionId)
+      .order("sort_order", { ascending: true });
 
-    const oldPaths = (oldPhotos ?? []).map((photo) => photo.storage_path as string);
-    await deleteStoredPhotos(oldPaths);
-    if (oldPhotos && oldPhotos.length > 0) {
-      await admin.from("photos").delete().eq("submission_id", submissionId);
+    const existingPhotos = (oldPhotos ?? []).map((photo) => ({
+      id: photo.id as string,
+      storage_path: photo.storage_path as string,
+      sort_order: Number(photo.sort_order ?? 0),
+    }));
+
+    const plan = planPhotoUpdate({
+      existing: existingPhotos,
+      keepIds: photosTouched ? keepIds : existingPhotos.map((photo) => photo.id),
+      newFileCount: files.length,
+      maxPhotos: MAX_PHOTOS,
+    });
+    if (plan.error) {
+      return { error: plan.error };
     }
 
-    const rows: {
-      submission_id: string;
-      storage_path: string;
-      width: number;
-      height: number;
-      bytes: number;
-      sort_order: number;
-    }[] = [];
+    if (plan.remove.length > 0) {
+      await deleteStoredPhotos(plan.remove.map((photo) => photo.storage_path));
+      await admin
+        .from("photos")
+        .delete()
+        .in(
+          "id",
+          plan.remove.map((photo) => photo.id),
+        );
+    }
 
-    for (let i = 0; i < Math.min(files.length, MAX_PHOTOS); i += 1) {
-      const file = files[i]!;
-      const width = Number.isInteger(widths[i]) && widths[i]! > 0 ? widths[i]! : 1;
-      const height = Number.isInteger(heights[i]) && heights[i]! > 0 ? heights[i]! : 1;
-      const ext = file.type === "image/png" ? "png" : file.type === "image/webp" ? "webp" : "jpg";
-      const storagePath = `${groupId}/${month.id}/${submissionId}/${i}.${ext}`;
-      const buffer = Buffer.from(await file.arrayBuffer());
+    for (let i = 0; i < plan.keep.length; i += 1) {
+      const photo = plan.keep[i]!;
+      if (photo.sort_order !== i) {
+        await admin.from("photos").update({ sort_order: i }).eq("id", photo.id);
+      }
+    }
 
-      const { error: uploadError } = await admin.storage.from(PHOTO_BUCKET).upload(storagePath, buffer, {
-        contentType: file.type,
-        upsert: true,
-      });
-      if (uploadError) {
-        return { error: "Could not store photo." };
+    if (files.length > 0) {
+      const rows: {
+        submission_id: string;
+        storage_path: string;
+        width: number;
+        height: number;
+        bytes: number;
+        sort_order: number;
+      }[] = [];
+
+      for (let i = 0; i < Math.min(files.length, MAX_PHOTOS); i += 1) {
+        const file = files[i]!;
+        const width = Number.isInteger(widths[i]) && widths[i]! > 0 ? widths[i]! : 1;
+        const height = Number.isInteger(heights[i]) && heights[i]! > 0 ? heights[i]! : 1;
+        const ext = file.type === "image/png" ? "png" : file.type === "image/webp" ? "webp" : "jpg";
+        const sortOrder = plan.nextSortStart + i;
+        const storagePath = `${groupId}/${month.id}/${submissionId}/${sortOrder}.${ext}`;
+        const buffer = Buffer.from(await file.arrayBuffer());
+
+        const { error: uploadError } = await admin.storage.from(PHOTO_BUCKET).upload(storagePath, buffer, {
+          contentType: file.type,
+          upsert: true,
+        });
+        if (uploadError) {
+          return { error: "Could not store photo." };
+        }
+
+        rows.push({
+          submission_id: submissionId,
+          storage_path: storagePath,
+          width,
+          height,
+          bytes: file.size,
+          sort_order: sortOrder,
+        });
       }
 
-      rows.push({
-        submission_id: submissionId,
-        storage_path: storagePath,
-        width,
-        height,
-        bytes: file.size,
-        sort_order: i,
-      });
-    }
-
-    const { error: photoInsertError } = await admin.from("photos").insert(rows);
-    if (photoInsertError) {
-      return { error: "Could not save photos." };
+      const { error: photoInsertError } = await admin.from("photos").insert(rows);
+      if (photoInsertError) {
+        return { error: "Could not save photos." };
+      }
     }
   }
 
