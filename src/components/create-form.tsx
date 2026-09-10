@@ -1,8 +1,8 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useState, useTransition } from "react";
 import Link from "next/link";
-import { createGroup, type CreateState } from "@/actions/create-group";
+import { checkStudioCode, createGroup, type CreateState } from "@/actions/create-group";
 import { CopyButton } from "@/components/copy-button";
 import { CreateSteps } from "@/components/create-steps";
 import {
@@ -16,6 +16,7 @@ import {
   DEFAULT_SUBMIT_END_DAY,
   DEFAULT_SUBMIT_START_DAY,
 } from "@/lib/constants";
+import { STUDIO_CODE_ERROR } from "@/lib/studio-code";
 
 function DaySelect({
   id,
@@ -43,6 +44,8 @@ export function CreateForm({ signedInAs }: { signedInAs?: string | null }) {
   const [state, action, pending] = useActionState<CreateState, FormData>(createGroup, null);
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [studioCode, setStudioCode] = useState("");
+  const [studioError, setStudioError] = useState<string | null>(null);
+  const [checkingCode, startCheck] = useTransition();
   const [preferredName, setPreferredName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -88,7 +91,7 @@ export function CreateForm({ signedInAs }: { signedInAs?: string | null }) {
           </div>
           <div className="panel">
             <p className="small muted">
-              Lost the PIN? Settings has <b>Regenerate PIN</b>. The old one stops working straight
+              Lost the PIN? Settings has <b>Make a new PIN</b>. The old one stops working straight
               away, and anyone already in the group stays in.
             </p>
           </div>
@@ -118,8 +121,16 @@ export function CreateForm({ signedInAs }: { signedInAs?: string | null }) {
                 event.preventDefault();
                 const next = String(new FormData(event.currentTarget).get("studio_code") ?? "").trim();
                 if (!next) return;
-                setStudioCode(next);
-                setStep(signedInAs ? 3 : 2);
+                setStudioError(null);
+                startCheck(async () => {
+                  const result = await checkStudioCode(next);
+                  if (!result.ok) {
+                    setStudioError(result.error || STUDIO_CODE_ERROR);
+                    return;
+                  }
+                  setStudioCode(next);
+                  setStep(signedInAs ? 3 : 2);
+                });
               }}
             >
               <div className="stack stack--tight">
@@ -138,8 +149,9 @@ export function CreateForm({ signedInAs }: { signedInAs?: string | null }) {
                 />
                 <span className="field__hint">Case does not matter.</span>
               </label>
-              <button className="btn btn--primary btn--block" type="submit">
-                Continue
+              {studioError ? <p className="err">{studioError}</p> : null}
+              <button className="btn btn--primary btn--block" type="submit" disabled={checkingCode}>
+                {checkingCode ? "Checking…" : "Continue"}
               </button>
             </form>
           </div>

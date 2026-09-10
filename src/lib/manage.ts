@@ -1,6 +1,6 @@
 import type { Role, SessionPayload } from "@/lib/types";
 
-export const JOIN_WRONG_PIN = "Wrong PIN.";
+export const JOIN_WRONG_PIN = "Wrong PIN. Ask whoever invited you for the current one.";
 export const JOIN_RATE_LIMITED = "Too many tries. Wait a bit.";
 
 export const ROSTER_SELECT = "id, preferred_name, role, joined_at";

@@ -44,6 +44,19 @@ function sendResult(
   return { ...partial, message: formatCapsuleSendResult(partial) };
 }
 
+function resolveOwnerReplyTo(
+  roster: Member[],
+  accountEmailById: Map<string, string>,
+): string | null {
+  const owner = roster.find((member) => member.role === "owner");
+  if (!owner) return null;
+  if (owner.email?.trim()) return owner.email.trim().toLowerCase();
+  if (owner.account_id) {
+    return accountEmailById.get(owner.account_id) ?? null;
+  }
+  return null;
+}
+
 export async function sendDueCapsuleEmails(now: Date = new Date()) {
   const admin = createAdminClient();
   const { data: groups, error } = await admin.from("groups").select("*");
@@ -219,6 +232,7 @@ async function sendCapsuleEmail(group: Group, month: Month, capsule: Capsule) {
   const resend = new Resend(key);
   let accepted = 0;
   let error: string | null = null;
+  const replyTo = resolveOwnerReplyTo(roster, accountEmailById);
   for (const to of resolved.emails) {
     try {
       const result = await resend.emails.send({
@@ -226,6 +240,7 @@ async function sendCapsuleEmail(group: Group, month: Month, capsule: Capsule) {
         to,
         subject,
         html,
+        ...(replyTo ? { replyTo } : {}),
       });
       const interpreted = resendSendAccepted(result);
       if (interpreted.ok) {

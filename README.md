@@ -39,7 +39,7 @@ Friends write a letter (and up to six photos) each month. After the window close
 - Sessions: httpOnly, Secure (prod), SameSite=Lax, host-only cookies on `capsule.plainandsimple.app`. `capsule_session` binds `member_id` + `group_id`. `capsule_account` binds `account_id`.
 - Capsules are session-gated. No public unauthenticated pages.
 
-Out of scope: PDF, phone / SMS OTP, first/last name, Apple Sign In / CloudKit, co-owners, rich editor, video, per-member schedules.
+Out of scope: PDF, phone / SMS OTP, first/last name, Apple Sign In / CloudKit, co-owners, rich editor, video, per-member schedules, forgot password, leave-group UI, reminder emails during an open window, People labels for who has not written.
 
 ## Stack
 
@@ -86,7 +86,7 @@ See `.env.example`.
 
 ## Screens
 
-1. **Home** `/` — left picture; right **Manage your capsule** (email → password → Continue). Upper-right **Create Capsule Group**. No three equal CTAs. No phone.
+1. **Home** `/` — brand, short promise, **Manage your capsule** (email → password → Continue), and **Create a capsule group**. No phone. No forgot-password.
 2. **Manage** `/manage` — account groups. Empty + join hint, or a pick list (including one group) with owner/member. After login with exactly one group, go to group home. Your groups always returns to this list.
 3. **Create** `/create` — studio code → preferred name + email + password + optional group name → UUID + PIN shown once (copy). Account owns the group.
 4. **Join** `/join` — join link or group ID + PIN + preferred name. Optional Save login (email + password). Skip → group session only.

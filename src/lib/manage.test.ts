@@ -161,7 +161,7 @@ describe("manage UI scenarios 1–20", () => {
   it("19. wrong PIN uses the exact join error", () => {
     expect(pinJoinOutcome(false, false)).toBe("wrong_pin");
     expect(pinJoinError("wrong_pin")).toBe(JOIN_WRONG_PIN);
-    expect(JOIN_WRONG_PIN).toBe("Wrong PIN.");
+    expect(JOIN_WRONG_PIN).toBe("Wrong PIN. Ask whoever invited you for the current one.");
   });
 
   it("20. rate limit wins even if the PIN would match", () => {

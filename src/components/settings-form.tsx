@@ -59,7 +59,10 @@ export function SettingsForm({ group }: { group: Group }) {
               aria-label="Email capsule"
             />
           </div>
-          <p className="formnote">Days of the month. America/Chicago.</p>
+          <p className="formnote">
+            Days of the month. America/Chicago. Changes take effect next month unless you force the
+            cycle.
+          </p>
           {scheduleState?.error ? <p className="err">{scheduleState.error}</p> : null}
           {scheduleState?.ok ? <p className="small">Saved.</p> : null}
           <div>

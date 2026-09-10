@@ -97,6 +97,8 @@ export default async function GroupHomePage({
 
           <GroupChrome uuid={uuid} role={member.role} />
 
+          {member.account_id ? null : <SaveLoginForm groupId={uuid} elevated />}
+
           <div className={`card card--pad-lg${myStatus === "submitted" && open ? " center" : ""}`}>
             <div className="stack">
               <div className="stack stack--tight">
@@ -137,7 +139,9 @@ export default async function GroupHomePage({
                     <h2 className="serif" style={{ fontSize: "1.5rem" }}>
                       {GROUP_FIRST_CAPSULE_HEADING}
                     </h2>
-                    <p className="muted small">Writing opens on {nextOpenDate}.</p>
+                    <p className="muted small">
+                      Writing opens on {nextOpenDate}. Invite people now so everyone is ready.
+                    </p>
                     <p className="muted tiny">{GROUP_NO_PREVIOUS_CAPSULES}</p>
                   </>
                 )}
@@ -166,7 +170,14 @@ export default async function GroupHomePage({
                   </Link>
                   <p className="btn-note">Writing opens again on {nextOpenDate}.</p>
                 </>
-              ) : null}
+              ) : (
+                <>
+                  <Link className="btn btn--primary btn--block btn--lg" href={`/g/${uuid}/invite`}>
+                    Invite people
+                  </Link>
+                  <p className="btn-note">Writing opens on {nextOpenDate}.</p>
+                </>
+              )}
             </div>
           </div>
 
@@ -223,8 +234,6 @@ export default async function GroupHomePage({
               </div>
             </>
           ) : null}
-
-          {member.account_id ? null : <SaveLoginForm groupId={uuid} />}
         </div>
       </div>
     </main>

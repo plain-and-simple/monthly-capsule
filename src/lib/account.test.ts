@@ -95,7 +95,9 @@ describe("GWT B — Create requires preferred_name + email + password", () => {
     expect(hashed).not.toBe("secret123");
     expect(await verifyPassword("secret123", hashed)).toBe(true);
     expect(await verifyPassword("wrong", hashed)).toBe(false);
-    expect(ACCOUNT_EXISTS).toBe("That email already has an account.");
+    expect(ACCOUNT_EXISTS).toBe(
+      "That email already has an account. Use the same password to link this group, or sign in from Home.",
+    );
   });
 });
 

@@ -6,7 +6,8 @@ export const PASSWORD_TOO_SHORT = "Password needs at least 8 characters.";
 export const PREFERRED_NAME_REQUIRED = "Preferred name required.";
 export const EMAIL_REQUIRED = "Email required.";
 export const EMAIL_INVALID = "Email looks wrong.";
-export const ACCOUNT_EXISTS = "That email already has an account.";
+export const ACCOUNT_EXISTS =
+  "That email already has an account. Use the same password to link this group, or sign in from Home.";
 
 export const ACCOUNT_FIELDS = ["preferred_name", "email", "password"] as const;
 export const FORBIDDEN_ACCOUNT_FIELDS = [

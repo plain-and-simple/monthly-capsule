@@ -72,7 +72,28 @@ export function formatCapsuleSendResult(input: {
   sent: number;
   skippedNoEmail: number;
   error: string | null;
+  reason?:
+    | "ok"
+    | "no-month"
+    | "no-capsule"
+    | "already-sent"
+    | "held"
+    | "no-resend-key"
+    | "bad-from"
+    | "no-recipients"
+    | "resend-error";
 }): string {
+  if (input.reason === "no-resend-key") {
+    return "Email is not configured (missing Resend API key). Nothing was sent.";
+  }
+  if (input.reason === "bad-from") {
+    return input.error
+      ? `From address problem: ${input.error}`
+      : "From address is not configured correctly. Nothing was sent.";
+  }
+  if (input.reason === "no-recipients") {
+    return `Nobody has an email yet. Skipped ${input.skippedNoEmail} with no address.`;
+  }
   const bits = [`Sent ${input.sent}.`];
   if (input.skippedNoEmail > 0) {
     bits.push(`Skipped ${input.skippedNoEmail} with no email.`);

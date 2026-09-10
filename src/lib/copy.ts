@@ -18,7 +18,6 @@ export const MANAGE_CREATE_LABEL = "Create";
 export const ROLE_OWNER_LABEL = "Owner";
 export const ROLE_MEMBER_LABEL = "Member";
 export const SIGN_OUT = "Sign out";
-export const LEAVE_GROUP = "Leave this group";
 
 export const JOIN_PIN_LABEL = "Group PIN";
 export const ACCOUNT_PASSWORD_LABEL = "Password";
