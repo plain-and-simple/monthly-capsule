@@ -1,0 +1,2858 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Every screen · Plain and Simple Monthly Capsule</title>
+    <style>
+/* Plain and Simple Monthly Capsule — draft design system
+   Quiet, papery, few words. One primary action per screen. */
+
+:root {
+  --paper: #f5f2ea;
+  --card: #fffdf7;
+  --ink: #1a1712;
+  --ink-2: #453f36;
+  --muted: #7b7268;
+  --line: #e4ddce;
+  --line-strong: #cec5b1;
+  --accent: #2f5b4c;
+  --accent-deep: #24473c;
+  --accent-soft: #e7efe9;
+  --stamp: #a8462f;
+
+  --font-serif: ui-serif, "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, "Times New Roman", serif;
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+
+  --r-sm: 6px;
+  --r: 10px;
+  --r-lg: 14px;
+
+  --shadow: 0 1px 2px rgba(26, 23, 18, 0.04), 0 8px 24px -18px rgba(26, 23, 18, 0.35);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+img {
+  max-width: 100%;
+  display: block;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+/* ---------- layout ---------- */
+
+.page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 5.5rem; /* room for the draft review bar */
+}
+
+.wrap {
+  width: 100%;
+  max-width: 34rem;
+  margin: 0 auto;
+  padding: 0 1.25rem;
+}
+
+.wrap--narrow {
+  max-width: 26rem;
+}
+
+.wrap--wide {
+  max-width: 48rem;
+}
+
+.main {
+  flex: 1;
+  padding: 2.5rem 0 4rem;
+}
+
+.main--centered {
+  display: flex;
+  align-items: center;
+  padding: 1.5rem 0 4rem;
+}
+
+.stack > * + * {
+  margin-top: 1rem;
+}
+
+.stack--tight > * + * {
+  margin-top: 0.5rem;
+}
+
+.stack--loose > * + * {
+  margin-top: 1.75rem;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.row--between {
+  justify-content: space-between;
+}
+
+.spacer {
+  flex: 1;
+}
+
+/* ---------- brand + chrome ---------- */
+
+.topbar {
+  border-bottom: 1px solid var(--line);
+  background: rgba(255, 253, 247, 0.7);
+}
+
+.topbar__inner {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  min-height: 58px;
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  text-decoration: none;
+  color: inherit;
+}
+
+.brand__mark {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1.5px solid var(--accent);
+  position: relative;
+  flex: none;
+}
+
+.brand__mark::after {
+  content: "";
+  position: absolute;
+  inset: 4px;
+  border-radius: 50%;
+  background: var(--accent);
+  opacity: 0.18;
+}
+
+.brand__name {
+  font-family: var(--font-serif);
+  font-size: 0.95rem;
+  letter-spacing: 0.01em;
+  line-height: 1.2;
+}
+
+.brand__name b {
+  font-weight: 600;
+}
+
+.brand__name span {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.brand--stacked .brand__name {
+  font-size: 1.05rem;
+}
+
+.topbar__account {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.footer {
+  border-top: 1px solid var(--line);
+  padding: 1.25rem 0 2rem;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.footer a {
+  color: var(--muted);
+}
+
+/* ---------- type ---------- */
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-serif);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin: 0;
+  line-height: 1.2;
+}
+
+h1 {
+  font-size: 1.9rem;
+}
+
+h2 {
+  font-size: 1.2rem;
+}
+
+h3 {
+  font-size: 1rem;
+}
+
+p {
+  margin: 0;
+}
+
+a {
+  color: var(--accent-deep);
+  text-underline-offset: 3px;
+}
+
+.display {
+  font-size: 2.6rem;
+  line-height: 1.1;
+}
+
+.lede {
+  color: var(--ink-2);
+  font-size: 1.02rem;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.small {
+  font-size: 0.85rem;
+}
+
+.tiny {
+  font-size: 0.78rem;
+}
+
+.eyebrow {
+  font-size: 0.72rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.serif {
+  font-family: var(--font-serif);
+}
+
+.center {
+  text-align: center;
+}
+
+/* ---------- surfaces ---------- */
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  padding: 1.5rem;
+  box-shadow: var(--shadow);
+}
+
+.card--flat {
+  box-shadow: none;
+}
+
+.card--pad-lg {
+  padding: 2rem;
+}
+
+.panel {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  padding: 1rem 1.1rem;
+}
+
+.rule {
+  height: 1px;
+  background: var(--line);
+  border: 0;
+  margin: 1.5rem 0;
+}
+
+.ornament {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  color: var(--line-strong);
+  margin: 2rem 0;
+}
+
+.ornament::before,
+.ornament::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--line);
+}
+
+/* ---------- buttons ---------- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  font-family: var(--font-sans);
+  font-size: 0.95rem;
+  font-weight: 500;
+  line-height: 1;
+  padding: 0.85rem 1.25rem;
+  border-radius: var(--r);
+  border: 1px solid transparent;
+  background: none;
+  color: var(--ink);
+  cursor: pointer;
+  text-decoration: none;
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+
+.btn--primary {
+  background: var(--accent);
+  color: #fffdf7;
+}
+
+.btn--primary:hover {
+  background: var(--accent-deep);
+}
+
+.btn--secondary {
+  border-color: var(--line-strong);
+  background: var(--card);
+}
+
+.btn--secondary:hover {
+  border-color: var(--muted);
+}
+
+.btn--quiet {
+  color: var(--muted);
+  padding: 0.5rem 0.25rem;
+  font-size: 0.9rem;
+}
+
+.btn--quiet:hover {
+  color: var(--ink);
+}
+
+.btn--block {
+  width: 100%;
+}
+
+.btn--lg {
+  padding: 1rem 1.5rem;
+  font-size: 1rem;
+}
+
+.btn[disabled],
+.btn[aria-disabled="true"] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn-note {
+  color: var(--muted);
+  font-size: 0.82rem;
+  text-align: center;
+}
+
+/* quiet secondary nav: People / Invite / Settings */
+.quietnav {
+  display: flex;
+  gap: 1.25rem;
+  flex-wrap: wrap;
+  font-size: 0.9rem;
+}
+
+.quietnav a {
+  color: var(--muted);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  padding-bottom: 1px;
+}
+
+.quietnav a:hover {
+  color: var(--ink);
+  border-bottom-color: var(--line-strong);
+}
+
+.backlink {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 0.88rem;
+}
+
+.backlink:hover {
+  color: var(--ink);
+}
+
+/* ---------- forms ---------- */
+
+.field {
+  display: block;
+}
+
+.field + .field {
+  margin-top: 1.1rem;
+}
+
+.field__label {
+  display: block;
+  font-size: 0.88rem;
+  font-weight: 500;
+  margin-bottom: 0.4rem;
+}
+
+.field__hint {
+  color: var(--muted);
+  font-size: 0.82rem;
+  margin-top: 0.4rem;
+}
+
+.input,
+.textarea,
+.select {
+  width: 100%;
+  font-family: inherit;
+  font-size: 1rem;
+  color: var(--ink);
+  background: #fffefb;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r);
+  padding: 0.75rem 0.85rem;
+}
+
+.input::placeholder,
+.textarea::placeholder {
+  color: #a9a196;
+}
+
+.input:focus,
+.textarea:focus,
+.select:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  border-color: var(--accent);
+}
+
+.input--code,
+.input--pin {
+  font-family: var(--font-mono);
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+}
+
+.textarea {
+  font-family: var(--font-serif);
+  font-size: 1.05rem;
+  line-height: 1.65;
+  min-height: 15rem;
+  resize: vertical;
+}
+
+.select {
+  appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%),
+    linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position: calc(100% - 18px) calc(1.2rem), calc(100% - 13px) calc(1.2rem);
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+}
+
+.field-inline {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.field-inline .select,
+.field-inline .input {
+  width: auto;
+  min-width: 8rem;
+}
+
+.check {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  font-size: 0.92rem;
+  cursor: pointer;
+}
+
+.check input {
+  margin-top: 0.25rem;
+  accent-color: var(--accent);
+  width: 1rem;
+  height: 1rem;
+}
+
+.formnote {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.error {
+  color: var(--stamp);
+  font-size: 0.85rem;
+}
+
+.field--error .input {
+  border-color: var(--stamp);
+}
+
+/* ---------- copy row / pin ---------- */
+
+.copyrow {
+  display: flex;
+  gap: 0.5rem;
+  align-items: stretch;
+}
+
+.copyrow .input {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  letter-spacing: 0;
+  text-overflow: ellipsis;
+}
+
+.copyrow .btn {
+  flex: none;
+  padding-inline: 1rem;
+}
+
+.pinbox {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--r);
+  padding: 0.9rem 1.1rem;
+  background: #fffefb;
+}
+
+.pin {
+  font-family: var(--font-mono);
+  font-size: 1.5rem;
+  letter-spacing: 0.3em;
+  padding-left: 0.3em;
+}
+
+/* ---------- status ---------- */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.78rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  padding: 0.3rem 0.6rem;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  color: var(--muted);
+  background: var(--card);
+}
+
+.badge--open {
+  color: var(--accent-deep);
+  border-color: rgba(47, 91, 76, 0.3);
+  background: var(--accent-soft);
+}
+
+.badge--closed {
+  color: var(--stamp);
+  border-color: rgba(168, 70, 47, 0.25);
+  background: #f8ece8;
+}
+
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex: none;
+}
+
+.status {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+/* ---------- lists ---------- */
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--line);
+}
+
+.list > li {
+  border-bottom: 1px solid var(--line);
+}
+
+.listitem {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  padding: 0.9rem 0.25rem;
+  text-decoration: none;
+  color: inherit;
+}
+
+a.listitem:hover {
+  background: rgba(255, 253, 247, 0.8);
+}
+
+.listitem__body {
+  min-width: 0;
+}
+
+.listitem__title {
+  font-family: var(--font-serif);
+  font-size: 1.05rem;
+}
+
+.listitem__meta {
+  color: var(--muted);
+  font-size: 0.83rem;
+}
+
+.listitem__end {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 0.83rem;
+  text-align: right;
+  flex: none;
+}
+
+.avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent-deep);
+  border: 1px solid rgba(47, 91, 76, 0.18);
+  display: grid;
+  place-items: center;
+  font-size: 0.8rem;
+  font-weight: 600;
+  flex: none;
+}
+
+.avatar--lg {
+  width: 44px;
+  height: 44px;
+  font-size: 0.95rem;
+}
+
+.avatar--waiting {
+  background: #f1ece1;
+  color: var(--muted);
+  border-color: var(--line);
+}
+
+/* ---------- empty state ---------- */
+
+.empty {
+  text-align: center;
+  padding: 2.5rem 1rem;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--r-lg);
+  background: rgba(255, 253, 247, 0.55);
+}
+
+.empty__mark {
+  width: 46px;
+  height: 46px;
+  margin: 0 auto 1rem;
+  border-radius: 50%;
+  border: 1.5px dashed var(--line-strong);
+}
+
+/* ---------- steps ---------- */
+
+.steps {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.steps__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.steps__num {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1px solid var(--line-strong);
+  display: grid;
+  place-items: center;
+  font-size: 0.7rem;
+}
+
+.steps__item--done .steps__num {
+  background: var(--accent-soft);
+  border-color: rgba(47, 91, 76, 0.3);
+  color: var(--accent-deep);
+}
+
+.steps__item--current .steps__num {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fffdf7;
+}
+
+.steps__item--current {
+  color: var(--ink);
+}
+
+.steps__sep {
+  width: 14px;
+  height: 1px;
+  background: var(--line-strong);
+}
+
+/* ---------- photos ---------- */
+
+.photos {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 0.6rem;
+}
+
+.photo {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: var(--r-sm);
+  overflow: hidden;
+  border: 1px solid var(--line);
+}
+
+.photo__remove {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 0;
+  background: rgba(26, 23, 18, 0.55);
+  color: #fff;
+  font-size: 0.7rem;
+  line-height: 1;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+
+.photo--add {
+  border: 1px dashed var(--line-strong);
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.8rem;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.photo--add:hover {
+  border-color: var(--muted);
+  color: var(--ink);
+}
+
+/* stand-in imagery for drafts — replaced by real uploads */
+.ph {
+  background-color: #dfd7c6;
+  background-repeat: no-repeat;
+}
+
+.ph--1 {
+  background-image: linear-gradient(180deg, #cfdbe0 0%, #e7e0d2 58%, #c9b99b 100%),
+    radial-gradient(circle at 72% 26%, rgba(255, 245, 220, 0.9) 0 12%, transparent 13%);
+  background-blend-mode: normal, screen;
+}
+
+.ph--2 {
+  background-image: linear-gradient(160deg, #b9c9b4 0%, #8fa88c 45%, #55684f 100%),
+    radial-gradient(circle at 25% 78%, rgba(255, 255, 255, 0.35) 0 18%, transparent 19%);
+}
+
+.ph--3 {
+  background-image: linear-gradient(200deg, #e8d3c0 0%, #d3a98c 50%, #9d6f56 100%),
+    radial-gradient(circle at 60% 35%, rgba(255, 250, 240, 0.55) 0 22%, transparent 23%);
+}
+
+.ph--4 {
+  background-image: linear-gradient(150deg, #cdd6e2 0%, #9fb0c6 55%, #6a7d96 100%),
+    radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.4) 0 15%, transparent 16%);
+}
+
+.ph--5 {
+  background-image: linear-gradient(170deg, #f0e2cb 0%, #dcc39c 48%, #a98b62 100%),
+    radial-gradient(circle at 78% 70%, rgba(120, 96, 62, 0.35) 0 20%, transparent 21%);
+}
+
+.ph--6 {
+  background-image: linear-gradient(190deg, #ded1de 0%, #b2a2b8 50%, #6f6076 100%),
+    radial-gradient(circle at 40% 62%, rgba(255, 255, 255, 0.35) 0 16%, transparent 17%);
+}
+
+/* ---------- capsule (the compiled newsletter) ---------- */
+
+.capsule {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  padding: 3rem 2.5rem;
+  box-shadow: var(--shadow);
+}
+
+.capsule__masthead {
+  text-align: center;
+  padding-bottom: 2rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.capsule__title {
+  font-family: var(--font-serif);
+  font-size: 2.2rem;
+  line-height: 1.1;
+  margin: 0.6rem 0 0.5rem;
+}
+
+.capsule__contents {
+  list-style: none;
+  margin: 1.5rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.4rem 1rem;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.capsule__contents a {
+  color: var(--muted);
+  text-decoration: none;
+  border-bottom: 1px solid var(--line-strong);
+}
+
+.capsule__contents a:hover {
+  color: var(--ink);
+}
+
+.letter {
+  padding: 2.5rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.letter:last-of-type {
+  border-bottom: 0;
+}
+
+.letter__head {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+
+.letter__name {
+  font-family: var(--font-serif);
+  font-size: 1.25rem;
+}
+
+.letter__meta {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.letter__body {
+  font-family: var(--font-serif);
+  font-size: 1.08rem;
+  line-height: 1.7;
+  color: #24201a;
+}
+
+.letter__body p + p {
+  margin-top: 1rem;
+}
+
+.letter__photos {
+  margin-top: 1.5rem;
+  display: grid;
+  gap: 0.6rem;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+}
+
+.letter__photos .photo {
+  aspect-ratio: 4 / 3;
+}
+
+.capsule__colophon {
+  margin-top: 2.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.82rem;
+  text-align: center;
+}
+
+/* ---------- email preview shell ---------- */
+
+.mailframe {
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  background: var(--card);
+}
+
+.mailframe__head {
+  padding: 0.9rem 1.1rem;
+  border-bottom: 1px solid var(--line);
+  background: #f1ece1;
+  font-size: 0.85rem;
+  display: grid;
+  gap: 0.15rem;
+}
+
+.mailframe__head b {
+  font-weight: 600;
+}
+
+.mailframe__body {
+  padding: 1.75rem 1.5rem;
+}
+
+/* ---------- dialog ---------- */
+
+.scrim {
+  position: relative;
+  background: rgba(26, 23, 18, 0.35);
+  border-radius: var(--r-lg);
+  padding: 2.5rem 1rem;
+}
+
+.dialog {
+  max-width: 24rem;
+  margin: 0 auto;
+  background: var(--card);
+  border-radius: var(--r-lg);
+  border: 1px solid var(--line);
+  padding: 1.6rem;
+  box-shadow: 0 24px 60px -30px rgba(26, 23, 18, 0.6);
+}
+
+/* ---------- design annotations ---------- */
+
+.note {
+  font-family: var(--font-sans);
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: #6a6459;
+  background: #efe9dc;
+  border-left: 2px solid var(--line-strong);
+  border-radius: 0 var(--r-sm) var(--r-sm) 0;
+  padding: 0.6rem 0.8rem;
+}
+
+.note b {
+  color: var(--ink-2);
+  font-weight: 600;
+}
+
+body.notes-off .note {
+  display: none;
+}
+
+/* ---------- draft index ---------- */
+
+.screengrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 0.75rem;
+}
+
+.screencard {
+  display: block;
+  text-decoration: none;
+  color: inherit;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  padding: 0.9rem 1rem;
+}
+
+.screencard:hover {
+  border-color: var(--line-strong);
+  box-shadow: var(--shadow);
+}
+
+.screencard__name {
+  font-family: var(--font-serif);
+  font-size: 1.02rem;
+  margin-bottom: 0.2rem;
+}
+
+.screencard__job {
+  color: var(--muted);
+  font-size: 0.83rem;
+  line-height: 1.45;
+}
+
+.qlist {
+  margin: 0;
+  padding-left: 1.1rem;
+  color: var(--ink-2);
+  font-size: 0.92rem;
+}
+
+.qlist li + li {
+  margin-top: 0.5rem;
+}
+
+/* ---------- draft review chrome ---------- */
+
+.review {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 50;
+  font-family: var(--font-sans);
+  font-size: 0.82rem;
+  color: #e8e2d6;
+}
+
+.review__bar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.55rem 0.9rem;
+  background: #211e19;
+  border-top: 1px solid #383229;
+}
+
+.review__label {
+  color: #9c9488;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-size: 0.68rem;
+  white-space: nowrap;
+}
+
+.review__current {
+  color: #f2ece0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.review__btn {
+  font: inherit;
+  color: #e8e2d6;
+  background: #2e2a23;
+  border: 1px solid #453f35;
+  border-radius: 6px;
+  padding: 0.3rem 0.6rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.review__btn:hover {
+  background: #3a352c;
+}
+
+.review__spacer {
+  flex: 1;
+}
+
+.review__panel {
+  display: none;
+  max-height: 60vh;
+  overflow: auto;
+  background: #1a1713;
+  border-top: 1px solid #383229;
+  padding: 1rem 0.9rem 1.25rem;
+}
+
+.review[data-open="true"] .review__panel {
+  display: block;
+}
+
+.review__group + .review__group {
+  margin-top: 1rem;
+}
+
+.review__grouptitle {
+  color: #8c8478;
+  font-size: 0.68rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-bottom: 0.4rem;
+}
+
+.review__links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.review__link {
+  color: #ddd6c8;
+  text-decoration: none;
+  border: 1px solid #3b352c;
+  border-radius: 6px;
+  padding: 0.3rem 0.55rem;
+}
+
+.review__link:hover {
+  background: #2a2620;
+  color: #fff;
+}
+
+.review__link[aria-current="page"] {
+  background: #3c5d51;
+  border-color: #4d7466;
+  color: #fff;
+}
+
+@media (max-width: 560px) {
+  .review__label,
+  .review__current {
+    display: none;
+  }
+}
+
+/* ---------- responsive ---------- */
+
+@media (max-width: 640px) {
+  .display {
+    font-size: 2.1rem;
+  }
+
+  h1 {
+    font-size: 1.6rem;
+  }
+
+  .card,
+  .card--pad-lg {
+    padding: 1.25rem;
+  }
+
+  .capsule {
+    padding: 1.75rem 1.25rem;
+  }
+
+  .main {
+    padding-top: 1.75rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
+}
+
+
+/* handoff bundle: no dev server, no review chrome */
+.page { padding-bottom: 0; }
+.bundlenav {
+  border-top: 1px solid var(--line);
+  background: #efe9dc;
+  padding: 0.85rem 1.25rem;
+  font-size: 0.82rem;
+  color: var(--muted);
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.bundlenav a { color: var(--ink-2); }
+.bundlenav button {
+  font: inherit;
+  color: var(--muted);
+  background: none;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  padding: 0.25rem 0.55rem;
+  cursor: pointer;
+}
+.bundlenav__spacer { flex: 1; }
+.sheet { border-bottom: 2px solid var(--line-strong); }
+.sheet__label {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: #211e19;
+  color: #f2ece0;
+  font-family: var(--font-sans);
+  font-size: 0.8rem;
+  padding: 0.5rem 1.25rem;
+}
+.sheet__label span { color: #9c9488; }
+@media print {
+  .bundlenav, .sheet__label { display: none; }
+  .sheet { break-after: page; }
+}
+
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <main class="main">
+        <div class="wrap wrap--wide stack stack--loose">
+          <div class="stack stack--tight">
+            <p class="eyebrow">Plain and Simple Monthly Capsule · rough drafts</p>
+            <h1 class="display serif">Every screen, one page</h1>
+            <p class="lede">18 draft screens in the order a month runs. Print this file for a PDF of the set.</p>
+          </div>
+          <ul class="capsule__contents" style="justify-content: flex-start">
+            <li><a href="#landing">Landing</a></li>
+            <li><a href="#create-code">Create · studio code</a></li>
+            <li><a href="#create-account">Create · account</a></li>
+            <li><a href="#create-group">Create · group</a></li>
+            <li><a href="#create-share">Create · share once</a></li>
+            <li><a href="#join">Join</a></li>
+            <li><a href="#manage-empty">Manage · no groups</a></li>
+            <li><a href="#manage">Manage · many groups</a></li>
+            <li><a href="#group-open">Group home · open</a></li>
+            <li><a href="#submit">Submit</a></li>
+            <li><a href="#submit-sent">Submit · sent</a></li>
+            <li><a href="#group-closed">Group home · closed</a></li>
+            <li><a href="#people">People</a></li>
+            <li><a href="#invite">Invite</a></li>
+            <li><a href="#settings">Settings</a></li>
+            <li><a href="#settings-compiled">Settings · compiled</a></li>
+            <li><a href="#capsule">Capsule</a></li>
+            <li><a href="#email">Email</a></li>
+          </ul>
+        </div>
+      </main>
+    </div>
+      <section class="sheet" id="landing">
+        <div class="sheet__label">Landing <span>— Sign in, or start a group. Joining happens by link only.</span></div>
+
+    <div class="page">
+      <header class="topbar">
+        <div class="wrap wrap--wide topbar__inner">
+          <a class="brand" href="#landing">
+            <span class="brand__mark"></span>
+            <span class="brand__name"><b>Plain and Simple</b> <span>Monthly Capsule</span></span>
+          </a>
+        </div>
+      </header>
+
+      <main class="main">
+        <div class="wrap">
+          <div class="stack stack--loose">
+            <div class="stack">
+              <p class="eyebrow">Once a month</p>
+              <h1 class="display serif">Friends write once a month.<br />You get one capsule.</h1>
+              <p class="lede">
+                A private page for a small group. Everyone sends a short letter and a few photos
+                during the month. When the window closes, it all arrives as one thing to read.
+              </p>
+            </div>
+
+            <div class="note">
+              <b>Landing does two jobs only.</b> Sign in, or start a group. There is no public
+              sign-up and no group directory — people join by opening a share link, so nothing on
+              this page asks for a group name or PIN.
+            </div>
+
+            <div class="card card--pad-lg">
+              <form class="stack" onsubmit="event.preventDefault()">
+                <h2>Sign in</h2>
+                <div>
+                  <label class="field">
+                    <span class="field__label">Email</span>
+                    <input class="input" type="email" name="email" autocomplete="email" placeholder="you@example.com" />
+                  </label>
+                  <label class="field">
+                    <span class="field__label">Password</span>
+                    <input class="input" type="password" name="password" autocomplete="current-password" placeholder="••••••••" />
+                  </label>
+                </div>
+                <label class="check">
+                  <input type="checkbox" checked />
+                  <span>Stay signed in on this device</span>
+                </label>
+                <a class="btn btn--primary btn--block btn--lg" href="#manage">Sign in</a>
+                <p class="center"><a class="small muted" href="#">Forgot password</a></p>
+              </form>
+            </div>
+
+            <div class="ornament"><span class="small muted">or</span></div>
+
+            <div class="stack stack--tight">
+              <a class="btn btn--secondary btn--block" href="#create-code">Create a capsule group</a>
+              <p class="btn-note">Needs a studio code. Ask whoever sent you here.</p>
+            </div>
+
+            <div class="panel">
+              <p class="small muted">
+                Have an invite link? Open it and you will land straight on Join — you will need the
+                Group PIN from whoever invited you.
+              </p>
+            </div>
+
+            <div class="stack stack--tight">
+              <p class="eyebrow">How a month goes</p>
+              <ol class="list small" style="border-top: 0">
+                <li style="border-bottom: 0; padding: 0.35rem 0">The window opens. Everyone gets a nudge.</li>
+                <li style="border-bottom: 0; padding: 0.35rem 0">Write a letter, add a few photos, submit.</li>
+                <li style="border-bottom: 0; padding: 0.35rem 0">The window closes and one capsule goes out.</li>
+              </ol>
+            </div>
+          </div>
+        </div>
+      </main>
+
+      <footer class="footer">
+        <div class="wrap wrap--wide row row--between">
+          <span>Plain and Simple Monthly Capsule</span>
+          <span class="tiny">No ads. No phone numbers. Nothing public.</span>
+        </div>
+      </footer>
+    </div>
+  
+      </section>
+      <section class="sheet" id="create-code">
+        <div class="sheet__label">Create · studio code <span>— Gate on the studio code before anything else.</span></div>
+
+    <div class="page">
+      <header class="topbar">
+        <div class="wrap wrap--wide topbar__inner">
+          <a class="brand" href="#landing">
+            <span class="brand__mark"></span>
+            <span class="brand__name"><b>Plain and Simple</b> <span>Monthly Capsule</span></span>
+          </a>
+        </div>
+      </header>
+
+      <main class="main main--centered">
+        <div class="wrap wrap--narrow">
+          <div class="stack stack--loose">
+            <div class="stack stack--tight">
+              <a class="backlink" href="#landing">← Back</a>
+              <div class="steps">
+                <span class="steps__item steps__item--current"><span class="steps__num">1</span> Code</span>
+                <span class="steps__sep"></span>
+                <span class="steps__item"><span class="steps__num">2</span> Account</span>
+                <span class="steps__sep"></span>
+                <span class="steps__item"><span class="steps__num">3</span> Group</span>
+              </div>
+            </div>
+
+            <div class="card card--pad-lg">
+              <form class="stack" onsubmit="event.preventDefault()">
+                <div class="stack stack--tight">
+                  <h1>Studio code</h1>
+                  <p class="muted small">New groups are made by invitation from the studio.</p>
+                </div>
+                <label class="field">
+                  <span class="field__label">Code</span>
+                  <input class="input input--code" type="text" placeholder="XXXX-XXXX" autocomplete="off" spellcheck="false" />
+                  <span class="field__hint">Case does not matter.</span>
+                </label>
+                <a class="btn btn--primary btn--block" href="#create-account">Continue</a>
+              </form>
+            </div>
+
+            <div class="note">
+              <b>Error state to build:</b> a wrong code returns one line under the field — “That code
+              is not valid.” No count of attempts, no lockout copy, no support link.
+            </div>
+
+            <p class="center small muted">
+              Already have an account? <a href="#landing">Sign in</a>
+            </p>
+          </div>
+        </div>
+      </main>
+    </div>
+  
+      </section>
+      <section class="sheet" id="create-account">
+        <div class="sheet__label">Create · account <span>— Preferred name, email, password.</span></div>
+
+    <div class="page">
+      <header class="topbar">
+        <div class="wrap wrap--wide topbar__inner">
+          <a class="brand" href="#landing">
+            <span class="brand__mark"></span>
+            <span class="brand__name"><b>Plain and Simple</b> <span>Monthly Capsule</span></span>
+          </a>
+        </div>
+      </header>
+
+      <main class="main main--centered">
+        <div class="wrap wrap--narrow">
+          <div class="stack stack--loose">
+            <div class="stack stack--tight">
+              <a class="backlink" href="#create-code">← Back</a>
+              <div class="steps">
+                <span class="steps__item steps__item--done"><span class="steps__num">✓</span> Code</span>
+                <span class="steps__sep"></span>
+                <span class="steps__item steps__item--current"><span class="steps__num">2</span> Account</span>
+                <span class="steps__sep"></span>
+                <span class="steps__item"><span class="steps__num">3</span> Group</span>
+              </div>
+            </div>
+
+            <div class="card card--pad-lg">
+              <form class="stack" onsubmit="event.preventDefault()">
+                <div class="stack stack--tight">
+                  <h1>Your account</h1>
+                  <p class="muted small">One account, as many groups as you like.</p>
+                </div>
+
+                <div>
+                  <label class="field">
+                    <span class="field__label">Preferred name</span>
+                    <input class="input" type="text" placeholder="Wren" autocomplete="nickname" />
+                    <span class="field__hint">What your group sees above your letters.</span>
+                  </label>
+                  <label class="field">
+                    <span class="field__label">Email</span>
+                    <input class="input" type="email" placeholder="wren@example.com" autocomplete="email" />
+                    <span class="field__hint">Where capsules arrive. Never shown to the group.</span>
+                  </label>
+                  <label class="field">
+                    <span class="field__label">Password</span>
+                    <input class="input" type="password" placeholder="••••••••" autocomplete="new-password" />
+                    <span class="field__hint">At least 10 characters.</span>
+                  </label>
+                </div>
+
+                <a class="btn btn--primary btn--block" href="#create-group">Continue</a>
+              </form>
+            </div>
+
+            <div class="note">
+              <b>No phone number, no SMS, no third-party sign-in.</b> Email and password is the whole
+              account. Keep this form to three fields.
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  
+      </section>
+      <section class="sheet" id="create-group">
+        <div class="sheet__label">Create · group <span>— Name the group and set the monthly cycle.</span></div>
+
+    <div class="page">
+      <header class="topbar">
+        <div class="wrap wrap--wide topbar__inner">
+          <a class="brand" href="#landing">
+            <span class="brand__mark"></span>
+            <span class="brand__name"><b>Plain and Simple</b> <span>Monthly Capsule</span></span>
+          </a>
+        </div>
+      </header>
+
+      <main class="main main--centered">
+        <div class="wrap wrap--narrow">
+          <div class="stack stack--loose">
+            <div class="stack stack--tight">
+              <a class="backlink" href="#create-account">← Back</a>
+              <div class="steps">
+                <span class="steps__item steps__item--done"><span class="steps__num">✓</span> Code</span>
+                <span class="steps__sep"></span>
+                <span class="steps__item steps__item--done"><span class="steps__num">✓</span> Account</span>
+                <span class="steps__sep"></span>
+                <span class="steps__item steps__item--current"><span class="steps__num">3</span> Group</span>
+              </div>
+            </div>
+
+            <div class="card card--pad-lg">
+              <form class="stack" onsubmit="event.preventDefault()">
+                <div class="stack stack--tight">
+                  <h1>Name the group</h1>
+                  <p class="muted small">You can change all of this later in Settings.</p>
+                </div>
+
+                <label class="field">
+                  <span class="field__label">Group name</span>
+                  <input class="input" type="text" placeholder="Cedar Street" />
+                  <span class="field__hint">What everyone sees. Keep it short.</span>
+                </label>
+
+                <div class="field">
+                  <span class="field__label">Monthly cycle</span>
+                  <div class="stack stack--tight">
+                    <div class="field-inline">
+                      <span class="small muted">Writing opens on day</span>
+                      <select class="select" aria-label="Day the window opens">
+                        <option>1</option>
+                        <option selected>10</option>
+                        <option>15</option>
+                      </select>
+                    </div>
+                    <div class="field-inline">
+                      <span class="small muted">and closes on day</span>
+                      <select class="select" aria-label="Day the window closes">
+                        <option>20</option>
+                        <option selected>25</option>
+                        <option>28</option>
+                      </select>
+                    </div>
+                  </div>
+                  <span class="field__hint">
+                    Everyone writes between the 10th and the 25th. The capsule goes out on the 25th.
+                  </span>
+                </div>
+
+                <a class="btn btn--primary btn--block" href="#create-share">Create group</a>
+              </form>
+            </div>
+
+            <div class="note">
+              <b>Plain language over a date picker.</b> The cycle is two numbers, and the sentence
+              underneath restates it in words so nobody has to decode a schedule.
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  
+      </section>
+      <section class="sheet" id="create-share">
+        <div class="sheet__label">Create · share once <span>— Share link + Group PIN, shown this one time.</span></div>
+
+    <div class="page">
+      <header class="topbar">
+        <div class="wrap wrap--wide topbar__inner">
+          <a class="brand" href="#manage">
+            <span class="brand__mark"></span>
+            <span class="brand__name"><b>Plain and Simple</b> <span>Monthly Capsule</span></span>
+          </a>
+          <div class="topbar__account">Wren</div>
+        </div>
+      </header>
+
+      <main class="main">
+        <div class="wrap">
+          <div class="stack stack--loose">
+            <div class="stack stack--tight">
+              <p class="eyebrow">Cedar Street is ready</p>
+              <h1>Write this down now</h1>
+              <p class="lede">
+                The PIN is shown this one time. We keep a scrambled copy, so we cannot read it back
+                to you later — only make a new one.
+              </p>
+            </div>
+
+            <div class="card">
+              <div class="stack">
+                <div class="stack stack--tight">
+                  <span class="field__label">Invite link</span>
+                  <div class="copyrow">
+                    <input
+                      class="input"
+                      id="share-link"
+                      readonly
+                      value="https://capsule.plainandsimple.app/join/3f1c8a2e-9b47-4d20-8c6a-71e0f5b9d431"
+                    />
+                    <button class="btn btn--secondary" type="button" data-copy="#share-link">Copy</button>
+                  </div>
+                </div>
+
+                <div class="stack stack--tight">
+                  <span class="field__label">Group PIN</span>
+                  <div class="pinbox">
+                    <span class="pin" id="share-pin">7K4Q2M</span>
+                    <button class="btn btn--quiet" type="button" data-copy="#share-pin">Copy</button>
+                  </div>
+                </div>
+
+                <button class="btn btn--primary btn--block" type="button" data-copy="#share-link">
+                  Copy link and PIN together
+                </button>
+                <p class="btn-note">Send them in the same message. Both are needed to join.</p>
+              </div>
+            </div>
+
+            <div class="note">
+              <b>Show-once, and say so plainly.</b> Two separate copy targets plus one combined
+              button, because most owners paste both into one text. If they leave without copying,
+              the only recovery is Settings → Make a new PIN.
+            </div>
+
+            <div class="panel">
+              <p class="small muted">
+                Lost the PIN? Settings has <b>Make a new PIN</b>. The old one stops working straight
+                away, and anyone already in the group stays in.
+              </p>
+            </div>
+
+            <div class="stack stack--tight">
+              <a class="btn btn--secondary btn--block" href="#group-open">I have saved these — go to Cedar Street</a>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  
+      </section>
+      <section class="sheet" id="join">
+        <div class="sheet__label">Join <span>— Invite link, Group PIN, preferred name.</span></div>
+
+    <div class="page">
+      <header class="topbar">
+        <div class="wrap wrap--wide topbar__inner">
+          <a class="brand" href="#landing">
+            <span class="brand__mark"></span>
+            <span class="brand__name"><b>Plain and Simple</b> <span>Monthly Capsule</span></span>
+          </a>
+        </div>
+      </header>
+
+      <main class="main">
+        <div class="wrap wrap--narrow">
+          <div class="stack stack--loose">
+            <div class="stack stack--tight">
+              <p class="eyebrow">You have been invited</p>
+              <h1>Join Cedar Street</h1>
+              <p class="lede">Five people so far. One letter each, once a month.</p>
+            </div>
+
+            <div class="card card--pad-lg">
+              <form class="stack" onsubmit="event.preventDefault()">
+                <label class="field">
+                  <span class="field__label">Group PIN</span>
+                  <input class="input input--pin" type="text" placeholder="XXXXXX" autocomplete="off" spellcheck="false" />
+                  <span class="field__hint">From whoever sent you the link.</span>
+                </label>
+
+                <hr class="rule" />
+
+                <label class="field">
+                  <span class="field__label">Preferred name</span>
+                  <input class="input" type="text" placeholder="Marisol" autocomplete="nickname" />
+                  <span class="field__hint">How Cedar Street will see you.</span>
+                </label>
+                <label class="field">
+                  <span class="field__label">Email</span>
+                  <input class="input" type="email" placeholder="marisol@example.com" autocomplete="email" />
+                </label>
+                <label class="field">
+                  <span class="field__label">Password</span>
+                  <input class="input" type="password" placeholder="••••••••" autocomplete="new-password" />
+                </label>
+
+                <label class="check">
+                  <input type="checkbox" checked />
+                  <span>Save my login on this device</span>
+                </label>
+
+                <a class="btn btn--primary btn--block btn--lg" href="#group-open">Join Cedar Street</a>
+              </form>
+            </div>
+
+            <div class="note">
+              <b>Two states for this screen.</b> Signed out shows the whole form. Signed in collapses
+              to the PIN, a confirm-your-name field, and “Join as Wren”. Both keep the PIN first, so
+              the wrong-PIN error lands before anyone types their details.
+            </div>
+
+            <div class="note">
+              <b>Wrong PIN:</b> one line under the field — “That PIN does not match. Ask whoever
+              invited you.” The link itself stays valid; the PIN is the thing being checked.
+            </div>
+
+            <p class="center small muted">
+              Already in this group? <a href="#landing">Sign in</a>
+            </p>
+          </div>
+        </div>
+      </main>
+
+      <footer class="footer">
+        <div class="wrap wrap--narrow center">
+          <span class="tiny">Nothing here is public. Only people with the link and the PIN can join.</span>
+        </div>
+      </footer>
+    </div>
+  
+      </section>
+      <section class="sheet" id="manage-empty">
+        <div class="sheet__label">Manage · no groups <span>— Empty state with create and join hints.</span></div>
+
+    <div class="page">
+      <header class="topbar">
+        <div class="wrap wrap--wide topbar__inner">
+          <a class="brand" href="#manage">
+            <span class="brand__mark"></span>
+            <span class="brand__name"><b>Plain and Simple</b> <span>Monthly Capsule</span></span>
+          </a>
+          <div class="topbar__account">Wren · <a href="#landing">Sign out</a></div>
+        </div>
+      </header>
+
+      <main class="main">
+        <div class="wrap">
+          <div class="stack stack--loose">
+            <h1>Your groups</h1>
+
+            <div class="empty">
+              <div class="empty__mark"></div>
+              <div class="stack stack--tight">
+                <h2 class="serif">Nothing here yet</h2>
+                <p class="muted small">
+                  Groups start one of two ways: someone sends you a link, or you make one.
+                </p>
+              </div>
+            </div>
+
+            <div class="stack stack--tight">
+              <a class="btn btn--primary btn--block" href="#create-code">Create a capsule group</a>
+              <p class="btn-note">Needs a studio code.</p>
+            </div>
+
+            <div class="panel">
+              <p class="small">
+                <b>Waiting on an invite?</b>
+                <span class="muted">
+                  Open the link you were sent and enter the Group PIN. There is no way to search for
+                  a group from here — that is on purpose.
+                </span>
+              </p>
+            </div>
+
+            <div class="note">
+              <b>The empty state carries the join explanation.</b> This is the only screen where
+              someone can be stuck with nowhere to go, so it names both paths in plain words instead
+              of showing a disabled list.
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  
+      </section>
+      <section class="sheet" id="manage">
+        <div class="sheet__label">Manage · many groups <span>— Pick a group by name. One group skips this screen.</span></div>
+
+    <div class="page">
+      <header class="topbar">
+        <div class="wrap wrap--wide topbar__inner">
+          <a class="brand" href="#manage">
+            <span class="brand__mark"></span>
+            <span class="brand__name"><b>Plain and Simple</b> <span>Monthly Capsule</span></span>
+          </a>
+          <div class="topbar__account">Wren · <a href="#landing">Sign out</a></div>
+        </div>
+      </header>
+
+      <main class="main">
+        <div class="wrap">
+          <div class="stack stack--loose">
+            <div class="stack stack--tight">
+              <h1>Your groups</h1>
+              <p class="muted small">Three groups. Pick one.</p>
+            </div>
+
+            <ul class="list">
+              <li>
+                <a class="listitem" href="#group-open">
+                  <span class="avatar avatar--lg">CS</span>
+                  <span class="listitem__body">
+                    <span class="listitem__title">Cedar Street</span>
+                    <span class="listitem__meta">Open until Sept 25 · you have not written yet</span>
+                  </span>
+                  <span class="listitem__end"><span class="badge badge--open"><span class="dot"></span>Open</span></span>
+                </a>
+              </li>
+              <li>
+                <a class="listitem" href="#group-closed">
+                  <span class="avatar avatar--lg">IF</span>
+                  <span class="listitem__body">
+                    <span class="listitem__title">The Ito Family</span>
+                    <span class="listitem__meta">September capsule is ready to read</span>
+                  </span>
+                  <span class="listitem__end"><span class="badge">Capsule</span></span>
+                </a>
+              </li>
+              <li>
+                <a class="listitem" href="#group-open">
+                  <span class="avatar avatar--lg">DE</span>
+                  <span class="listitem__body">
+                    <span class="listitem__title">Deep End Swim Club</span>
+                    <span class="listitem__meta">Opens Oct 1 · 9 people</span>
+                  </span>
+                  <span class="listitem__end"><span class="badge">Resting</span></span>
+                </a>
+              </li>
+            </ul>
+
+            <div class="note">
+              <b>Names, never UUIDs.</b> The right column carries the only thing worth scanning for:
+              is anything waiting on me. One group skips this screen entirely and lands on group
+              home; zero groups gets the empty state.
+            </div>
+
+            <div class="row">
+              <a class="btn btn--quiet" href="#create-code">Create a group</a>
+              <span class="muted tiny">Joining still happens by link.</span>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  
+      </section>
+      <section class="sheet" id="group-open">
+        <div class="sheet__label">Group home · open <span>— One primary action: Submit.</span></div>
+
+    <div class="page">
+      <header class="topbar">
+        <div class="wrap wrap--wide topbar__inner">
+          <a class="brand" href="#manage">
+            <span class="brand__mark"></span>
+            <span class="brand__name"><b>Plain and Simple</b> <span>Monthly Capsule</span></span>
+          </a>
+          <div class="topbar__account">Wren · <a href="#landing">Sign out</a></div>
+        </div>
+      </header>
+
+      <main class="main">
+        <div class="wrap">
+          <div class="stack stack--loose">
+            <div class="stack stack--tight">
+              <a class="backlink" href="#manage">← Your groups</a>
+              <div class="row row--between">
+                <h1>Cedar Street</h1>
+                <span class="badge badge--open"><span class="dot"></span>Open</span>
+              </div>
+            </div>
+
+            <div class="card card--pad-lg">
+              <div class="stack">
+                <div class="stack stack--tight">
+                  <p class="eyebrow">September 2026</p>
+                  <h2 class="serif" style="font-size: 1.5rem">Writing is open until Friday the 25th</h2>
+                  <p class="muted small">Sixteen days left. A few paragraphs is plenty.</p>
+                </div>
+                <a class="btn btn--primary btn--block btn--lg" href="#submit">Write your letter</a>
+                <p class="btn-note">You can keep editing until the window closes.</p>
+              </div>
+            </div>
+
+            <div class="panel">
+              <div class="stack stack--tight">
+                <p class="small"><b>Three of six have written</b></p>
+                <div class="row" style="gap: 0.4rem">
+                  <span class="avatar" title="Ade">A</span>
+                  <span class="avatar" title="June">J</span>
+                  <span class="avatar" title="Kofi">K</span>
+                  <span class="avatar avatar--waiting" title="Wren — not yet">W</span>
+                  <span class="avatar avatar--waiting" title="Marisol — not yet">M</span>
+                  <span class="avatar avatar--waiting" title="Theo — not yet">T</span>
+                </div>
+                <p class="muted tiny">Nobody is notified about who is late. It is just a count.</p>
+              </div>
+            </div>
+
+            <div class="note">
+              <b>One primary action, and it changes with the cycle.</b> While the window is open the
+              page says Write your letter and nothing competes with it. People, Invite and Settings
+              stay as plain text links below the fold of attention.
+            </div>
+
+            <hr class="rule" />
+
+            <div class="stack">
+              <nav class="quietnav">
+                <a href="#people">People</a>
+                <a href="#invite">Invite</a>
+                <a href="#settings">Settings</a>
+              </nav>
+              <p class="small muted">
+                Last month: <a href="#capsule">the August capsule</a> · six letters, twenty-two photos
+              </p>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  
+      </section>
+      <section class="sheet" id="submit">
+        <div class="sheet__label">Submit <span>— Letter plus photos for this month.</span></div>
+
+    <div class="page">
+      <header class="topbar">
+        <div class="wrap wrap--wide topbar__inner">
+          <a class="brand" href="#manage">
+            <span class="brand__mark"></span>
+            <span class="brand__name"><b>Plain and Simple</b> <span>Monthly Capsule</span></span>
+          </a>
+          <div class="topbar__account">Wren</div>
+        </div>
+      </header>
+
+      <main class="main">
+        <div class="wrap">
+          <div class="stack stack--loose">
+            <div class="stack stack--tight">
+              <a class="backlink" href="#group-open">← Cedar Street</a>
+              <div class="row row--between">
+                <h1>Your September letter</h1>
+                <span class="status"><span class="dot"></span>Saved just now</span>
+              </div>
+              <p class="muted small">Open until Friday the 25th. Nobody sees this until the window closes.</p>
+            </div>
+
+            <form class="stack stack--loose" onsubmit="event.preventDefault()">
+              <label class="field">
+                <span class="field__label">Letter</span>
+                <textarea class="textarea" placeholder="What has this month been like?">The plum tree finally did something. Two plums, both of which the birds got first, but there were plums.
+
+Work is the same in the way that is either steady or stuck depending on the day. I have started walking the long way home past the school field, which is where most of the thinking gets done.
+
+Dad's knee is better. He wants everyone to know he is back on the bike, at a speed he described as "respectable."</textarea>
+                <span class="field__hint">No length rule. Three lines is a letter too.</span>
+              </label>
+
+              <div class="field">
+                <span class="field__label">Photos</span>
+                <div class="photos" style="margin-top: 0.5rem">
+                  <div class="photo ph ph--1"><button class="photo__remove" type="button" aria-label="Remove photo">✕</button></div>
+                  <div class="photo ph ph--3"><button class="photo__remove" type="button" aria-label="Remove photo">✕</button></div>
+                  <div class="photo ph ph--2"><button class="photo__remove" type="button" aria-label="Remove photo">✕</button></div>
+                  <button class="photo photo--add" type="button">Add</button>
+                </div>
+                <p class="field__hint">Three of eight. Drag to reorder — the first one leads your entry.</p>
+              </div>
+
+              <div class="stack stack--tight">
+                <a class="btn btn--primary btn--block btn--lg" href="#submit-sent">Submit for September</a>
+                <p class="btn-note">You can come back and change it until the 25th.</p>
+              </div>
+            </form>
+
+            <div class="note">
+              <b>The writing surface is the screen.</b> Serif, wide line height, no formatting bar, no
+              word count creeping up in the corner. Autosave runs quietly and the only status text is
+              “Saved just now”.
+            </div>
+
+            <div class="note">
+              <b>Upload states to build:</b> a tile with a progress ring while sending, and a tile
+              with “Would not upload — try again” for failures. A failed photo never blocks submitting
+              the letter.
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  
+      </section>
+      <section class="sheet" id="submit-sent">
+        <div class="sheet__label">Submit · sent <span>— Confirmation, with room to edit until the window closes.</span></div>
+
+    <div class="page">
+      <header class="topbar">
+        <div class="wrap wrap--wide topbar__inner">
+          <a class="brand" href="#manage">
+            <span class="brand__mark"></span>
+            <span class="brand__name"><b>Plain and Simple</b> <span>Monthly Capsule</span></span>
+          </a>
+          <div class="topbar__account">Wren</div>
+        </div>
+      </header>
+
+      <main class="main">
+        <div class="wrap">
+          <div class="stack stack--loose">
+            <div class="stack stack--tight">
+              <a class="backlink" href="#group-open">← Cedar Street</a>
+              <div class="row row--between">
+                <h1>Cedar Street</h1>
+                <span class="badge badge--open"><span class="dot"></span>Open</span>
+              </div>
+            </div>
+
+            <div class="card card--pad-lg center">
+              <div class="stack">
+                <div class="stack stack--tight">
+                  <p class="eyebrow">September 2026</p>
+                  <h2 class="serif" style="font-size: 1.5rem">Your letter is in</h2>
+                  <p class="muted small">
+                    Four of six have written. The capsule is made on the 25th and lands in your inbox.
+                  </p>
+                </div>
+                <div class="row" style="justify-content: center">
+                  <a class="btn btn--secondary" href="#submit">Edit until the 25th</a>
+                </div>
+              </div>
+            </div>
+
+            <div class="note">
+              <b>Confirmation, not celebration.</b> No confetti, no share prompt. It states what
+              happens next and offers the one thing a person might still want — a way back in.
+            </div>
+
+            <hr class="rule" />
+
+            <div class="stack">
+              <nav class="quietnav">
+                <a href="#people">People</a>
+                <a href="#invite">Invite</a>
+                <a href="#settings">Settings</a>
+              </nav>
+              <p class="small muted">Last month: <a href="#capsule">the August capsule</a></p>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  
+      </section>
+      <section class="sheet" id="group-closed">
+        <div class="sheet__label">Group home · closed <span>— One primary action: View capsule.</span></div>
+
+    <div class="page">
+      <header class="topbar">
+        <div class="wrap wrap--wide topbar__inner">
+          <a class="brand" href="#manage">
+            <span class="brand__mark"></span>
+            <span class="brand__name"><b>Plain and Simple</b> <span>Monthly Capsule</span></span>
+          </a>
+          <div class="topbar__account">Wren · <a href="#landing">Sign out</a></div>
+        </div>
+      </header>
+
+      <main class="main">
+        <div class="wrap">
+          <div class="stack stack--loose">
+            <div class="stack stack--tight">
+              <a class="backlink" href="#manage">← Your groups</a>
+              <div class="row row--between">
+                <h1>Cedar Street</h1>
+                <span class="badge badge--closed"><span class="dot"></span>Closed</span>
+              </div>
+            </div>
+
+            <div class="card card--pad-lg">
+              <div class="stack">
+                <div class="stack stack--tight">
+                  <p class="eyebrow">September 2026</p>
+                  <h2 class="serif" style="font-size: 1.5rem">The September capsule is ready</h2>
+                  <p class="muted small">Five letters, fourteen photos. Emailed to everyone on the 25th.</p>
+                </div>
+                <a class="btn btn--primary btn--block btn--lg" href="#capsule">Read the capsule</a>
+                <p class="btn-note">Writing opens again on October 10.</p>
+              </div>
+            </div>
+
+            <div class="note">
+              <b>Same layout, one word different.</b> Group home never grows a second primary button —
+              closed simply swaps Write your letter for Read the capsule, so the page teaches the
+              cycle by changing with it.
+            </div>
+
+            <div class="stack stack--tight">
+              <p class="eyebrow">Earlier capsules</p>
+              <ul class="list">
+                <li>
+                  <a class="listitem" href="#capsule">
+                    <span class="listitem__body">
+                      <span class="listitem__title">August 2026</span>
+                      <span class="listitem__meta">Six letters · twenty-two photos</span>
+                    </span>
+                    <span class="listitem__end">Read</span>
+                  </a>
+                </li>
+                <li>
+                  <a class="listitem" href="#capsule">
+                    <span class="listitem__body">
+                      <span class="listitem__title">July 2026</span>
+                      <span class="listitem__meta">Four letters · nine photos</span>
+                    </span>
+                    <span class="listitem__end">Read</span>
+                  </a>
+                </li>
+                <li>
+                  <a class="listitem" href="#capsule">
+                    <span class="listitem__body">
+                      <span class="listitem__title">June 2026</span>
+                      <span class="listitem__meta">Six letters · thirty-one photos · the first one</span>
+                    </span>
+                    <span class="listitem__end">Read</span>
+                  </a>
+                </li>
+              </ul>
+            </div>
+
+            <hr class="rule" />
+
+            <nav class="quietnav">
+              <a href="#people">People</a>
+              <a href="#invite">Invite</a>
+              <a href="#settings">Settings</a>
+            </nav>
+          </div>
+        </div>
+      </main>
+    </div>
+  
+      </section>
+      <section class="sheet" id="people">
+        <div class="sheet__label">People <span>— Roster by preferred name.</span></div>
+
+    <div class="page">
+      <header class="topbar">
+        <div class="wrap wrap--wide topbar__inner">
+          <a class="brand" href="#manage">
+            <span class="brand__mark"></span>
+            <span class="brand__name"><b>Plain and Simple</b> <span>Monthly Capsule</span></span>
+          </a>
+          <div class="topbar__account">Wren</div>
+        </div>
+      </header>
+
+      <main class="main">
+        <div class="wrap">
+          <div class="stack stack--loose">
+            <div class="stack stack--tight">
+              <a class="backlink" href="#group-open">← Cedar Street</a>
+              <h1>People</h1>
+              <p class="muted small">Six in Cedar Street.</p>
+            </div>
+
+            <ul class="list">
+              <li>
+                <div class="listitem">
+                  <span class="avatar">W</span>
+                  <span class="listitem__body">
+                    <span class="listitem__title">Wren</span>
+                    <span class="listitem__meta">You · started the group</span>
+                  </span>
+                  <span class="listitem__end">Written</span>
+                </div>
+              </li>
+              <li>
+                <div class="listitem">
+                  <span class="avatar">A</span>
+                  <span class="listitem__body">
+                    <span class="listitem__title">Ade</span>
+                    <span class="listitem__meta">Joined in June</span>
+                  </span>
+                  <span class="listitem__end">Written</span>
+                </div>
+              </li>
+              <li>
+                <div class="listitem">
+                  <span class="avatar">J</span>
+                  <span class="listitem__body">
+                    <span class="listitem__title">June</span>
+                    <span class="listitem__meta">Joined in June</span>
+                  </span>
+                  <span class="listitem__end">Written</span>
+                </div>
+              </li>
+              <li>
+                <div class="listitem">
+                  <span class="avatar avatar--waiting">K</span>
+                  <span class="listitem__body">
+                    <span class="listitem__title">Kofi</span>
+                    <span class="listitem__meta">Joined in July</span>
+                  </span>
+                  <span class="listitem__end muted">Not yet</span>
+                </div>
+              </li>
+              <li>
+                <div class="listitem">
+                  <span class="avatar avatar--waiting">M</span>
+                  <span class="listitem__body">
+                    <span class="listitem__title">Marisol</span>
+                    <span class="listitem__meta">Joined last week</span>
+                  </span>
+                  <span class="listitem__end muted">Not yet</span>
+                </div>
+              </li>
+              <li>
+                <div class="listitem">
+                  <span class="avatar avatar--waiting">T</span>
+                  <span class="listitem__body">
+                    <span class="listitem__title">Theo</span>
+                    <span class="listitem__meta">Joined in June</span>
+                  </span>
+                  <span class="listitem__end muted">Not yet</span>
+                </div>
+              </li>
+            </ul>
+
+            <div class="note">
+              <b>Preferred names only.</b> No email addresses, no last seen, no nudge button. “Not
+              yet” is a fact for this month, not a status attached to a person — it disappears the
+              moment the window closes.
+            </div>
+
+            <div class="row">
+              <a class="btn btn--secondary" href="#invite">Invite someone</a>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  
+      </section>
+      <section class="sheet" id="invite">
+        <div class="sheet__label">Invite <span>— Copy the link, type the PIN you already know.</span></div>
+
+    <div class="page">
+      <header class="topbar">
+        <div class="wrap wrap--wide topbar__inner">
+          <a class="brand" href="#manage">
+            <span class="brand__mark"></span>
+            <span class="brand__name"><b>Plain and Simple</b> <span>Monthly Capsule</span></span>
+          </a>
+          <div class="topbar__account">Wren</div>
+        </div>
+      </header>
+
+      <main class="main">
+        <div class="wrap">
+          <div class="stack stack--loose">
+            <div class="stack stack--tight">
+              <a class="backlink" href="#group-open">← Cedar Street</a>
+              <h1>Invite someone to Cedar Street</h1>
+              <p class="muted small">They need both the link and the PIN.</p>
+            </div>
+
+            <div class="card">
+              <div class="stack">
+                <div class="stack stack--tight">
+                  <span class="field__label">Invite link</span>
+                  <div class="copyrow">
+                    <input
+                      class="input"
+                      id="invite-link"
+                      readonly
+                      value="https://capsule.plainandsimple.app/join/3f1c8a2e-9b47-4d20-8c6a-71e0f5b9d431"
+                    />
+                    <button class="btn btn--secondary" type="button" data-copy="#invite-link">Copy</button>
+                  </div>
+                </div>
+
+                <label class="field">
+                  <span class="field__label">Group PIN</span>
+                  <input
+                    class="input input--pin"
+                    id="invite-pin"
+                    type="text"
+                    placeholder="XXXXXX"
+                    autocomplete="off"
+                    spellcheck="false"
+                  />
+                  <span class="field__hint">
+                    Type the PIN you already know. We never show it back to you — not even here.
+                  </span>
+                </label>
+
+                <div class="stack stack--tight">
+                  <span class="field__label">Message to send</span>
+                  <textarea class="textarea" id="invite-message" readonly style="min-height: 7rem; font-family: var(--font-sans); font-size: 0.92rem">
+Join Cedar Street on Plain and Simple Monthly Capsule.
+
+Link: https://capsule.plainandsimple.app/join/3f1c8a2e-9b47-4d20-8c6a-71e0f5b9d431
+Group PIN: ——————</textarea
+                  >
+                  <button class="btn btn--primary btn--block" type="button" data-copy="#invite-message">
+                    Copy message
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div class="note">
+              <b>The server never returns the PIN.</b> That is the whole reason this screen has a
+              text field instead of a second copy button. The message preview fills in as the member
+              types, so the PIN only ever exists in their head, their message, and a hash.
+            </div>
+
+            <div class="panel">
+              <p class="small muted">
+                Forgotten the PIN? Anyone in the group knows it. Only the owner can make a new one,
+                in Settings.
+              </p>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  
+      </section>
+      <section class="sheet" id="settings">
+        <div class="sheet__label">Settings <span>— Cycle days, open early, close and compile, PIN regen.</span></div>
+
+    <div class="page">
+      <header class="topbar">
+        <div class="wrap wrap--wide topbar__inner">
+          <a class="brand" href="#manage">
+            <span class="brand__mark"></span>
+            <span class="brand__name"><b>Plain and Simple</b> <span>Monthly Capsule</span></span>
+          </a>
+          <div class="topbar__account">Wren · owner</div>
+        </div>
+      </header>
+
+      <main class="main">
+        <div class="wrap">
+          <div class="stack stack--loose">
+            <div class="stack stack--tight">
+              <a class="backlink" href="#group-open">← Cedar Street</a>
+              <h1>Settings</h1>
+              <p class="muted small">Only you can see this page.</p>
+            </div>
+
+            <div class="card">
+              <div class="stack">
+                <div class="stack stack--tight">
+                  <p class="eyebrow">Waiting on you</p>
+                  <h2>The August capsule was never emailed</h2>
+                  <p class="muted small">Made on August 25. Everyone can read it on the site.</p>
+                </div>
+                <div class="row">
+                  <a class="btn btn--primary" href="#email">Email it now</a>
+                  <a class="btn btn--quiet" href="#capsule">Read it first</a>
+                </div>
+              </div>
+            </div>
+
+            <div class="note">
+              <b>“Email later” is not a menu item — it is this card.</b> An unsent capsule shows up at
+              the top of Settings until it is sent or the next one is made. Nothing nags anywhere else.
+            </div>
+
+            <hr class="rule" />
+
+            <section class="stack">
+              <h2>This month</h2>
+              <div class="panel">
+                <div class="stack">
+                  <p class="small">
+                    September is <b>open</b> until Friday the 25th. Four of six have written.
+                  </p>
+                  <div class="row">
+                    <a class="btn btn--secondary" href="#settings-compiled">Close and make the capsule</a>
+                    <span class="btn btn--quiet" aria-disabled="true">Open writing early</span>
+                  </div>
+                  <p class="muted tiny">
+                    Closing early is final for September. Anyone still writing loses the window —
+                    their draft stays saved for next month.
+                  </p>
+                </div>
+              </div>
+              <div class="note">
+                <b>Only one of the two buttons is ever live.</b> Between cycles it is “Open writing
+                early”; while open it is “Close and make the capsule”. The other stays visible but
+                inert so the pair reads as one switch on the month.
+              </div>
+            </section>
+
+            <hr class="rule" />
+
+            <section class="stack">
+              <h2>Cycle</h2>
+              <form class="stack" onsubmit="event.preventDefault()">
+                <div class="field-inline">
+                  <span class="small muted">Writing opens on day</span>
+                  <select class="select" aria-label="Day the window opens">
+                    <option>1</option>
+                    <option selected>10</option>
+                    <option>15</option>
+                  </select>
+                </div>
+                <div class="field-inline">
+                  <span class="small muted">and closes on day</span>
+                  <select class="select" aria-label="Day the window closes">
+                    <option>20</option>
+                    <option selected>25</option>
+                    <option>28</option>
+                  </select>
+                </div>
+                <p class="formnote">Changes take effect next month. September keeps its dates.</p>
+                <div><button class="btn btn--secondary" type="submit">Save cycle</button></div>
+              </form>
+            </section>
+
+            <hr class="rule" />
+
+            <section class="stack">
+              <h2>Group name</h2>
+              <form class="stack" onsubmit="event.preventDefault()">
+                <label class="field">
+                  <span class="field__label">Name</span>
+                  <input class="input" type="text" value="Cedar Street" />
+                </label>
+                <div><button class="btn btn--secondary" type="submit">Save name</button></div>
+              </form>
+            </section>
+
+            <hr class="rule" />
+
+            <section class="stack">
+              <h2>Group PIN</h2>
+              <p class="small muted">
+                We store the PIN scrambled, so nobody — including us — can look it up. If it has gone
+                astray, make a new one and tell the group.
+              </p>
+              <div><button class="btn btn--secondary" type="button">Make a new PIN</button></div>
+              <div class="note">
+                <b>Regen is a two-step.</b> Confirm first — “The old PIN stops working right away.
+                People already in Cedar Street stay in.” — then land on the same show-once panel used
+                after creating a group.
+              </div>
+            </section>
+          </div>
+        </div>
+      </main>
+    </div>
+  
+      </section>
+      <section class="sheet" id="settings-compiled">
+        <div class="sheet__label">Settings · compiled <span>— Capsule made. Send email now, or not now.</span></div>
+
+    <div class="page">
+      <header class="topbar">
+        <div class="wrap wrap--wide topbar__inner">
+          <a class="brand" href="#manage">
+            <span class="brand__mark"></span>
+            <span class="brand__name"><b>Plain and Simple</b> <span>Monthly Capsule</span></span>
+          </a>
+          <div class="topbar__account">Wren · owner</div>
+        </div>
+      </header>
+
+      <main class="main">
+        <div class="wrap">
+          <div class="stack stack--loose">
+            <div class="stack stack--tight">
+              <h1>Settings</h1>
+              <p class="muted small">September has been closed.</p>
+            </div>
+
+            <div class="scrim">
+              <div class="dialog">
+                <div class="stack">
+                  <div class="stack stack--tight">
+                    <p class="eyebrow">Made just now</p>
+                    <h2 class="serif" style="font-size: 1.3rem">The September capsule is ready</h2>
+                    <p class="muted small">Five letters, fourteen photos. Theo did not write this month.</p>
+                  </div>
+
+                  <a class="btn btn--secondary btn--block" href="#capsule">Read it</a>
+
+                  <hr class="rule" style="margin: 0.5rem 0" />
+
+                  <div class="stack stack--tight">
+                    <p class="small">Email it to all six people now?</p>
+                    <a class="btn btn--primary btn--block" href="#email">Send it</a>
+                    <a class="btn btn--quiet btn--block" href="#settings">Not now</a>
+                    <p class="btn-note">If not now, Settings will keep offering it until you do.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="note">
+              <b>Compiling and emailing are two decisions, in that order.</b> The capsule exists the
+              moment the window closes; sending is a separate yes. Owners who want to read it first
+              can, and “Not now” is a real answer rather than a dismissal.
+            </div>
+
+            <div class="note">
+              <b>While it compiles:</b> the same dialog with “Making the September capsule…” and no
+              buttons. It should take seconds; if it fails, the dialog says so and offers Try again,
+              and no email is ever sent halfway.
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  
+      </section>
+      <section class="sheet" id="capsule">
+        <div class="sheet__label">Capsule <span>— The compiled HTML capsule for the month.</span></div>
+
+    <div class="page">
+      <header class="topbar">
+        <div class="wrap wrap--wide topbar__inner">
+          <a class="brand" href="#manage">
+            <span class="brand__mark"></span>
+            <span class="brand__name"><b>Plain and Simple</b> <span>Monthly Capsule</span></span>
+          </a>
+          <div class="topbar__account"><a href="#group-closed">Cedar Street</a></div>
+        </div>
+      </header>
+
+      <main class="main">
+        <div class="wrap wrap--wide">
+          <div class="stack stack--loose">
+            <a class="backlink" href="#group-closed">← Cedar Street</a>
+
+            <article class="capsule">
+              <header class="capsule__masthead">
+                <p class="eyebrow">Cedar Street</p>
+                <h1 class="capsule__title">September 2026</h1>
+                <p class="muted small">Five letters, fourteen photos, in the order they arrived</p>
+                <ul class="capsule__contents">
+                  <li><a href="#ade">Ade</a></li>
+                  <li><a href="#june">June</a></li>
+                  <li><a href="#kofi">Kofi</a></li>
+                  <li><a href="#wren">Wren</a></li>
+                  <li><a href="#marisol">Marisol</a></li>
+                </ul>
+              </header>
+
+              <section class="letter" id="ade">
+                <div class="letter__head">
+                  <span class="avatar">A</span>
+                  <div>
+                    <div class="letter__name">Ade</div>
+                    <div class="letter__meta">Sept 11</div>
+                  </div>
+                </div>
+                <div class="letter__body">
+                  <p>
+                    I started cycling to the new office and have learned that the last hill is not
+                    actually the last hill. There is one more after it, hidden, and I take it
+                    personally every single morning.
+                  </p>
+                  <p>
+                    The job is fine. Better than fine on Tuesdays, when the team I like is in. I keep
+                    meaning to say something about the pay and keep saying something about the coffee
+                    machine instead.
+                  </p>
+                  <p>
+                    Attempt four at sourdough came out like a frisbee. Attempt five is proofing in the
+                    airing cupboard as I write this, so by the time you read this it has either worked
+                    or it hasn't.
+                  </p>
+                </div>
+                <div class="letter__photos">
+                  <div class="photo ph ph--2"></div>
+                  <div class="photo ph ph--5"></div>
+                </div>
+              </section>
+
+              <section class="letter" id="june">
+                <div class="letter__head">
+                  <span class="avatar">J</span>
+                  <div>
+                    <div class="letter__name">June</div>
+                    <div class="letter__meta">Sept 14</div>
+                  </div>
+                </div>
+                <div class="letter__body">
+                  <p>
+                    Moved. The new place has a window that gets the afternoon and I have done very
+                    little except sit in it. Boxes are still in the hallway. I have decided the
+                    hallway is storage now.
+                  </p>
+                  <p>
+                    Mitzi took three days to come out from under the bed and now behaves as though
+                    the flat was her idea. Evening class starts back on the 29th — pottery, which I am
+                    bad at, which is the point.
+                  </p>
+                </div>
+                <div class="letter__photos">
+                  <div class="photo ph ph--4"></div>
+                  <div class="photo ph ph--1"></div>
+                  <div class="photo ph ph--6"></div>
+                </div>
+              </section>
+
+              <section class="letter" id="kofi">
+                <div class="letter__head">
+                  <span class="avatar">K</span>
+                  <div>
+                    <div class="letter__name">Kofi</div>
+                    <div class="letter__meta">Sept 19</div>
+                  </div>
+                </div>
+                <div class="letter__body">
+                  <p>
+                    Two weeks in Accra with my mother, who introduced me to eleven relatives and
+                    quizzed me on their names afterwards. I got seven. She said that was generous
+                    scoring.
+                  </p>
+                  <p>
+                    We went to the coast on the Sunday and I swam properly for the first time in
+                    years. Came home with too much shito and no room in the suitcase for anything
+                    sensible.
+                  </p>
+                  <p>Back at work Monday. It is raining here. It is very much raining here.</p>
+                </div>
+                <div class="letter__photos">
+                  <div class="photo ph ph--3"></div>
+                  <div class="photo ph ph--5"></div>
+                  <div class="photo ph ph--1"></div>
+                </div>
+              </section>
+
+              <section class="letter" id="wren">
+                <div class="letter__head">
+                  <span class="avatar">W</span>
+                  <div>
+                    <div class="letter__name">Wren</div>
+                    <div class="letter__meta">Sept 22</div>
+                  </div>
+                </div>
+                <div class="letter__body">
+                  <p>
+                    The plum tree finally did something. Two plums, both of which the birds got first,
+                    but there were plums.
+                  </p>
+                  <p>
+                    Work is the same in the way that is either steady or stuck depending on the day. I
+                    have started walking the long way home past the school field, which is where most
+                    of the thinking gets done.
+                  </p>
+                  <p>
+                    Dad's knee is better. He wants everyone to know he is back on the bike, at a speed
+                    he described as "respectable."
+                  </p>
+                </div>
+                <div class="letter__photos">
+                  <div class="photo ph ph--1"></div>
+                  <div class="photo ph ph--3"></div>
+                  <div class="photo ph ph--2"></div>
+                </div>
+              </section>
+
+              <section class="letter" id="marisol">
+                <div class="letter__head">
+                  <span class="avatar">M</span>
+                  <div>
+                    <div class="letter__name">Marisol</div>
+                    <div class="letter__meta">Sept 24 · first letter</div>
+                  </div>
+                </div>
+                <div class="letter__body">
+                  <p>
+                    Hello, all. Wren has been threatening to add me to this for months and here I am,
+                    writing to six people I mostly know from stories.
+                  </p>
+                  <p>
+                    I am on nights until October, which does strange things to a month — I have seen
+                    a lot of 4am and not much daylight. The ward has been kind. The commute has not.
+                  </p>
+                  <p>Tell me about the pottery, June. I want to see the bad bowls.</p>
+                </div>
+                <div class="letter__photos">
+                  <div class="photo ph ph--6"></div>
+                  <div class="photo ph ph--4"></div>
+                </div>
+              </section>
+
+              <footer class="capsule__colophon">
+                <p>Cedar Street · September 2026 · made on the 25th</p>
+                <p>Theo did not write this month. October opens on the 10th.</p>
+              </footer>
+            </article>
+
+            <div class="note">
+              <b>The capsule is the product; everything else is scaffolding.</b> One column, serif,
+              no group chrome inside the page itself — the letters run in arrival order with a
+              contents list at the top for the long months.
+            </div>
+
+            <div class="note">
+              <b>A missed month is stated once, quietly, at the end.</b> No empty slot with someone's
+              name on it, and no “0 letters” placeholder.
+            </div>
+
+            <div class="note">
+              <b>This file is the artifact.</b> Same HTML on the site and in the email, so a capsule
+              stays readable if it is forwarded, printed, or saved to a folder years later.
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  
+      </section>
+      <section class="sheet" id="email">
+        <div class="sheet__label">Email <span>— The same capsule, delivered to inboxes.</span></div>
+
+    <div class="page">
+      <header class="topbar">
+        <div class="wrap wrap--wide topbar__inner">
+          <a class="brand" href="#manage">
+            <span class="brand__mark"></span>
+            <span class="brand__name"><b>Plain and Simple</b> <span>Monthly Capsule</span></span>
+          </a>
+          <div class="topbar__account">Wren · owner</div>
+        </div>
+      </header>
+
+      <main class="main">
+        <div class="wrap">
+          <div class="stack stack--loose">
+            <div class="stack stack--tight">
+              <a class="backlink" href="#group-closed">← Cedar Street</a>
+              <h1>Sent to six people</h1>
+              <p class="muted small">September 25, 2026. Everyone is on the same email — replies go to you, not the group.</p>
+            </div>
+
+            <div class="mailframe">
+              <div class="mailframe__head">
+                <div><b>From</b> Cedar Street via Plain and Simple &lt;capsules@plainandsimple.app&gt;</div>
+                <div><b>To</b> you, and five others</div>
+                <div><b>Subject</b> Cedar Street — September 2026</div>
+              </div>
+              <div class="mailframe__body">
+                <div class="capsule__masthead" style="padding-bottom: 1.5rem">
+                  <p class="eyebrow">Cedar Street</p>
+                  <h2 class="capsule__title" style="font-size: 1.8rem">September 2026</h2>
+                  <p class="muted small">Five letters from Ade, June, Kofi, Wren and Marisol</p>
+                </div>
+
+                <section class="letter" style="padding-top: 2rem">
+                  <div class="letter__head">
+                    <span class="avatar">A</span>
+                    <div>
+                      <div class="letter__name">Ade</div>
+                      <div class="letter__meta">Sept 11</div>
+                    </div>
+                  </div>
+                  <div class="letter__body">
+                    <p>
+                      I started cycling to the new office and have learned that the last hill is not
+                      actually the last hill. There is one more after it, hidden, and I take it
+                      personally every single morning.
+                    </p>
+                    <p>
+                      The job is fine. Better than fine on Tuesdays, when the team I like is in. I
+                      keep meaning to say something about the pay and keep saying something about the
+                      coffee machine instead.
+                    </p>
+                  </div>
+                  <div class="letter__photos">
+                    <div class="photo ph ph--2"></div>
+                    <div class="photo ph ph--5"></div>
+                  </div>
+                </section>
+
+                <section class="letter">
+                  <div class="letter__head">
+                    <span class="avatar">J</span>
+                    <div>
+                      <div class="letter__name">June</div>
+                      <div class="letter__meta">Sept 14</div>
+                    </div>
+                  </div>
+                  <div class="letter__body">
+                    <p>
+                      Moved. The new place has a window that gets the afternoon and I have done very
+                      little except sit in it. Boxes are still in the hallway. I have decided the
+                      hallway is storage now.
+                    </p>
+                  </div>
+                </section>
+
+                <div class="ornament"><span class="tiny muted">three more letters</span></div>
+
+                <p class="center">
+                  <a class="btn btn--secondary" href="#capsule">Read the whole capsule</a>
+                </p>
+
+                <div class="capsule__colophon">
+                  <p>You get this because you are in Cedar Street. October opens on the 10th.</p>
+                  <p><a href="#">Manage your groups</a></p>
+                </div>
+              </div>
+            </div>
+
+            <div class="note">
+              <b>The email is the capsule, not a teaser for it.</b> Full letters go in the body so it
+              reads in the inbox with no click. The link at the end is for people who would rather
+              read it on the site or send it on.
+            </div>
+
+            <div class="note">
+              <b>Build constraints:</b> tables and inline styles, no web fonts, images with real alt
+              text, and a text-only alternative part. Long months will clip in Gmail — put the
+              contents list and “read the whole capsule” link near the top for those.
+            </div>
+
+            <div class="note">
+              <b>Everyone is bcc'd</b> so the group's addresses never travel in a header. Replies land
+              with the owner, and the reply-to copy says so.
+            </div>
+
+            <div class="row">
+              <a class="btn btn--quiet" href="#settings">Back to Settings</a>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  
+      </section>
+  </body>
+</html>

@@ -1,0 +1,18 @@
+Plain and Simple Monthly Capsule — rough draft designs
+=======================================================
+
+Open index.html to start. Every file here is standalone HTML with the CSS
+inlined: no server, no build, no internet. Double-click and it works.
+
+  index.html        The set, with design principles and open questions
+  all-screens.html  All 18 screens in one file — print this for a PDF
+  <screen>.html     One file per screen, cross-linked at the bottom
+
+The grey blocks are design notes for the team. "Hide design notes" at the
+bottom of any page removes them.
+
+Handing these to another tool: all-screens.html is the one to pass along, or
+any single screen file on its own. Nothing depends on anything outside itself.
+
+Content is invented — names, letters, dates. Photos are CSS gradients rather
+than image files, so there are no assets to lose.
