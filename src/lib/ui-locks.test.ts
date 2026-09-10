@@ -27,4 +27,24 @@ describe("privacy and chrome locks", () => {
     expect(source).not.toMatch(/>\s*Leave\s*</);
     expect(source).not.toContain("leaveGroup");
   });
+
+  it("Your groups goes to /manage and the month badge sits in the card", () => {
+    const source = readFileSync(resolve(here, "../app/(app)/g/[uuid]/page.tsx"), "utf8");
+    expect(source).toContain('href="/manage"');
+    expect(source).toContain("Your groups");
+    const card = source.indexOf("card card--pad-lg");
+    const openBadge = source.indexOf("badge--open");
+    const closedBadge = source.indexOf("badge--closed");
+    expect(card).toBeGreaterThan(-1);
+    expect(openBadge).toBeGreaterThan(card);
+    expect(closedBadge).toBeGreaterThan(card);
+    expect(source.slice(0, card)).not.toContain("badge--open");
+    expect(source.slice(0, card)).not.toContain("badge--closed");
+  });
+
+  it("manage list shows owner or member per group", () => {
+    const source = readFileSync(resolve(here, "../app/(app)/manage/page.tsx"), "utf8");
+    expect(source).toContain("membershipRoleLabel");
+    expect(source).toContain("member.role");
+  });
 });

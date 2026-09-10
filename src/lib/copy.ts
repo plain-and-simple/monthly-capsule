@@ -15,6 +15,8 @@ export const MANAGE_EMPTY_HEADING = "No groups yet";
 export const MANAGE_EMPTY_TITLE = "Your groups";
 export const MANAGE_EMPTY_HINT = "Have a link? Open it to join.";
 export const MANAGE_CREATE_LABEL = "Create";
+export const ROLE_OWNER_LABEL = "Owner";
+export const ROLE_MEMBER_LABEL = "Member";
 export const SIGN_OUT = "Sign out";
 export const LEAVE_GROUP = "Leave this group";
 

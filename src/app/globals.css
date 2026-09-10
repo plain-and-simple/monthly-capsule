@@ -672,6 +672,13 @@ button.listitem:hover {
   min-width: 0;
 }
 
+.listitem__heading {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
 .listitem__title {
   font-family: var(--font-serif);
   font-size: 1.05rem;

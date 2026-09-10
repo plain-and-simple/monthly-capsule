@@ -6,6 +6,7 @@ import {
   decorateManagedGroup,
   initials,
   manageGroupStatus,
+  membershipRoleLabel,
   nextOpenPhrase,
   windowClosesPhrase,
 } from "./group-status";
@@ -76,5 +77,12 @@ describe("plain-language dates", () => {
     expect(initials("Cedar Street")).toBe("CS");
     expect(initials("Wren")).toBe("W");
     expect(initials("")).toBe("?");
+  });
+});
+
+describe("manage membership role", () => {
+  it("labels owner vs member in a few words", () => {
+    expect(membershipRoleLabel("owner")).toBe("Owner");
+    expect(membershipRoleLabel("member")).toBe("Member");
   });
 });
