@@ -31,8 +31,9 @@ Friends write a letter (and up to six photos) each month. After the window close
 - Email job runs on `email_day`. Sends only if a capsule exists, `email_sent_at` is null, and `email_held` is false. Recipients are `members.email` or, when that is null, the linked `accounts.email`. Addresses are deduped. Resend skips seats with no address. `email_sent_at` is set only after Resend accepts every attempted send.
 - Owner settings labels are exactly: **Submit opens**, **Submit closes**, **Email capsule**.
 - Owner **Capsule cycle** (force, unused = calendar path unchanged):
-  - **Open submit early** opens the next closed→open period (not always this calendar month). Already open → “Already open.” No duplicate month.
-  - **Close & make capsule** (confirm; danger) always compiles HTML via `compileGroupMonth` (idempotent). Email is a separate optional step.
+  - **Open submit early** opens **this Chicago calendar month** (or the next version of it). Already open → “Already open.” A compiled month does **not** walk to next calendar month — force-open again creates **v2 / v3** of the same month.
+  - Submissions do **not** roll over: each edition has its own `months` row and empty submission set. Closing v1 freezes those letters; v2 starts empty.
+  - **Close & make capsule** (confirm; danger) compiles that edition via `compileGroupMonth` (idempotent per `month_id`). Email is a separate optional step and targets that version’s URL.
   - After compile: **Email the group?** → **Send** (Resend; show sent N / skipped no-email / Resend error; mark sent only on accept) or **Not now** (`email_held`; cron `email_day` will not send until the owner Sends later).
   - **Email group** later from View or Settings when a capsule exists and is unsent.
 - Sessions: httpOnly, Secure (prod), SameSite=Lax, host-only cookies on `capsule.plainandsimple.app`. `capsule_session` binds `member_id` + `group_id`. `capsule_account` binds `account_id`.
@@ -60,7 +61,7 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
-Apply the SQL in `supabase/migrations/` to your Supabase project (SQL editor, or `supabase db push` if you use the CLI). The first migration creates tables, indexes, RLS, and the private storage bucket. The accounts migration adds `accounts`, `login_attempts`, `members.account_id`, and renames `display_name` → `preferred_name`. The force-cycle migration adds `groups.force_open_year_month` and `capsules.email_held`. The submission_status migration adds `submissions.status`. The capsule_archive migration adds `capsules.archive`.
+Apply the SQL in `supabase/migrations/` to your Supabase project (SQL editor, or `supabase db push` if you use the CLI). The first migration creates tables, indexes, RLS, and the private storage bucket. The accounts migration adds `accounts`, `login_attempts`, `members.account_id`, and renames `display_name` → `preferred_name`. The force-cycle migration adds `groups.force_open_year_month` and `capsules.email_held`. The submission_status migration adds `submissions.status`. The capsule_archive migration adds `capsules.archive`. The month_versions migration adds `months.version` and unique `(group_id, year_month, version)`.
 
 ```bash
 npm run typecheck
@@ -94,12 +95,12 @@ See `.env.example`.
 7. **People** `/g/[uuid]/people` — preferred names. Any member. No emails.
 8. **Invite** `/g/[uuid]/invite` — copy join URL, optional typed PIN, and share text (URL + PIN if typed). Server never returns a PIN.
 9. **Submit** `/g/[uuid]/submit` — letter + ≤6 photos; Save as draft (hidden from capsule) or Save and submit (included); still editable until the window closes; “Closed.” when shut.
-10. **Capsule** `/g/[uuid]/capsule/[YYYY-MM]` — read-only archive; session required. Any member.
+10. **Capsule** `/g/[uuid]/capsule/[YYYY-MM]` — first edition (v1). Later same-month compiles: `/g/[uuid]/capsule/[YYYY-MM]/v2`. Read-only archive; session required. Any member.
 11. **Owner settings** `/g/[uuid]/settings` — the three day-of-month fields, Capsule cycle (open early / close & make / email), and Regenerate PIN.
 
 ## Dogfood path
 
-e2e is not set up. After env + **all** migrations (init, accounts, force-cycle, submission_status, **capsule_archive**):
+e2e is not set up. After env + **all** migrations (init, accounts, force-cycle, submission_status, capsule_archive, **month_versions**):
 
 1. **Create (GWT B).** Open `/`. Upper-right Create Capsule Group. Studio code (local default `plainandsimple` if `CREATE_GROUP_CODE` is unset). Preferred name, email, password (8+). Copy the join link and PIN. Continue to the group home. You are the owner.
 2. **Manage (GWT A).** Private window. `/` → Manage your capsule with that email + password. No SMS. One group → group home. Sign out from `/manage` (Leave, then Your capsules, or open `/manage` directly).
@@ -108,7 +109,7 @@ e2e is not set up. After env + **all** migrations (init, accounts, force-cycle, 
 5. **People (GWT E).** People shows preferred names only — no emails.
 6. **Invite / PIN / schedule.** Invite: copy link, type PIN, copy share text. Settings (owner): the three day fields; invalid combos rejected. Regenerate PIN asks to confirm; new PIN once; old PIN fails; sessions stay valid.
 7. If Chicago’s day is inside the window, submit a letter + photos. After the window, Submit shows Closed.
-8. **Force cycle (owner).** Settings → Capsule cycle. If closed: Open submit early → group home shows Open, members can Submit. If already open: “Already open.” Close & make capsule → confirm → Read the capsule. Email the group? Send (Resend; sent N / skipped / error) or Not now (in-app only; cron email_day does not send). Email group later from View or Settings until sent. A member must not see these actions.
+8. **Force cycle (owner).** Settings → Capsule cycle. If this Chicago month is not in an open window: Open submit early → that month (or v2+ if it was already compiled). If already open: “Already open.” Close & make capsule → confirm → Read that edition. Email the group? Send (Resend; sent N / skipped / error) or Not now (in-app only; cron email_day does not send). Email group later from View or Settings until sent. A member must not see these actions. Re-open after compile starts an empty new version of the **same** month.
 9. Cron (optional, needs the same env):
 
 ```bash
@@ -138,4 +139,8 @@ Both require `Authorization: Bearer $CRON_SECRET`.
 
 ## Schema (minimal)
 
-`accounts` (preferred_name, unique email, password_hash), `groups` (`force_open_year_month` nullable), `members` (memberships: `preferred_name`, optional `account_id`, unique `group_id + email` where email is not null, unique `account_id + group_id` where account_id is not null), `months`, `submissions` (unique `month_id + member_id`), `photos`, `capsules` (`month_id` unique, `email_held` default false, `archive` jsonb snapshot), `pin_attempts` (5 / 15 minutes / IP+group), `login_attempts` (5 / 15 minutes / IP+email).
+`accounts` (preferred_name, unique email, password_hash), `groups` (`force_open_year_month` nullable), `members` (memberships: `preferred_name`, optional `account_id`, unique `group_id + email` where email is not null, unique `account_id + group_id` where account_id is not null), `months` (`version` default 1, unique `group_id + year_month + version`, at most one `open` row per group), `submissions` (unique `month_id + member_id` — no rollover across editions), `photos`, `capsules` (`month_id` unique, `email_held` default false, `archive` jsonb snapshot including `month_version`), `pin_attempts` (5 / 15 minutes / IP+group), `login_attempts` (5 / 15 minutes / IP+email).
+
+### Live SQL for CoS (`uqqxauszzorzhmngcnvf`)
+
+Apply `supabase/migrations/20260910120000_month_versions.sql` in the SQL editor (do not skip). Existing month rows become `version = 1`. The October 2026 dogfood capsule stays `/g/…/capsule/2026-10`. After that, force-open in September opens **September**, not another October.

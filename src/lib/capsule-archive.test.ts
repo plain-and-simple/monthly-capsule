@@ -33,6 +33,7 @@ const snapshot = buildCapsuleArchive({
 describe("capsule archive snapshot", () => {
   it("stores letters, photo paths, html, and a missed count", () => {
     expect(snapshot.version).toBe(1);
+    expect(snapshot.month_version).toBe(1);
     expect(snapshot.year_month).toBe("2026-10");
     expect(snapshot.letters).toHaveLength(1);
     expect(snapshot.letters[0]?.photos[0]?.storage_path).toBe("g/m/p.jpg");
@@ -42,6 +43,20 @@ describe("capsule archive snapshot", () => {
     expect(snapshot.missed_count).toBe(2);
     expect(capsuleHasArchive(snapshot)).toBe(true);
     expect(parseCapsuleArchive(snapshot)?.letters[0]?.preferred_name).toBe("Chacha");
+    expect(parseCapsuleArchive(snapshot)?.month_version).toBe(1);
+  });
+
+  it("stores month_version for same-month v2 archives", () => {
+    const v2 = buildCapsuleArchive({
+      yearMonth: "2026-09",
+      groupName: "stepppy",
+      memberCount: 1,
+      monthVersion: 2,
+      letters: [{ preferred_name: "Chacha", body: "Second compile", photos: [] }],
+    });
+    expect(v2.month_version).toBe(2);
+    expect(v2.html).toContain('data-month-version="2"');
+    expect(parseCapsuleArchive({ ...v2, month_version: undefined })?.month_version).toBe(1);
   });
 
   it("rejects garbage so a marker row is treated as missing", () => {
@@ -71,10 +86,11 @@ describe("compile and view wire the archive", () => {
     expect(source).toContain("buildCapsuleArchive");
     expect(source).toContain("archive");
     expect(source).toMatch(/insert\(\{[\s\S]*archive/);
+    expect(source).toContain("monthVersion");
   });
 
   it("capsule page serves the archive to members", () => {
-    const page = readFileSync(resolve(here, "../app/(app)/g/[uuid]/capsule/[yearMonth]/page.tsx"), "utf8");
+    const page = readFileSync(resolve(here, "../app/(app)/g/[uuid]/capsule/view.tsx"), "utf8");
     expect(page).toContain("parseCapsuleArchive");
     expect(page).toContain("ensureCapsuleArchive");
     expect(page).toContain("archive.letters");

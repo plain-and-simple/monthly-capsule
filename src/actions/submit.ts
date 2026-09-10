@@ -32,7 +32,7 @@ export async function submitLetter(
 
   const { member, group } = await requireGroupMember(groupId);
   const window = await resolveSubmitWindow(group);
-  if (!window.open || !window.yearMonth) {
+  if (!window.open || !window.yearMonth || window.version == null) {
     return { error: "Submit is closed." };
   }
 
@@ -42,7 +42,7 @@ export async function submitLetter(
   }
 
   const yearMonth = window.yearMonth;
-  const month = await ensureMonth(groupId, yearMonth, "open");
+  const month = await ensureMonth(groupId, yearMonth, "open", window.version);
   const admin = createAdminClient();
 
   const { data: existing } = await admin

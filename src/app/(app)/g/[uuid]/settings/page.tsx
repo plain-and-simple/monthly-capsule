@@ -2,9 +2,10 @@ import Link from "next/link";
 import { CycleForm } from "@/components/cycle-form";
 import { RegenPinForm } from "@/components/regen-pin-form";
 import { SettingsForm } from "@/components/settings-form";
-import { latestUnsentYearMonth } from "@/lib/compile";
+import { latestUnsentCapsule } from "@/lib/compile";
 import { groupDisplayName } from "@/lib/copy";
 import { resolveSubmitWindow } from "@/lib/cycle-store";
+import { capsuleTitle } from "@/lib/month-version";
 import { monthLabel } from "@/lib/schedule";
 import { requireOwner } from "@/lib/session";
 import { writtenCount, writtenCountPhrase } from "@/lib/submit";
@@ -15,17 +16,23 @@ export const dynamic = "force-dynamic";
 export default async function SettingsPage({ params }: { params: Promise<{ uuid: string }> }) {
   const { uuid } = await params;
   const { group } = await requireOwner(uuid);
-  const [{ open, yearMonth }, unsentYearMonth] = await Promise.all([
+  const [{ open, yearMonth, version }, unsent] = await Promise.all([
     resolveSubmitWindow(group),
-    latestUnsentYearMonth(uuid),
+    latestUnsentCapsule(uuid),
   ]);
   const name = groupDisplayName(group.name);
   const admin = createAdminClient();
 
   let writtenPhrase: string | undefined;
-  if (yearMonth) {
+  if (yearMonth && version != null) {
     const [{ data: month }, { count }] = await Promise.all([
-      admin.from("months").select("id").eq("group_id", uuid).eq("year_month", yearMonth).maybeSingle(),
+      admin
+        .from("months")
+        .select("id")
+        .eq("group_id", uuid)
+        .eq("year_month", yearMonth)
+        .eq("version", version)
+        .maybeSingle(),
       admin.from("members").select("id", { count: "exact", head: true }).eq("group_id", uuid),
     ]);
     if (month) {
@@ -55,8 +62,10 @@ export default async function SettingsPage({ params }: { params: Promise<{ uuid:
           <CycleForm
             groupId={group.id}
             submitOpen={open}
-            unsentYearMonth={unsentYearMonth}
-            thisMonthLabel={yearMonth ? monthLabel(yearMonth) : undefined}
+            unsent={unsent}
+            thisMonthLabel={
+              yearMonth ? capsuleTitle(monthLabel(yearMonth), version ?? 1) : undefined
+            }
             writtenPhrase={writtenPhrase}
           />
 

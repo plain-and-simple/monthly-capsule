@@ -13,6 +13,8 @@ import {
 } from "@/lib/email-policy";
 import { nextOpenPhrase } from "@/lib/group-status";
 import { resolveCapsuleRecipients } from "@/lib/recipients";
+import { findGroupCapsule } from "@/lib/compile";
+import { capsuleHref, capsuleTitle, normalizeMonthVersion } from "@/lib/month-version";
 import { emailTargetYearMonth, monthLabel } from "@/lib/schedule";
 import { includedSubmissions } from "@/lib/submit";
 import { createAdminClient } from "@/lib/supabase";
@@ -73,15 +75,9 @@ export async function sendDueCapsuleEmails(now: Date = new Date()) {
 export async function sendGroupMonthEmail(
   group: Group,
   yearMonth: string,
-  opts: { cron?: boolean } = {},
+  opts: { cron?: boolean; version?: number } = {},
 ) {
-  const admin = createAdminClient();
-  const { data: month } = await admin
-    .from("months")
-    .select("*")
-    .eq("group_id", group.id)
-    .eq("year_month", yearMonth)
-    .maybeSingle();
+  const { month, capsule } = await findGroupCapsule(group.id, yearMonth, opts.version);
   if (!month) {
     return sendResult({
       sent: 0,
@@ -92,11 +88,6 @@ export async function sendGroupMonthEmail(
     });
   }
 
-  const { data: capsule } = await admin
-    .from("capsules")
-    .select("*")
-    .eq("month_id", month.id)
-    .maybeSingle();
   if (!capsule) {
     return sendResult({
       sent: 0,
@@ -128,24 +119,13 @@ export async function sendGroupMonthEmail(
   return sendCapsuleEmail(group, month as Month, capsule as Capsule);
 }
 
-export async function holdGroupMonthEmail(groupId: string, yearMonth: string) {
-  const admin = createAdminClient();
-  const { data: month } = await admin
-    .from("months")
-    .select("id")
-    .eq("group_id", groupId)
-    .eq("year_month", yearMonth)
-    .maybeSingle();
+export async function holdGroupMonthEmail(groupId: string, yearMonth: string, version?: number) {
+  const { month, capsule } = await findGroupCapsule(groupId, yearMonth, version);
   if (!month) return { ok: false as const, reason: "no-month" as const };
-
-  const { data: capsule } = await admin
-    .from("capsules")
-    .select("id, email_sent_at")
-    .eq("month_id", month.id)
-    .maybeSingle();
   if (!capsule) return { ok: false as const, reason: "no-capsule" as const };
   if (capsule.email_sent_at) return { ok: false as const, reason: "already-sent" as const };
 
+  const admin = createAdminClient();
   const { error } = await admin
     .from("capsules")
     .update({ email_held: true })
@@ -189,7 +169,9 @@ async function sendCapsuleEmail(group: Group, month: Month, capsule: Capsule) {
     });
   }
 
-  const link = `${appUrl()}/g/${group.id}/capsule/${month.year_month}`;
+  const edition = normalizeMonthVersion(month.version);
+  const labeled = capsuleTitle(monthLabel(month.year_month), edition);
+  const link = `${appUrl()}${capsuleHref(group.id, month.year_month, edition)}`;
   const archive = parseCapsuleArchive(capsule.archive);
   let letters = archive
     ? archive.letters.map((letter) => ({ name: letter.preferred_name, body: letter.body }))
@@ -206,12 +188,12 @@ async function sendCapsuleEmail(group: Group, month: Month, capsule: Capsule) {
   }
   const html = capsuleEmailHtml({
     groupName: group.name,
-    monthLabel: monthLabel(month.year_month),
+    monthLabel: labeled,
     link,
     letters,
     nextOpen: nextOpenPhrase(month.year_month, group.submit_start_day),
   });
-  const subject = capsuleEmailSubject(group.name, monthLabel(month.year_month));
+  const subject = capsuleEmailSubject(group.name, labeled);
 
   const key = resendApiKey();
   if (!key) {

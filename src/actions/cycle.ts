@@ -1,7 +1,14 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { closedYearMonths, compileGroupMonth, ensureMonth, findGroupCapsule } from "@/lib/compile";
+import {
+  closedYearMonths,
+  compileGroupMonth,
+  ensureMonth,
+  findGroupCapsule,
+  listGroupMonthRows,
+  toCycleMonthRows,
+} from "@/lib/compile";
 import {
   CYCLE_ALREADY_OPEN,
   CYCLE_ALREADY_SENT,
@@ -11,37 +18,49 @@ import {
   CYCLE_OWNER_ONLY,
   CYCLE_SENT,
   CYCLE_SKIPPED,
+  CYCLE_VERSION_CAP,
   decideForceClose,
   decideForceEmail,
   decideForceOpen,
   decideForceSkip,
-  forceCloseYearMonth,
+  forceCloseTarget,
+  forceOpenYearMonth,
   isCycleSubmitOpen,
-  nextClosedToOpenYearMonth,
 } from "@/lib/cycle";
 import { holdGroupMonthEmail, sendGroupMonthEmail } from "@/lib/email";
 import { forceCloseConfirmAccepted } from "@/lib/manage";
+import { capsuleHref, planForceOpen } from "@/lib/month-version";
 import { requireGroupMember } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase";
 
-export type ForceOpenState = { error?: string; ok?: boolean; yearMonth?: string } | null;
+export type ForceOpenState =
+  | { error?: string; ok?: boolean; yearMonth?: string; version?: number }
+  | null;
 export type ForceCloseState =
   | {
       error?: string;
       ok?: boolean;
       yearMonth?: string;
+      version?: number;
       askEmail?: boolean;
       message?: string;
     }
   | null;
 export type CycleEmailState = { error?: string; ok?: boolean; message?: string } | null;
 
-function revalidateGroup(groupId: string, yearMonth?: string) {
+function parseEdition(formData: FormData): number | undefined {
+  const raw = String(formData.get("version") ?? "");
+  if (!raw) return undefined;
+  const n = Number(raw);
+  return Number.isInteger(n) && n >= 1 ? n : undefined;
+}
+
+function revalidateGroup(groupId: string, yearMonth?: string, version?: number) {
   revalidatePath(`/g/${groupId}`);
   revalidatePath(`/g/${groupId}/submit`);
   revalidatePath(`/g/${groupId}/settings`);
   if (yearMonth) {
-    revalidatePath(`/g/${groupId}/capsule/${yearMonth}`);
+    revalidatePath(capsuleHref(groupId, yearMonth, version ?? 1));
   }
 }
 
@@ -62,7 +81,12 @@ export async function forceOpenSubmit(
     if (decision === "forbidden") return { error: CYCLE_OWNER_ONLY };
     if (decision === "already_open") return { error: CYCLE_ALREADY_OPEN };
 
-    const yearMonth = nextClosedToOpenYearMonth(group, closed);
+    const yearMonth = forceOpenYearMonth();
+    const rows = toCycleMonthRows(await listGroupMonthRows(groupId));
+    const plan = planForceOpen(rows, yearMonth);
+    if (plan.action === "already_open") return { error: CYCLE_ALREADY_OPEN };
+    if (plan.action === "capped") return { error: CYCLE_VERSION_CAP };
+
     const admin = createAdminClient();
     const { error } = await admin
       .from("groups")
@@ -70,9 +94,9 @@ export async function forceOpenSubmit(
       .eq("id", groupId);
     if (error) return { error: "Could not open." };
 
-    await ensureMonth(groupId, yearMonth, "open");
+    await ensureMonth(groupId, yearMonth, "open", plan.version);
     revalidateGroup(groupId);
-    return { ok: true, yearMonth };
+    return { ok: true, yearMonth, version: plan.version };
   } catch (error) {
     if (isRedirectError(error)) throw error;
     return { error: "Could not open." };
@@ -91,19 +115,22 @@ export async function forceCloseCompile(
     if (decision === "forbidden") return { error: CYCLE_OWNER_ONLY };
     if (decision === "unconfirmed") return { error: CYCLE_CONFIRM_CLOSE };
 
+    const months = await listGroupMonthRows(groupId);
+    const rows = toCycleMonthRows(months);
     const closed = await closedYearMonths(groupId);
-    const yearMonth = forceCloseYearMonth(group, closed);
+    const target = forceCloseTarget(group, rows, closed);
     const admin = createAdminClient();
     if (group.force_open_year_month) {
       await admin.from("groups").update({ force_open_year_month: null }).eq("id", groupId);
     }
 
-    await compileGroupMonth({ ...group, force_open_year_month: null }, yearMonth);
-    const { capsule } = await findGroupCapsule(groupId, yearMonth);
-    revalidateGroup(groupId, yearMonth);
+    await compileGroupMonth({ ...group, force_open_year_month: null }, target.yearMonth, target.version);
+    const { capsule } = await findGroupCapsule(groupId, target.yearMonth, target.version);
+    revalidateGroup(groupId, target.yearMonth, target.version);
     return {
       ok: true,
-      yearMonth,
+      yearMonth: target.yearMonth,
+      version: target.version,
       askEmail: Boolean(capsule && !capsule.email_sent_at),
       message: CYCLE_COMPILED,
     };
@@ -119,10 +146,11 @@ export async function emailGroupNow(
 ): Promise<CycleEmailState> {
   const groupId = String(formData.get("groupId") ?? "");
   const yearMonth = String(formData.get("yearMonth") ?? "");
+  const version = parseEdition(formData);
 
   try {
     const { member, group } = await requireGroupMember(groupId);
-    const { capsule } = await findGroupCapsule(groupId, yearMonth);
+    const { capsule } = await findGroupCapsule(groupId, yearMonth, version);
     const decision = decideForceEmail(
       member.role,
       capsule ? { email_sent_at: capsule.email_sent_at as string | null } : null,
@@ -131,7 +159,7 @@ export async function emailGroupNow(
     if (decision === "no_capsule") return { error: CYCLE_NO_CAPSULE };
     if (decision === "already_sent") return { error: CYCLE_ALREADY_SENT };
 
-    const result = await sendGroupMonthEmail(group, yearMonth);
+    const result = await sendGroupMonthEmail(group, yearMonth, { version });
     if (result.reason === "already-sent") return { error: CYCLE_ALREADY_SENT };
     if (result.reason === "no-capsule" || result.reason === "no-month") {
       return { error: CYCLE_NO_CAPSULE };
@@ -142,7 +170,7 @@ export async function emailGroupNow(
     if (result.reason === "resend-error" && result.sent === 0) {
       return { error: result.message };
     }
-    revalidateGroup(groupId, yearMonth);
+    revalidateGroup(groupId, yearMonth, version);
     return { ok: true, message: result.message || CYCLE_SENT };
   } catch (error) {
     if (isRedirectError(error)) throw error;
@@ -156,10 +184,11 @@ export async function skipGroupEmail(
 ): Promise<CycleEmailState> {
   const groupId = String(formData.get("groupId") ?? "");
   const yearMonth = String(formData.get("yearMonth") ?? "");
+  const version = parseEdition(formData);
 
   try {
     const { member } = await requireGroupMember(groupId);
-    const { capsule } = await findGroupCapsule(groupId, yearMonth);
+    const { capsule } = await findGroupCapsule(groupId, yearMonth, version);
     const decision = decideForceSkip(
       member.role,
       capsule ? { email_sent_at: capsule.email_sent_at as string | null } : null,
@@ -168,13 +197,14 @@ export async function skipGroupEmail(
     if (decision === "no_capsule") return { error: CYCLE_NO_CAPSULE };
     if (decision === "already_sent") return { error: CYCLE_ALREADY_SENT };
 
-    const held = await holdGroupMonthEmail(groupId, yearMonth);
+    const held = await holdGroupMonthEmail(groupId, yearMonth, version);
     if (!held.ok && held.reason === "already-sent") return { error: CYCLE_ALREADY_SENT };
     if (!held.ok) return { error: "Could not skip." };
-    revalidateGroup(groupId, yearMonth);
+    revalidateGroup(groupId, yearMonth, version);
     return { ok: true, message: CYCLE_SKIPPED };
   } catch (error) {
     if (isRedirectError(error)) throw error;
     return { error: "Could not skip." };
   }
 }
+

@@ -6,42 +6,116 @@ import {
   type CapsuleArchive,
   type CapsuleArchiveLetter,
 } from "@/lib/capsule-archive";
+import {
+  DEFAULT_MONTH_VERSION,
+  latestEdition,
+  normalizeMonthVersion,
+  openEdition,
+  type CycleMonthRow,
+} from "@/lib/month-version";
 import { compileTargetYearMonth } from "@/lib/schedule";
 import { includedSubmissions } from "@/lib/submit";
 import { createAdminClient } from "@/lib/supabase";
-import type { Group, Photo, Submission } from "@/lib/types";
+import type { Group, Month, Photo, Submission } from "@/lib/types";
 
-export async function ensureMonth(groupId: string, yearMonth: string, status: string) {
+function asMonth(row: Record<string, unknown>): Month {
+  return {
+    id: row.id as string,
+    group_id: row.group_id as string,
+    year_month: row.year_month as string,
+    version: normalizeMonthVersion(row.version),
+    status: row.status as Month["status"],
+    created_at: row.created_at as string,
+  };
+}
+
+export async function listGroupMonthRows(groupId: string): Promise<Month[]> {
   const admin = createAdminClient();
-  const { data: existing, error: findError } = await admin
+  const { data, error } = await admin.from("months").select("*").eq("group_id", groupId);
+  if (error) throw new Error("Could not load months");
+  return (data ?? []).map((row) => asMonth(row as Record<string, unknown>));
+}
+
+export function toCycleMonthRows(months: readonly Month[]): CycleMonthRow[] {
+  return months.map((month) => ({
+    year_month: month.year_month,
+    version: month.version,
+    status: month.status,
+  }));
+}
+
+export async function findMonthEdition(groupId: string, yearMonth: string, version: number) {
+  const admin = createAdminClient();
+  const { data, error } = await admin
     .from("months")
     .select("*")
     .eq("group_id", groupId)
     .eq("year_month", yearMonth)
+    .eq("version", version)
     .maybeSingle();
+  if (error) throw new Error("Could not load month");
+  return data ? asMonth(data as Record<string, unknown>) : null;
+}
 
-  if (findError) {
-    throw new Error("Could not load month");
-  }
-  if (existing) return existing;
-
+async function createMonth(groupId: string, yearMonth: string, version: number, status: string) {
+  const admin = createAdminClient();
   const { data: created, error } = await admin
     .from("months")
-    .insert({ group_id: groupId, year_month: yearMonth, status })
+    .insert({ group_id: groupId, year_month: yearMonth, version, status })
     .select("*")
     .single();
 
-  if (error) {
-    const { data: raced } = await admin
-      .from("months")
-      .select("*")
-      .eq("group_id", groupId)
-      .eq("year_month", yearMonth)
-      .maybeSingle();
-    if (raced) return raced;
-    throw new Error("Could not create month");
+  if (!error && created) return asMonth(created as Record<string, unknown>);
+
+  const raced = await findMonthEdition(groupId, yearMonth, version);
+  if (raced) return raced;
+  throw new Error("Could not create month");
+}
+
+export async function ensureMonth(
+  groupId: string,
+  yearMonth: string,
+  status: string,
+  version?: number,
+) {
+  const edition = version != null ? normalizeMonthVersion(version) : null;
+  if (edition != null) {
+    const existing = await findMonthEdition(groupId, yearMonth, edition);
+    if (!existing) return createMonth(groupId, yearMonth, edition, status);
+
+    if (status === "open" && existing.status === "closed") {
+      const admin = createAdminClient();
+      const { error } = await admin.from("months").update({ status: "open" }).eq("id", existing.id);
+      if (error) throw new Error("Could not reopen month");
+      return { ...existing, status: "open" as const };
+    }
+    if (status === "open" && existing.status === "compiled") {
+      throw new Error("Cannot reopen a compiled edition");
+    }
+    return existing;
   }
-  return created;
+
+  const rows = (await listGroupMonthRows(groupId)).filter((row) => row.year_month === yearMonth);
+  const open = rows.find((row) => row.status === "open");
+  if (open) return open;
+
+  if (status === "open") {
+    if (rows.some((row) => row.status === "compiled")) {
+      throw new Error("No open edition");
+    }
+    const closed = rows.find((row) => row.status === "closed");
+    if (closed) {
+      const admin = createAdminClient();
+      const { error } = await admin.from("months").update({ status: "open" }).eq("id", closed.id);
+      if (error) throw new Error("Could not reopen month");
+      return { ...closed, status: "open" as const };
+    }
+    return createMonth(groupId, yearMonth, DEFAULT_MONTH_VERSION, "open");
+  }
+
+  const latest = [...rows].sort((a, b) => b.version - a.version)[0];
+  if (latest) return latest;
+  return createMonth(groupId, yearMonth, DEFAULT_MONTH_VERSION, status);
 }
 
 async function clearForceOpenIfMatch(group: Group, yearMonth: string) {
@@ -55,31 +129,40 @@ async function clearForceOpenIfMatch(group: Group, yearMonth: string) {
 }
 
 export async function closedYearMonths(groupId: string): Promise<string[]> {
-  const admin = createAdminClient();
-  const { data, error } = await admin
-    .from("months")
-    .select("year_month")
-    .eq("group_id", groupId)
-    .in("status", ["closed", "compiled"]);
-  if (error) throw new Error("Could not load months");
-  return (data ?? []).map((row) => row.year_month as string);
+  const months = await listGroupMonthRows(groupId);
+  return [
+    ...new Set(
+      months
+        .filter((row) => row.status === "closed" || row.status === "compiled")
+        .map((row) => row.year_month),
+    ),
+  ];
 }
 
-export async function findGroupCapsule(groupId: string, yearMonth: string) {
+export async function findGroupCapsule(groupId: string, yearMonth: string, version?: number) {
   const admin = createAdminClient();
-  const { data: month } = await admin
-    .from("months")
-    .select("id, year_month, status")
-    .eq("group_id", groupId)
-    .eq("year_month", yearMonth)
-    .maybeSingle();
+  let month: Month | null = null;
+  if (version != null) {
+    month = await findMonthEdition(groupId, yearMonth, version);
+  } else {
+    const { data: compiled } = await admin
+      .from("months")
+      .select("*")
+      .eq("group_id", groupId)
+      .eq("year_month", yearMonth)
+      .eq("status", "compiled")
+      .order("version", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    month = compiled
+      ? asMonth(compiled as Record<string, unknown>)
+      : ((await listGroupMonthRows(groupId))
+          .filter((row) => row.year_month === yearMonth)
+          .sort((a, b) => b.version - a.version)[0] ?? null);
+  }
   if (!month) return { month: null, capsule: null };
 
-  const { data: capsule } = await admin
-    .from("capsules")
-    .select("*")
-    .eq("month_id", month.id)
-    .maybeSingle();
+  const { data: capsule } = await admin.from("capsules").select("*").eq("month_id", month.id).maybeSingle();
   return { month, capsule };
 }
 
@@ -87,6 +170,7 @@ export async function snapshotMonthArchive(
   group: Group,
   yearMonth: string,
   monthId: string,
+  monthVersion: number = DEFAULT_MONTH_VERSION,
 ): Promise<CapsuleArchive> {
   const admin = createAdminClient();
   const [{ data: submissions }, { count: memberCount }] = await Promise.all([
@@ -137,6 +221,7 @@ export async function snapshotMonthArchive(
     groupName: group.name,
     letters,
     memberCount: memberCount ?? 0,
+    monthVersion,
   });
 }
 
@@ -151,10 +236,11 @@ export async function ensureCapsuleArchive(
   yearMonth: string,
   monthId: string,
   capsule: { id: string; archive?: unknown },
+  monthVersion: number = DEFAULT_MONTH_VERSION,
 ): Promise<CapsuleArchive> {
   const existing = parseCapsuleArchive(capsule.archive);
   if (existing) return existing;
-  const archive = await snapshotMonthArchive(group, yearMonth, monthId);
+  const archive = await snapshotMonthArchive(group, yearMonth, monthId, monthVersion);
   await writeCapsuleArchive(capsule.id, archive);
   return archive;
 }
@@ -166,17 +252,14 @@ async function finishCompile(group: Group, yearMonth: string, monthId: string, c
   return { monthId, created };
 }
 
-export async function compileGroupMonth(group: Group, yearMonth: string) {
+export async function compileGroupMonth(group: Group, yearMonth: string, version?: number) {
   const admin = createAdminClient();
-  const month = await ensureMonth(group.id, yearMonth, "closed");
-  const monthId = month.id as string;
-  const archive = await snapshotMonthArchive(group, yearMonth, monthId);
+  const month = await ensureMonth(group.id, yearMonth, "closed", version);
+  const monthId = month.id;
+  const monthVersion = month.version;
+  const archive = await snapshotMonthArchive(group, yearMonth, monthId, monthVersion);
 
-  const { data: existing } = await admin
-    .from("capsules")
-    .select("*")
-    .eq("month_id", monthId)
-    .maybeSingle();
+  const { data: existing } = await admin.from("capsules").select("*").eq("month_id", monthId).maybeSingle();
 
   if (existing) {
     if (!capsuleHasArchive(existing.archive)) {
@@ -217,13 +300,21 @@ export async function compileGroupMonth(group: Group, yearMonth: string) {
 }
 
 export async function latestUnsentYearMonth(groupId: string): Promise<string | null> {
+  const found = await latestUnsentCapsule(groupId);
+  return found?.yearMonth ?? null;
+}
+
+export async function latestUnsentCapsule(
+  groupId: string,
+): Promise<{ yearMonth: string; version: number } | null> {
   const admin = createAdminClient();
   const { data: months, error } = await admin
     .from("months")
-    .select("id, year_month")
+    .select("id, year_month, version")
     .eq("group_id", groupId)
     .eq("status", "compiled")
-    .order("year_month", { ascending: false });
+    .order("year_month", { ascending: false })
+    .order("version", { ascending: false });
   if (error || !months?.length) return null;
 
   for (const month of months) {
@@ -233,7 +324,10 @@ export async function latestUnsentYearMonth(groupId: string): Promise<string | n
       .eq("month_id", month.id)
       .maybeSingle();
     if (capsule && !capsule.email_sent_at) {
-      return month.year_month as string;
+      return {
+        yearMonth: month.year_month as string,
+        version: normalizeMonthVersion(month.version),
+      };
     }
   }
   return null;
@@ -244,11 +338,19 @@ export async function compileDueCapsules(now: Date = new Date()) {
   const { data: groups, error } = await admin.from("groups").select("*");
   if (error) throw new Error("Could not list groups");
 
-  const results: { groupId: string; yearMonth: string; created: boolean }[] = [];
+  const results: { groupId: string; yearMonth: string; version: number; created: boolean }[] = [];
   for (const group of (groups ?? []) as Group[]) {
     const yearMonth = compileTargetYearMonth(group, now);
-    const result = await compileGroupMonth(group, yearMonth);
-    results.push({ groupId: group.id, yearMonth, created: result.created });
+    const rows = toCycleMonthRows(await listGroupMonthRows(group.id));
+    const open = openEdition(rows, yearMonth);
+    const version = open?.version ?? latestEdition(rows, yearMonth)?.version;
+    const result = await compileGroupMonth(group, yearMonth, version);
+    results.push({
+      groupId: group.id,
+      yearMonth,
+      version: version ?? DEFAULT_MONTH_VERSION,
+      created: result.created,
+    });
   }
   return results;
 }

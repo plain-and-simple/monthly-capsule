@@ -4,17 +4,21 @@ import {
   CYCLE_ALREADY_SENT,
   CYCLE_CONFIRM_CLOSE,
   CYCLE_OWNER_ONLY,
+  CYCLE_VERSION_CAP,
   decideForceClose,
   decideForceEmail,
   decideForceOpen,
   decideForceSkip,
+  forceCloseTarget,
   forceCloseYearMonth,
   forceOpenStillActive,
+  forceOpenYearMonth,
   isCycleSubmitOpen,
   nextClosedToOpenYearMonth,
   openSubmitYearMonth,
   type CycleGroup,
 } from "./cycle";
+import { planForceOpen } from "./month-version";
 
 const schedule: CycleGroup = {
   submit_start_day: 1,
@@ -37,24 +41,25 @@ const afterWindow = chicago("2026-09-09T05:30:00Z"); // Sept 9
 const beforeLateStart = chicago("2026-09-08T17:00:00Z"); // Sept 8, start=10
 
 describe("F1 force open when closed", () => {
-  it("targets next month after the window ends, not this calendar month", () => {
+  it("targets this Chicago calendar month after the window ends, not next month", () => {
     expect(isCycleSubmitOpen(schedule, [], afterWindow)).toBe(false);
-    expect(nextClosedToOpenYearMonth(schedule, [], afterWindow)).toBe("2026-10");
+    expect(forceOpenYearMonth(afterWindow)).toBe("2026-09");
+    expect(nextClosedToOpenYearMonth(schedule, [], afterWindow)).toBe("2026-09");
   });
 
   it("targets this month when still waiting for submit_start_day", () => {
     expect(isCycleSubmitOpen(lateStart, [], beforeLateStart)).toBe(false);
-    expect(nextClosedToOpenYearMonth(lateStart, [], beforeLateStart)).toBe("2026-09");
+    expect(forceOpenYearMonth(beforeLateStart)).toBe("2026-09");
   });
 
-  it("lets members submit to the force-opened next period", () => {
-    const opened: CycleGroup = { ...schedule, force_open_year_month: "2026-10" };
-    expect(openSubmitYearMonth(opened, [], afterWindow)).toBe("2026-10");
-    expect(isCycleSubmitOpen(opened, [], afterWindow)).toBe(true);
+  it("lets members submit to a force-opened current month after the window", () => {
+    const opened: CycleGroup = { ...schedule, force_open_year_month: "2026-09" };
+    expect(openSubmitYearMonth(opened, ["2026-09"], afterWindow)).toBe("2026-09");
+    expect(isCycleSubmitOpen(opened, ["2026-09"], afterWindow)).toBe(true);
   });
 });
 
-describe("F2 already open — no duplicate month", () => {
+describe("F2 already open — same-month versions, not next month", () => {
   it("is already open in the calendar window", () => {
     expect(isCycleSubmitOpen(schedule, [], duringWindow)).toBe(true);
     expect(openSubmitYearMonth(schedule, [], duringWindow)).toBe("2026-09");
@@ -62,15 +67,19 @@ describe("F2 already open — no duplicate month", () => {
     expect(CYCLE_ALREADY_OPEN).toBe("Already open.");
   });
 
-  it("is already open after a force-open of the next period", () => {
-    const opened: CycleGroup = { ...schedule, force_open_year_month: "2026-10" };
+  it("is already open after a force-open of this month", () => {
+    const opened: CycleGroup = { ...schedule, force_open_year_month: "2026-09" };
     expect(decideForceOpen("owner", isCycleSubmitOpen(opened, [], afterWindow))).toBe(
       "already_open",
     );
   });
 
-  it("skips a compiled month and walks to the next closed→open period", () => {
-    expect(nextClosedToOpenYearMonth(schedule, ["2026-09"], duringWindow)).toBe("2026-10");
+  it("compiled this month force-opens v2 of this month, not October", () => {
+    expect(forceOpenYearMonth(duringWindow)).toBe("2026-09");
+    expect(
+      planForceOpen([{ year_month: "2026-09", version: 1, status: "compiled" }], "2026-09"),
+    ).toEqual({ action: "create", version: 2 });
+    expect(CYCLE_VERSION_CAP).toBe("This month cannot take another version.");
   });
 });
 
@@ -98,9 +107,17 @@ describe("F4 force close compiles the open period", () => {
     expect(forceCloseYearMonth(schedule, [], duringWindow)).toBe("2026-09");
   });
 
-  it("closes a force-opened next period", () => {
-    const opened: CycleGroup = { ...schedule, force_open_year_month: "2026-10" };
-    expect(forceCloseYearMonth(opened, [], afterWindow)).toBe("2026-10");
+  it("closes a force-opened current month after the window", () => {
+    const opened: CycleGroup = { ...schedule, force_open_year_month: "2026-09" };
+    expect(forceCloseYearMonth(opened, [], afterWindow)).toBe("2026-09");
+    expect(
+      forceCloseTarget(
+        opened,
+        [{ year_month: "2026-09", version: 2, status: "open" }],
+        [],
+        afterWindow,
+      ),
+    ).toEqual({ yearMonth: "2026-09", version: 2 });
   });
 
   it("compiles the cron target when already closed (idempotent month)", () => {
@@ -139,9 +156,10 @@ describe("F8 no force — calendar path unchanged", () => {
     expect(isCycleSubmitOpen(lateStart, [], beforeLateStart)).toBe(false);
   });
 
-  it("force-open expires on that month's submit_end_day", () => {
+  it("force-open of this month stays active after submit_end_day", () => {
     expect(forceOpenStillActive("2026-10", schedule, afterWindow)).toBe(true);
-    expect(forceOpenStillActive("2026-09", schedule, afterWindow)).toBe(false);
+    expect(forceOpenStillActive("2026-09", schedule, afterWindow)).toBe(true);
     expect(forceOpenStillActive("2026-09", schedule, duringWindow)).toBe(true);
+    expect(forceOpenStillActive("2026-08", schedule, duringWindow)).toBe(false);
   });
 });
