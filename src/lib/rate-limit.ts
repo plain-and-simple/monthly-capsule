@@ -4,6 +4,8 @@ import { headers } from "next/headers";
 import {
   LOGIN_ATTEMPT_MAX,
   LOGIN_ATTEMPT_WINDOW_MS,
+  PASSWORD_RESET_ATTEMPT_MAX,
+  PASSWORD_RESET_ATTEMPT_WINDOW_MS,
   PIN_ATTEMPT_MAX,
   PIN_ATTEMPT_WINDOW_MS,
 } from "@/lib/constants";
@@ -80,4 +82,40 @@ export async function purgeOldLoginAttempts(): Promise<void> {
   const admin = createAdminClient();
   const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
   await admin.from("login_attempts").delete().lt("attempted_at", cutoff);
+}
+
+export async function passwordResetAttemptsBlocked(
+  emailNorm: string,
+  ip: string,
+): Promise<boolean> {
+  const admin = createAdminClient();
+  const since = new Date(Date.now() - PASSWORD_RESET_ATTEMPT_WINDOW_MS).toISOString();
+  const { count, error } = await admin
+    .from("password_reset_attempts")
+    .select("id", { count: "exact", head: true })
+    .eq("email_norm", emailNorm)
+    .eq("ip_hash", hashIp(ip))
+    .gte("attempted_at", since);
+
+  if (error) {
+    throw new Error("Could not check password reset rate limit");
+  }
+  return (count ?? 0) >= PASSWORD_RESET_ATTEMPT_MAX;
+}
+
+export async function recordPasswordResetAttempt(
+  emailNorm: string,
+  ip: string,
+): Promise<void> {
+  const admin = createAdminClient();
+  await admin.from("password_reset_attempts").insert({
+    email_norm: emailNorm,
+    ip_hash: hashIp(ip),
+  });
+}
+
+export async function purgeOldPasswordResetAttempts(): Promise<void> {
+  const admin = createAdminClient();
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  await admin.from("password_reset_attempts").delete().lt("attempted_at", cutoff);
 }

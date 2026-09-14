@@ -1,9 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { useActionState } from "react";
 import { manageLogin, type ManageLoginState } from "@/actions/manage-login";
 import { PendingSubmitButton, useInstantBusy } from "@/components/pending-submit-button";
-import { ACCOUNT_PASSWORD_LABEL, LANDING_SIGN_IN } from "@/lib/copy";
+import { ACCOUNT_PASSWORD_LABEL, FORGOT_PASSWORD_LINK, LANDING_SIGN_IN } from "@/lib/copy";
 
 export function ManageForm() {
   const [state, action, pending] = useActionState<ManageLoginState, FormData>(
@@ -32,6 +33,9 @@ export function ManageForm() {
           />
         </label>
       </div>
+      <p className="small">
+        <Link href="/forgot">{FORGOT_PASSWORD_LINK}</Link>
+      </p>
       {state?.error ? <p className="err">{state.error}</p> : null}
       <PendingSubmitButton
         className="btn btn--primary btn--block btn--lg"

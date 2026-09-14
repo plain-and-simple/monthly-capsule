@@ -15,7 +15,7 @@ Friends write a letter (and up to six photos) each month. After the window close
 
 - **Brand chrome** is the Capsule seal icon + `PS` (not the full wordmark). Favicon / apple-touch are icon-only. Page title (and the landing footer) still use **Plain and Simple Monthly Capsule**. Resend has no send-API sender avatar (skip). From display stays **Capsule**.
 - **Account** is one field `preferred_name`, plus email and a hashed password (min 8). Memberships link an account to groups. **No phone. No SMS.**
-- **Manage** is email + password, rate-limited (5 / 15 minutes / IP + email). After login: 0 groups → empty + join hint; 1 → group home; many → pick list.
+- **Manage** is email + password, rate-limited (5 / 15 minutes / IP + email). After login: 0 groups → empty + join hint; 1 → group home; many → pick list. **Forgot password?** emails a one-hour, single-use link via Resend. Same response whether the email has an account. The reset page sets a new password and signs in the same way Manage does.
 - Web join with a group UUID + PIN. PIN is generated at create, shown **once**, stored as a bcrypt hash only, never recovered.
 - Join asks for preferred name. **Save login** (email + password) is optional. Skip → group session only until it expires; Manage will not list that group until they save.
 - Owner may **Regenerate PIN**. Confirm first. New PIN is shown once. The old PIN dies immediately. Existing sessions stay valid.
@@ -62,7 +62,7 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
-Apply the SQL in `supabase/migrations/` to your Supabase project (SQL editor, or `supabase db push` if you use the CLI). The first migration creates tables, indexes, RLS, and the private storage bucket. The accounts migration adds `accounts`, `login_attempts`, `members.account_id`, and renames `display_name` → `preferred_name`. The force-cycle migration adds `groups.force_open_year_month` and `capsules.email_held`. The submission_status migration adds `submissions.status`. The capsule_archive migration adds `capsules.archive`. The month_versions migration adds `months.version` and unique `(group_id, year_month, version)`.
+Apply the SQL in `supabase/migrations/` to your Supabase project (SQL editor, or `supabase db push` if you use the CLI). The first migration creates tables, indexes, RLS, and the private storage bucket. The accounts migration adds `accounts`, `login_attempts`, `members.account_id`, and renames `display_name` → `preferred_name`. The force-cycle migration adds `groups.force_open_year_month` and `capsules.email_held`. The submission_status migration adds `submissions.status`. The capsule_archive migration adds `capsules.archive`. The month_versions migration adds `months.version` and unique `(group_id, year_month, version)`. The password_reset migration adds `password_reset_tokens` and `password_reset_attempts`.
 
 ```bash
 npm run typecheck
@@ -89,6 +89,8 @@ See `.env.example`.
 
 1. **Home** `/` — left picture; right **Manage your capsule** (email → password → Continue). Upper-right **Create Capsule Group**. No three equal CTAs. No phone.
 2. **Manage** `/manage` — account groups. Empty + join hint, or a pick list (including one group) with owner/member. After login with exactly one group, go to group home. Your groups always returns to this list.
+2a. **Forgot password** `/forgot` — email only. Always the same “if we have that account, we sent a link” copy. Rate-limited 5 / 15 minutes / IP + email.
+2b. **Reset password** `/reset/[token]` — set a new password (min 8). Invalid, used, or expired links ask you to request a new one. Success signs in like Manage.
 3. **Create** `/create` — studio code → preferred name + email + password + optional group name → UUID + PIN shown once (copy). Account owns the group.
 4. **Join** `/join` — join link or group ID + PIN + preferred name. Optional Save login (email + password). Skip → group session only.
 5. **Join link** `/join/[uuid]` — PIN + preferred name + optional Save login.
@@ -104,7 +106,7 @@ See `.env.example`.
 e2e is not set up. After env + **all** migrations (init, accounts, force-cycle, submission_status, capsule_archive, **month_versions**):
 
 1. **Create (GWT B).** Open `/`. Upper-right Create Capsule Group. Studio code (local default `plainandsimple` if `CREATE_GROUP_CODE` is unset). Preferred name, email, password (8+). Copy the join link and PIN. Continue to the group home. You are the owner.
-2. **Manage (GWT A).** Private window. `/` → Manage your capsule with that email + password. No SMS. One group → group home. Your groups (and the brand mark) open `/manage` even with one group, so you can create another. Sign out from `/manage`.
+2. **Manage (GWT A).** Private window. `/` → Manage your capsule with that email + password. No SMS. One group → group home. Your groups (and the brand mark) open `/manage` even with one group, so you can create another. Sign out from `/manage`. **Forgot password?** from the login card → `/forgot` → same ack whether the email exists. Open the emailed `/reset/…` link, set a new password (8+), land signed in.
 3. **Join without save (GWT C).** Another private window. Open the join link. Preferred name. Leave Save login unchecked. You land in the group. Manage with a *new* email does not list this group. The owner’s Manage still does.
 4. **Join with save (GWT D).** Preferred name + check Save login + email + password. That account’s Manage finds the group. Or Save login from group home after a skip.
 5. **People (GWT E).** People shows preferred names only — no emails.
@@ -141,7 +143,7 @@ Both require `Authorization: Bearer $CRON_SECRET`.
 
 ## Schema (minimal)
 
-`accounts` (preferred_name, unique email, password_hash), `groups` (`force_open_year_month` nullable), `members` (memberships: `preferred_name`, optional `account_id`, unique `group_id + email` where email is not null, unique `account_id + group_id` where account_id is not null), `months` (`version` default 1, unique `group_id + year_month + version`, at most one `open` row per group), `submissions` (unique `month_id + member_id` — no rollover across editions), `photos`, `capsules` (`month_id` unique, `email_held` default false, `archive` jsonb snapshot including `month_version`), `pin_attempts` (5 / 15 minutes / IP+group), `login_attempts` (5 / 15 minutes / IP+email).
+`accounts` (preferred_name, unique email, password_hash), `groups` (`force_open_year_month` nullable), `members` (memberships: `preferred_name`, optional `account_id`, unique `group_id + email` where email is not null, unique `account_id + group_id` where account_id is not null), `months` (`version` default 1, unique `group_id + year_month + version`, at most one `open` row per group), `submissions` (unique `month_id + member_id` — no rollover across editions), `photos`, `capsules` (`month_id` unique, `email_held` default false, `archive` jsonb snapshot including `month_version`), `pin_attempts` (5 / 15 minutes / IP+group), `login_attempts` (5 / 15 minutes / IP+email), `password_reset_tokens` (SHA-256 of the emailed secret, expiry, `used_at`), `password_reset_attempts` (5 / 15 minutes / IP+email).
 
 ### Live SQL for CoS (`uqqxauszzorzhmngcnvf`)
 
