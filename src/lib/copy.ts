@@ -1,4 +1,6 @@
 export const PRODUCT_NAME = "Plain and Simple Monthly Capsule";
+/** Header chrome mark. Icon + these letters — not the full wordmark. */
+export const CHROME_MARK = "PS";
 
 export const LANDING_PROMISE = "Friends write once a month. You get one capsule.";
 export const LANDING_CREATE_LABEL = "Create";
@@ -74,10 +76,18 @@ export function createSuccessHero(input: { name: string; pin: string }): CreateS
 
 export function landingChrome(input: {
   productName: string;
+  chromeMark: string;
   createLabel: string;
   promise: string;
   manageHeading: string;
   signIn: string;
-}): { productName: string; createLabel: string; promise: string; manageHeading: string; signIn: string } {
+}): {
+  productName: string;
+  chromeMark: string;
+  createLabel: string;
+  promise: string;
+  manageHeading: string;
+  signIn: string;
+} {
   return input;
 }

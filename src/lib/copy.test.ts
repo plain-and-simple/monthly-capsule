@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   ACCOUNT_PASSWORD_LABEL,
+  CHROME_MARK,
   CREATE_SUCCESS_COPY,
   CREATE_SUCCESS_HINT,
   CYCLE_CLOSE_COMPILE,
@@ -38,22 +39,26 @@ describe("landing copy smoke", () => {
   it("uses the full product name and locked promise", () => {
     const chrome = landingChrome({
       productName: PRODUCT_NAME,
+      chromeMark: CHROME_MARK,
       createLabel: LANDING_CREATE_LABEL,
       promise: LANDING_PROMISE,
       manageHeading: LANDING_MANAGE_HEADING,
       signIn: LANDING_SIGN_IN,
     });
     expect(chrome.productName).toBe("Plain and Simple Monthly Capsule");
+    expect(chrome.chromeMark).toBe("PS");
     expect(chrome.promise).toBe("Friends write once a month. You get one capsule.");
     expect(chrome.createLabel).toBe("Create");
     expect(chrome.manageHeading).toBe("Manage your capsule");
     expect(chrome.signIn).toBe("Sign in");
     expect(chrome.productName).not.toBe("Capsule");
+    expect(chrome.chromeMark).not.toBe(chrome.productName);
   });
 
   it("cuts bare Capsule chrome, Create-as-link label, and No phone", () => {
     const surface = [
       PRODUCT_NAME,
+      CHROME_MARK,
       LANDING_CREATE_LABEL,
       LANDING_PROMISE,
       LANDING_MANAGE_HEADING,
@@ -63,6 +68,7 @@ describe("landing copy smoke", () => {
       expect(surface).not.toContain(phrase);
     }
     expect(surface).not.toMatch(/^Capsule$/m);
+    expect(CHROME_MARK).toBe("PS");
   });
 });
 

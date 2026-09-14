@@ -4,12 +4,15 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   capsuleFromHeader,
+  cronEmailDueCapsules,
   cronShouldSendCapsule,
   DEFAULT_RESEND_FROM,
   extractResendFromEmail,
   formatCapsuleSendResult,
   holdEmailUpdate,
   ownerCanEmailCapsule,
+  ownerEmailFailed,
+  previewCapsuleSend,
   resendSendAccepted,
   sentEmailUpdate,
   shouldMarkCapsuleEmailed,
@@ -84,31 +87,124 @@ describe("Resend accept vs stamp", () => {
     ).toBe("Sent 0. Resend error: The domain is not verified.");
   });
 
-  it("uses the designer capsules@ mailbox and a group display From", () => {
+  it("uses the locked Capsule display name and designer mailbox", () => {
     expect(extractResendFromEmail(DEFAULT_RESEND_FROM)).toBe("capsules@plainandsimple.app");
     expect(extractResendFromEmail("Capsule <capsule@plainandsimple.app>")).toBe(
       "capsule@plainandsimple.app",
     );
-    expect(capsuleFromHeader("stepppy", DEFAULT_RESEND_FROM)).toEqual({
+    expect(capsuleFromHeader(DEFAULT_RESEND_FROM)).toEqual({
       ok: true,
       email: "capsules@plainandsimple.app",
-      from: "stepppy via Plain and Simple <capsules@plainandsimple.app>",
+      from: "Capsule <capsules@plainandsimple.app>",
     });
-    expect(capsuleFromHeader("stepppy", "not-an-address")).toEqual({
+    expect(capsuleFromHeader("Plain and Simple <capsules@plainandsimple.app>")).toEqual({
+      ok: true,
+      email: "capsules@plainandsimple.app",
+      from: "Capsule <capsules@plainandsimple.app>",
+    });
+    expect(capsuleFromHeader("not-an-address")).toEqual({
       ok: false,
       error: "From address is not a valid email.",
     });
   });
 });
 
+describe("cron catch-up for split compile/email and versions", () => {
+  const unsent = { email_sent_at: null, email_held: false };
+
+  it("emails every due unsent edition, not only the latest of the calendar month", () => {
+    expect(
+      cronEmailDueCapsules("2026-09", [
+        { yearMonth: "2026-09", version: 1, ...unsent },
+        { yearMonth: "2026-09", version: 2, ...unsent },
+        { yearMonth: "2026-08", version: 1, ...unsent },
+        { yearMonth: "2026-10", version: 1, ...unsent },
+        { yearMonth: "2026-09", version: 3, email_sent_at: "2026-09-14T17:53:31.409Z", email_held: false },
+        { yearMonth: "2026-09", version: 4, email_sent_at: null, email_held: true },
+      ]).map((row) => `${row.yearMonth}v${row.version}`),
+    ).toEqual(["2026-08v1", "2026-09v1", "2026-09v2"]);
+  });
+
+  it("does not treat a force-compiled future month as due before its email_day", () => {
+    expect(
+      cronEmailDueCapsules("2026-09", [{ yearMonth: "2026-10", version: 1, ...unsent }]),
+    ).toEqual([]);
+  });
+});
+
+describe("send preview / owner failure", () => {
+  it("blocks send when Resend is missing, From is bad, or nobody has an email", () => {
+    expect(
+      previewCapsuleSend({
+        fromOk: true,
+        hasResendKey: false,
+        recipientCount: 1,
+        skippedNoEmail: 0,
+      }),
+    ).toMatchObject({ canSend: false, reason: "no-resend-key" });
+    expect(
+      previewCapsuleSend({
+        fromOk: false,
+        fromError: "From address is not a valid email.",
+        hasResendKey: true,
+        recipientCount: 1,
+        skippedNoEmail: 0,
+      }),
+    ).toMatchObject({ canSend: false, reason: "bad-from" });
+    expect(
+      previewCapsuleSend({
+        fromOk: true,
+        hasResendKey: true,
+        recipientCount: 0,
+        skippedNoEmail: 2,
+      }),
+    ).toMatchObject({ canSend: false, reason: "no-recipients", wouldSend: 0 });
+    expect(
+      previewCapsuleSend({
+        fromOk: true,
+        hasResendKey: true,
+        recipientCount: 1,
+        skippedNoEmail: 1,
+      }),
+    ).toEqual({
+      canSend: true,
+      reason: "ok",
+      wouldSend: 1,
+      skippedNoEmail: 1,
+      error: null,
+    });
+  });
+
+  it("treats unstamped owner Send as a visible failure", () => {
+    expect(ownerEmailFailed({ markedSent: false })).toBe(true);
+    expect(ownerEmailFailed({ markedSent: true })).toBe(false);
+  });
+});
+
 const here = dirname(fileURLToPath(import.meta.url));
 
 describe("send path must not stamp blindly", () => {
+  it("send path does not set a Resend avatar", () => {
+    const source = readFileSync(resolve(here, "./email.ts"), "utf8");
+    const sendAt = source.indexOf("resend.emails.send");
+    const sendBlock = source.slice(sendAt, source.indexOf("resendSendAccepted", sendAt));
+    expect(sendAt).toBeGreaterThan(-1);
+    expect(sendBlock).not.toMatch(/\b(avatar|logo)\s*:/);
+  });
+
   it("checks Resend accept and recipient resolution before sentEmailUpdate", () => {
     const source = readFileSync(resolve(here, "./email.ts"), "utf8");
     expect(source).toContain("resolveCapsuleRecipients");
     expect(source).toContain("resendSendAccepted");
     expect(source).toContain("shouldMarkCapsuleEmailed");
     expect(source.indexOf("shouldMarkCapsuleEmailed")).toBeLessThan(source.lastIndexOf("sentEmailUpdate"));
+    expect(source).toContain("cronEmailDueCapsules");
+    expect(source).toContain("previewCapsuleSend");
+    expect(source).toContain("capsuleEmailText");
+    expect(source).toContain("to: [to]");
+    const cycle = readFileSync(resolve(here, "../actions/cycle.ts"), "utf8");
+    expect(cycle).toContain("ownerEmailFailed");
+    const cron = readFileSync(resolve(here, "../app/api/cron/email/route.ts"), "utf8");
+    expect(cron).toContain('searchParams.get("dry") === "1"');
   });
 });
