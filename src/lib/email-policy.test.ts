@@ -9,6 +9,7 @@ import {
   DEFAULT_RESEND_FROM,
   extractResendFromEmail,
   formatCapsuleSendResult,
+  formatSkippedNoEmail,
   holdEmailUpdate,
   ownerCanEmailCapsule,
   ownerEmailFailed,
@@ -73,10 +74,21 @@ describe("Resend accept vs stamp", () => {
     expect(shouldMarkCapsuleEmailed({ attempted: 2, accepted: 1 })).toBe(false);
   });
 
-  it("shows sent / skipped / Resend error to the owner", () => {
+  it("shows sent / skipped names / Resend error to the owner", () => {
     expect(formatCapsuleSendResult({ sent: 1, skippedNoEmail: 0, error: null })).toBe("Sent 1.");
     expect(formatCapsuleSendResult({ sent: 1, skippedNoEmail: 2, error: null })).toBe(
       "Sent 1. Skipped 2 with no email.",
+    );
+    expect(
+      formatCapsuleSendResult({
+        sent: 1,
+        skippedNoEmail: 1,
+        skippedNames: ["Curtis"],
+        error: null,
+      }),
+    ).toBe("Sent 1. Skipped 1 with no email: Curtis.");
+    expect(formatSkippedNoEmail({ skippedNoEmail: 2, skippedNames: ["Curtis", "Bess"] })).toBe(
+      "Skipped 2 with no email: Curtis, Bess.",
     );
     expect(
       formatCapsuleSendResult({

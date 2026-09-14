@@ -2,6 +2,7 @@ import Link from "next/link";
 import { AppHeader } from "@/components/app-header";
 import { OpenGroupForm } from "@/components/open-group-form";
 import {
+  JOIN_EXISTING_CTA,
   LANDING_CREATE_CTA,
   MANAGE_EMPTY_HINT,
   MANAGE_EMPTY_TITLE,
@@ -67,10 +68,13 @@ export default async function ManagePage() {
                   </div>
                 </div>
                 <div className="stack stack--tight">
-                  <Link className="btn btn--primary btn--block" href="/create">
+                  <Link className="btn btn--primary btn--block" href="/join">
+                    {JOIN_EXISTING_CTA}
+                  </Link>
+                  <Link className="btn btn--secondary btn--block" href="/create">
                     {LANDING_CREATE_CTA}
                   </Link>
-                  <p className="btn-note">Needs a studio code.</p>
+                  <p className="btn-note">Creating a group needs a studio code.</p>
                 </div>
                 <div className="panel">
                   <p className="small">
@@ -102,10 +106,12 @@ export default async function ManagePage() {
                   })}
                 </ul>
                 <div className="row">
+                  <Link className="btn btn--quiet" href="/join">
+                    {JOIN_EXISTING_CTA}
+                  </Link>
                   <Link className="btn btn--quiet" href="/create">
                     Create a group
                   </Link>
-                  <span className="muted tiny">Joining still happens by link.</span>
                 </div>
               </>
             )}

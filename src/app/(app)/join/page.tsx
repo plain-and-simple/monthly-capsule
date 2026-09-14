@@ -1,5 +1,6 @@
 import { AppHeader } from "@/components/app-header";
 import { JoinForm } from "@/components/join-form";
+import { JoinGate } from "@/components/join-gate";
 import { getAccount } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
@@ -14,7 +15,11 @@ export default async function JoinHomePage() {
         homeHref={account ? "/manage" : "/"}
       />
       <main className="main">
-        <JoinForm signedInAs={account?.preferred_name ?? null} />
+        {account ? (
+          <JoinForm signedInAs={account.preferred_name} />
+        ) : (
+          <JoinGate next="/join" />
+        )}
       </main>
       <footer className="footer">
         <div className="wrap wrap--narrow center">

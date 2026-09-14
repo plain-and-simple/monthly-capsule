@@ -7,6 +7,15 @@ export const LANDING_CREATE_LABEL = "Create";
 export const LANDING_CREATE_CTA = "Create a capsule group";
 export const LANDING_MANAGE_HEADING = "Manage your capsule";
 export const LANDING_SIGN_IN = "Sign in";
+export const LANDING_SIGN_UP = "Create an account";
+export const LANDING_HAVE_LOGIN = "Already have a login?";
+export const LANDING_NEED_ACCOUNT = "Need an account?";
+export const JOIN_EXISTING_CTA = "Join existing Capsule";
+export const JOIN_AUTH_HINT =
+  "Create an account or sign in. Then you can enter the Group PIN and join.";
+export const SAVE_LOGIN_REQUIRED_HEADING = "Save a login";
+export const SAVE_LOGIN_REQUIRED_HINT =
+  "Email and password are required before you can save a letter. That is how we email the capsule.";
 export const LANDING_LEDE =
   "A private page for a small group. Everyone sends a short letter and a few photos during the month. When the window closes, it all arrives as one thing to read.";
 

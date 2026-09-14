@@ -141,6 +141,18 @@ export function previewCapsuleSend(input: {
   };
 }
 
+export function formatSkippedNoEmail(input: {
+  skippedNoEmail: number;
+  skippedNames?: readonly string[];
+}): string | null {
+  if (input.skippedNoEmail <= 0) return null;
+  const names = (input.skippedNames ?? []).map((name) => name.trim()).filter(Boolean);
+  if (names.length > 0) {
+    return `Skipped ${input.skippedNoEmail} with no email: ${names.join(", ")}.`;
+  }
+  return `Skipped ${input.skippedNoEmail} with no email.`;
+}
+
 /** Owner Send is success only when Resend accepted every attempted address. */
 export function ownerEmailFailed(result: { markedSent: boolean }): boolean {
   return !result.markedSent;
@@ -149,12 +161,12 @@ export function ownerEmailFailed(result: { markedSent: boolean }): boolean {
 export function formatCapsuleSendResult(input: {
   sent: number;
   skippedNoEmail: number;
+  skippedNames?: readonly string[];
   error: string | null;
 }): string {
   const bits = [`Sent ${input.sent}.`];
-  if (input.skippedNoEmail > 0) {
-    bits.push(`Skipped ${input.skippedNoEmail} with no email.`);
-  }
+  const skipped = formatSkippedNoEmail(input);
+  if (skipped) bits.push(skipped);
   if (input.error) {
     bits.push(`Resend error: ${input.error}`);
   }

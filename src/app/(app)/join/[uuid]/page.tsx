@@ -1,7 +1,9 @@
 import { redirect } from "next/navigation";
 import { AppHeader } from "@/components/app-header";
 import { JoinForm } from "@/components/join-form";
+import { JoinGate } from "@/components/join-gate";
 import { sessionRejoinsGroup } from "@/lib/manage";
+import { inviteJoinPath } from "@/lib/return-path";
 import { getAccount, getSession } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase";
 
@@ -19,6 +21,7 @@ export default async function JoinPage({ params }: { params: Promise<{ uuid: str
     admin.from("groups").select("name").eq("id", uuid).maybeSingle(),
     admin.from("members").select("id", { count: "exact", head: true }).eq("group_id", uuid),
   ]);
+  const next = inviteJoinPath(uuid);
 
   return (
     <>
@@ -28,12 +31,20 @@ export default async function JoinPage({ params }: { params: Promise<{ uuid: str
         homeHref={account ? "/manage" : "/"}
       />
       <main className="main">
-        <JoinForm
-          uuid={uuid}
-          signedInAs={account?.preferred_name ?? null}
-          groupName={group?.name ?? null}
-          memberCount={count ?? undefined}
-        />
+        {account ? (
+          <JoinForm
+            uuid={uuid}
+            signedInAs={account.preferred_name}
+            groupName={group?.name ?? null}
+            memberCount={count ?? undefined}
+          />
+        ) : (
+          <JoinGate
+            next={next}
+            groupName={group?.name ?? null}
+            memberCount={count ?? undefined}
+          />
+        )}
       </main>
       <footer className="footer">
         <div className="wrap wrap--narrow center">

@@ -235,7 +235,7 @@ export default async function GroupHomePage({
             </>
           ) : null}
 
-          {member.account_id ? null : <SaveLoginForm groupId={uuid} />}
+          {member.account_id ? null : <SaveLoginForm groupId={uuid} next={`/g/${uuid}`} />}
         </div>
       </div>
     </main>

@@ -8,6 +8,7 @@ import {
   cronEmailDueCapsules,
   cronShouldSendCapsule,
   formatCapsuleSendResult,
+  formatSkippedNoEmail,
   previewCapsuleSend,
   resendSendAccepted,
   sentEmailUpdate,
@@ -25,6 +26,7 @@ import type { Account, Capsule, Group, Member, Month, Submission } from "@/lib/t
 export type SendGroupMonthResult = {
   sent: number;
   skippedNoEmail: number;
+  skippedNames: string[];
   markedSent: boolean;
   error: string | null;
   reason:
@@ -42,9 +44,14 @@ export type SendGroupMonthResult = {
 };
 
 function sendResult(
-  partial: Omit<SendGroupMonthResult, "message"> & { message?: string },
+  partial: Omit<SendGroupMonthResult, "message" | "skippedNames"> & {
+    message?: string;
+    skippedNames?: string[];
+  },
 ): SendGroupMonthResult {
-  return { ...partial, message: partial.message ?? formatCapsuleSendResult(partial) };
+  const skippedNames = partial.skippedNames ?? [];
+  const payload = { ...partial, skippedNames };
+  return { ...payload, message: partial.message ?? formatCapsuleSendResult(payload) };
 }
 
 export async function sendDueCapsuleEmails(
@@ -212,6 +219,7 @@ async function sendCapsuleEmail(
 
   const resolved = resolveCapsuleRecipients(
     roster.map((member) => ({
+      preferredName: member.preferred_name,
       memberEmail: member.email,
       accountEmail: member.account_id ? accountEmailById.get(member.account_id) ?? null : null,
     })),
@@ -230,6 +238,7 @@ async function sendCapsuleEmail(
     return sendResult({
       sent: 0,
       skippedNoEmail: preview.skippedNoEmail,
+      skippedNames: resolved.skippedNames,
       markedSent: false,
       error: preview.error,
       reason: preview.reason,
@@ -237,13 +246,18 @@ async function sendCapsuleEmail(
   }
 
   if (opts.dryRun) {
+    const skipped = formatSkippedNoEmail({
+      skippedNoEmail: preview.skippedNoEmail,
+      skippedNames: resolved.skippedNames,
+    });
     return sendResult({
       sent: 0,
       skippedNoEmail: preview.skippedNoEmail,
+      skippedNames: resolved.skippedNames,
       markedSent: false,
       error: null,
       reason: "dry-run",
-      message: `Dry run: would send ${preview.wouldSend}. Skipped ${preview.skippedNoEmail} with no email.`,
+      message: [`Dry run: would send ${preview.wouldSend}.`, skipped].filter(Boolean).join(" "),
     });
   }
 
@@ -283,6 +297,7 @@ async function sendCapsuleEmail(
     return sendResult({
       sent: 0,
       skippedNoEmail: resolved.skippedNoEmail,
+      skippedNames: resolved.skippedNames,
       markedSent: false,
       error: "Email is not configured.",
       reason: "no-resend-key",
@@ -339,6 +354,7 @@ async function sendCapsuleEmail(
   return sendResult({
     sent: accepted,
     skippedNoEmail: resolved.skippedNoEmail,
+    skippedNames: resolved.skippedNames,
     markedSent,
     error,
     reason: error && accepted === 0 ? "resend-error" : "ok",

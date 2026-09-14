@@ -1,10 +1,10 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState } from "react";
 import Link from "next/link";
 import { joinGroup, type JoinState } from "@/actions/join-group";
 import { PendingSubmitButton, useInstantBusy } from "@/components/pending-submit-button";
-import { ACCOUNT_PASSWORD_LABEL, JOIN_PIN_LABEL, PREFERRED_NAME_LABEL, groupDisplayName } from "@/lib/copy";
+import { JOIN_PIN_LABEL, PREFERRED_NAME_LABEL, groupDisplayName } from "@/lib/copy";
 
 export function JoinForm({
   uuid,
@@ -13,13 +13,12 @@ export function JoinForm({
   memberCount,
 }: {
   uuid?: string;
-  signedInAs?: string | null;
+  signedInAs: string;
   groupName?: string | null;
   memberCount?: number;
 }) {
   const [state, action, pending] = useActionState<JoinState, FormData>(joinGroup, null);
   const { busy, markBusy } = useInstantBusy(pending);
-  const [saveLogin, setSaveLogin] = useState(false);
   const title = groupName ? `Join ${groupDisplayName(groupName)}` : "Join";
 
   return (
@@ -69,7 +68,7 @@ export function JoinForm({
                 name="preferred_name"
                 maxLength={40}
                 required
-                defaultValue={signedInAs ?? ""}
+                defaultValue={signedInAs}
                 autoComplete="nickname"
               />
               <span className="field__hint">
@@ -77,45 +76,7 @@ export function JoinForm({
               </span>
             </label>
 
-            {signedInAs ? (
-              <p className="small muted">Signed in as {signedInAs}. This group will appear in Manage.</p>
-            ) : (
-              <>
-                <label className="check">
-                  <input
-                    type="checkbox"
-                    name="save_login"
-                    value="1"
-                    checked={saveLogin}
-                    onChange={(event) => setSaveLogin(event.target.checked)}
-                  />
-                  <span>Save my login so Manage can find this group</span>
-                </label>
-                {saveLogin ? (
-                  <>
-                    <label className="field">
-                      <span className="field__label">Email</span>
-                      <input className="input" name="email" type="email" required autoComplete="email" />
-                    </label>
-                    <label className="field">
-                      <span className="field__label">{ACCOUNT_PASSWORD_LABEL}</span>
-                      <input
-                        className="input"
-                        name="password"
-                        type="password"
-                        required
-                        minLength={8}
-                        autoComplete="new-password"
-                      />
-                    </label>
-                  </>
-                ) : (
-                  <p className="formnote">
-                    Skip to join this capsule only. Manage will not list it until you save a login.
-                  </p>
-                )}
-              </>
-            )}
+            <p className="small muted">Signed in as {signedInAs}. This group will appear in Manage.</p>
 
             {state?.error ? <p className="err">{state.error}</p> : null}
             <PendingSubmitButton
@@ -129,7 +90,7 @@ export function JoinForm({
         </div>
 
         <p className="center small muted">
-          Already in this group? <Link href="/">Sign in</Link>
+          Already in this group? <Link href="/manage">Open Manage</Link>
         </p>
       </div>
     </div>

@@ -88,6 +88,7 @@ describe("submit action error handling", () => {
     expect(source).toContain("collectPhotoFiles");
     expect(source).toContain('from "@/lib/photo-files"');
     expect(source).toContain('return { error: "Could not save." }');
+    expect(source).toContain("submitBlockedReason");
     expect(source).toMatch(/catch \(error\)/);
     expect(source).toContain("if (isRedirectError(error)) throw error");
   });

@@ -3,22 +3,26 @@
 import { useActionState } from "react";
 import { saveLogin, type SaveLoginState } from "@/actions/save-login";
 import { PendingSubmitButton, useInstantBusy } from "@/components/pending-submit-button";
+import { SAVE_LOGIN_REQUIRED_HEADING, SAVE_LOGIN_REQUIRED_HINT } from "@/lib/copy";
 
-export function SaveLoginForm({ groupId }: { groupId: string }) {
+export function SaveLoginForm({
+  groupId,
+  next,
+}: {
+  groupId: string;
+  next?: string;
+}) {
   const [state, action, pending] = useActionState<SaveLoginState, FormData>(saveLogin, null);
   const { busy, markBusy } = useInstantBusy(pending);
-
-  if (state?.ok) {
-    return <p className="small muted">Login saved. Manage will find this group.</p>;
-  }
 
   return (
     <form action={action} className="card stack" onSubmit={markBusy} aria-busy={busy || undefined}>
       <div className="stack stack--tight">
-        <h2>Save login</h2>
-        <p className="muted small">Optional. Email and password so Manage can find this group later.</p>
+        <h2>{SAVE_LOGIN_REQUIRED_HEADING}</h2>
+        <p className="muted small">{SAVE_LOGIN_REQUIRED_HINT}</p>
       </div>
       <input type="hidden" name="groupId" value={groupId} />
+      {next ? <input type="hidden" name="next" value={next} /> : null}
       <label className="field">
         <span className="field__label">Email</span>
         <input className="input" name="email" type="email" required autoComplete="email" />
