@@ -26,6 +26,20 @@ export const JOIN_PIN_LABEL = "Group PIN";
 export const ACCOUNT_PASSWORD_LABEL = "Password";
 export const PREFERRED_NAME_LABEL = "Preferred name";
 
+export const FORGOT_PASSWORD_LINK = "Forgot password?";
+export const FORGOT_PASSWORD_HEADING = "Reset your password";
+export const FORGOT_PASSWORD_LEDE =
+  "Enter the email for your Plain and Simple Monthly Capsule account. If we have it, we will send a reset link.";
+export const FORGOT_PASSWORD_ACK =
+  "If that email has an account, we sent a reset link.";
+export const FORGOT_PASSWORD_SUBMIT = "Send reset link";
+export const RESET_PASSWORD_HEADING = "Choose a new password";
+export const RESET_PASSWORD_LEDE =
+  "Pick a new password for your Plain and Simple Monthly Capsule account. Then you will be signed in.";
+export const RESET_PASSWORD_SUBMIT = "Set new password";
+export const RESET_LINK_INVALID = "This reset link is not valid. Request a new one.";
+export const RESET_REQUEST_NEW = "Request a new link";
+
 export const INVITE_HELPER =
   "Share the link. Type the PIN if you have it. We never show it again.";
 

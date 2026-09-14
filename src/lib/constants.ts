@@ -16,6 +16,11 @@ export const ACCOUNT_COOKIE = "capsule_account";
 export const LOGIN_ATTEMPT_WINDOW_MS = 15 * 60 * 1000;
 export const LOGIN_ATTEMPT_MAX = 5;
 
+export const PASSWORD_RESET_ATTEMPT_WINDOW_MS = 15 * 60 * 1000;
+export const PASSWORD_RESET_ATTEMPT_MAX = 5;
+export const RESET_TOKEN_BYTES = 32;
+export const RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
+
 export const DEFAULT_SUBMIT_START_DAY = 1;
 export const DEFAULT_SUBMIT_END_DAY = 8;
 export const DEFAULT_EMAIL_DAY = 9;

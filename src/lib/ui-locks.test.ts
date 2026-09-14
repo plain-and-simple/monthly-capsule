@@ -83,4 +83,10 @@ describe("privacy and chrome locks", () => {
     expect(source).toContain("membershipRoleLabel");
     expect(source).toContain("member.role");
   });
+
+  it("Manage login exposes Forgot password without redesigning the form", () => {
+    const source = readFileSync(resolve(here, "../components/manage-form.tsx"), "utf8");
+    expect(source).toContain("FORGOT_PASSWORD_LINK");
+    expect(source).toContain('href="/forgot"');
+  });
 });

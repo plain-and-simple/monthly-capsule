@@ -10,6 +10,10 @@ import {
   CYCLE_OPEN_EARLY,
   CYCLE_SECTION,
   CYCLE_SEND,
+  FORGOT_PASSWORD_ACK,
+  FORGOT_PASSWORD_HEADING,
+  FORGOT_PASSWORD_LEDE,
+  FORGOT_PASSWORD_LINK,
   JOIN_PIN_LABEL,
   LANDING_CREATE_LABEL,
   LANDING_CUT_PHRASES,
@@ -21,6 +25,8 @@ import {
   MANAGE_EMPTY_HINT,
   PREFERRED_NAME_LABEL,
   PRODUCT_NAME,
+  RESET_PASSWORD_HEADING,
+  RESET_PASSWORD_LEDE,
   ROLE_MEMBER_LABEL,
   ROLE_OWNER_LABEL,
   GROUP_EARLIER_CAPSULES,
@@ -106,6 +112,16 @@ describe("join and manage labels", () => {
     expect(MANAGE_CREATE_LABEL).toBe("Create");
     expect(ROLE_OWNER_LABEL).toBe("Owner");
     expect(ROLE_MEMBER_LABEL).toBe("Member");
+  });
+
+  it("brands password reset as Plain and Simple Monthly Capsule", () => {
+    expect(FORGOT_PASSWORD_LINK).toBe("Forgot password?");
+    expect(FORGOT_PASSWORD_HEADING).toBe("Reset your password");
+    expect(RESET_PASSWORD_HEADING).toBe("Choose a new password");
+    expect(FORGOT_PASSWORD_LEDE).toContain(PRODUCT_NAME);
+    expect(RESET_PASSWORD_LEDE).toContain(PRODUCT_NAME);
+    expect(FORGOT_PASSWORD_ACK).toBe("If that email has an account, we sent a reset link.");
+    expect(FORGOT_PASSWORD_LEDE).not.toMatch(/^Enter the email for your Monthly Capsule/);
   });
 
   it("locks closed-home capsule labels", () => {

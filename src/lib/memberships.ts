@@ -80,6 +80,23 @@ export async function authenticateAccount(
   return ok ? account : null;
 }
 
+export async function updateAccountPassword(
+  accountId: string,
+  passwordHash: string,
+): Promise<Account | null> {
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("accounts")
+    .update({ password_hash: passwordHash })
+    .eq("id", accountId)
+    .select("*")
+    .maybeSingle();
+  if (error || !data) {
+    return null;
+  }
+  return data as Account;
+}
+
 export async function linkMembership(input: {
   account: Account;
   groupId: string;
