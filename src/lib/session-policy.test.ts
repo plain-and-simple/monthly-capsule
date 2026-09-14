@@ -263,6 +263,8 @@ describe("open-group hang regression", () => {
     expect(form).not.toContain("openManagedGroup");
     expect(form).not.toContain("@/actions/open-group");
     expect(form).toContain("Opening…");
+    expect(form).toContain("onSubmit");
+    expect(form).not.toMatch(/disabled=\{clicked\}/);
 
     const page = readFileSync(resolve(here, "../app/(app)/manage/page.tsx"), "utf8");
     expect(page).toContain("decideOpenGroupUi");

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 import { initials } from "@/lib/group-status";
 import { OPEN_GROUP_PATH, type OpenGroupUiDecision } from "@/lib/session-policy";
 
@@ -39,38 +39,6 @@ function OpenGroupRow({
         )}
       </span>
     </>
-  );
-}
-
-function OpenGroupButton({
-  name,
-  roleLabel,
-  meta,
-  status,
-}: {
-  name: string;
-  roleLabel: string;
-  meta: string;
-  status: string;
-}) {
-  const [clicked, setClicked] = useState(false);
-
-  return (
-    <button
-      className="listitem"
-      type="submit"
-      disabled={clicked}
-      aria-busy={clicked || undefined}
-      onClick={() => setClicked(true)}
-    >
-      <OpenGroupRow
-        name={name}
-        roleLabel={roleLabel}
-        meta={meta}
-        status={status}
-        busy={clicked}
-      />
-    </button>
   );
 }
 
@@ -134,6 +102,8 @@ export function OpenGroupForm({
   meta: string;
   status: string;
 }) {
+  const [clicked, setClicked] = useState(false);
+
   if (open.action === "link") {
     return (
       <OpenGroupLink
@@ -147,9 +117,27 @@ export function OpenGroupForm({
   }
 
   return (
-    <form action={OPEN_GROUP_PATH} method="post">
+    <form
+      action={OPEN_GROUP_PATH}
+      method="post"
+      onSubmit={(event: FormEvent<HTMLFormElement>) => {
+        if (clicked) {
+          event.preventDefault();
+          return;
+        }
+        setClicked(true);
+      }}
+    >
       <input type="hidden" name="groupId" value={groupId} />
-      <OpenGroupButton name={name} roleLabel={roleLabel} meta={meta} status={status} />
+      <button className="listitem" type="submit" aria-busy={clicked || undefined}>
+        <OpenGroupRow
+          name={name}
+          roleLabel={roleLabel}
+          meta={meta}
+          status={status}
+          busy={clicked}
+        />
+      </button>
     </form>
   );
 }
