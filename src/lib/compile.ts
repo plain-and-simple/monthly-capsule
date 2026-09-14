@@ -195,26 +195,27 @@ export async function snapshotMonthArchive(
     ]),
   );
 
-  const letters: CapsuleArchiveLetter[] = [];
-  for (const submission of included) {
-    const { data: photos } = await admin
-      .from("photos")
-      .select("storage_path, width, height, sort_order")
-      .eq("submission_id", submission.id)
-      .order("sort_order", { ascending: true });
-    letters.push({
-      preferred_name: nameById.get(submission.member_id) || "Friend",
-      body: submission.body,
-      photos: ((photos ?? []) as Pick<Photo, "storage_path" | "width" | "height" | "sort_order">[]).map(
-        (photo, index) => ({
-          storage_path: photo.storage_path,
-          width: photo.width,
-          height: photo.height,
-          sort_order: photo.sort_order ?? index,
-        }),
-      ),
-    });
-  }
+  const letters: CapsuleArchiveLetter[] = await Promise.all(
+    included.map(async (submission) => {
+      const { data: photos } = await admin
+        .from("photos")
+        .select("storage_path, width, height, sort_order")
+        .eq("submission_id", submission.id)
+        .order("sort_order", { ascending: true });
+      return {
+        preferred_name: nameById.get(submission.member_id) || "Friend",
+        body: submission.body,
+        photos: ((photos ?? []) as Pick<Photo, "storage_path" | "width" | "height" | "sort_order">[]).map(
+          (photo, index) => ({
+            storage_path: photo.storage_path,
+            width: photo.width,
+            height: photo.height,
+            sort_order: photo.sort_order ?? index,
+          }),
+        ),
+      };
+    }),
+  );
 
   return buildCapsuleArchive({
     yearMonth,

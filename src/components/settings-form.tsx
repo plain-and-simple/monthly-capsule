@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 import { updateGroupName, updateSchedule, type SettingsState } from "@/actions/settings";
+import { PendingSubmitButton, useInstantBusy } from "@/components/pending-submit-button";
 import type { Group } from "@/lib/types";
 
 export function SettingsForm({ group }: { group: Group }) {
@@ -9,16 +10,23 @@ export function SettingsForm({ group }: { group: Group }) {
     updateSchedule,
     null,
   );
+  const { busy: scheduleBusy, markBusy: markScheduleBusy } = useInstantBusy(schedulePending);
   const [nameState, nameAction, namePending] = useActionState<SettingsState, FormData>(
     updateGroupName,
     null,
   );
+  const { busy: nameBusy, markBusy: markNameBusy } = useInstantBusy(namePending);
 
   return (
     <div className="stack stack--loose">
       <section className="stack">
         <h2>Cycle</h2>
-        <form action={scheduleAction} className="stack">
+        <form
+          action={scheduleAction}
+          className="stack"
+          onSubmit={markScheduleBusy}
+          aria-busy={scheduleBusy || undefined}
+        >
           <input type="hidden" name="groupId" value={group.id} />
           <div className="field-inline">
             <span className="small muted">Submit opens</span>
@@ -63,9 +71,13 @@ export function SettingsForm({ group }: { group: Group }) {
           {scheduleState?.error ? <p className="err">{scheduleState.error}</p> : null}
           {scheduleState?.ok ? <p className="small">Saved.</p> : null}
           <div>
-            <button className="btn btn--secondary" type="submit" disabled={schedulePending}>
-              {schedulePending ? "Saving…" : "Save cycle"}
-            </button>
+            <PendingSubmitButton
+              className="btn btn--secondary"
+              busy={scheduleBusy}
+              pendingLabel="Saving…"
+            >
+              Save cycle
+            </PendingSubmitButton>
           </div>
         </form>
       </section>
@@ -74,7 +86,12 @@ export function SettingsForm({ group }: { group: Group }) {
 
       <section className="stack">
         <h2>Group name</h2>
-        <form action={nameAction} className="stack">
+        <form
+          action={nameAction}
+          className="stack"
+          onSubmit={markNameBusy}
+          aria-busy={nameBusy || undefined}
+        >
           <input type="hidden" name="groupId" value={group.id} />
           <label className="field">
             <span className="field__label">Name</span>
@@ -83,9 +100,13 @@ export function SettingsForm({ group }: { group: Group }) {
           {nameState?.error ? <p className="err">{nameState.error}</p> : null}
           {nameState?.ok ? <p className="small">Saved.</p> : null}
           <div>
-            <button className="btn btn--secondary" type="submit" disabled={namePending}>
-              {namePending ? "Saving…" : "Save name"}
-            </button>
+            <PendingSubmitButton
+              className="btn btn--secondary"
+              busy={nameBusy}
+              pendingLabel="Saving…"
+            >
+              Save name
+            </PendingSubmitButton>
           </div>
         </form>
       </section>

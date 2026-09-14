@@ -1,6 +1,5 @@
-import { logoutAccount } from "@/actions/logout";
 import { Brand } from "@/components/brand";
-import { SIGN_OUT } from "@/lib/copy";
+import { SignOutButton } from "@/components/sign-out-button";
 
 export function AppHeader({
   name,
@@ -18,13 +17,7 @@ export function AppHeader({
         {name || showSignOut ? (
           <div className="topbar__account">
             {name ? <span>{name}</span> : null}
-            {showSignOut ? (
-              <form action={logoutAccount}>
-                <button type="submit" className="signout">
-                  {SIGN_OUT}
-                </button>
-              </form>
-            ) : null}
+            {showSignOut ? <SignOutButton /> : null}
           </div>
         ) : null}
       </div>

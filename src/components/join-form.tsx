@@ -3,6 +3,7 @@
 import { useActionState, useState } from "react";
 import Link from "next/link";
 import { joinGroup, type JoinState } from "@/actions/join-group";
+import { PendingSubmitButton, useInstantBusy } from "@/components/pending-submit-button";
 import { ACCOUNT_PASSWORD_LABEL, JOIN_PIN_LABEL, PREFERRED_NAME_LABEL, groupDisplayName } from "@/lib/copy";
 
 export function JoinForm({
@@ -17,6 +18,7 @@ export function JoinForm({
   memberCount?: number;
 }) {
   const [state, action, pending] = useActionState<JoinState, FormData>(joinGroup, null);
+  const { busy, markBusy } = useInstantBusy(pending);
   const [saveLogin, setSaveLogin] = useState(false);
   const title = groupName ? `Join ${groupDisplayName(groupName)}` : "Join";
 
@@ -34,7 +36,7 @@ export function JoinForm({
         </div>
 
         <div className="card card--pad-lg">
-          <form action={action} className="stack">
+          <form action={action} className="stack" onSubmit={markBusy} aria-busy={busy || undefined}>
             {uuid ? (
               <input type="hidden" name="uuid" value={uuid} />
             ) : (
@@ -116,9 +118,13 @@ export function JoinForm({
             )}
 
             {state?.error ? <p className="err">{state.error}</p> : null}
-            <button className="btn btn--primary btn--block btn--lg" type="submit" disabled={pending}>
-              {pending ? "Joining…" : title}
-            </button>
+            <PendingSubmitButton
+              className="btn btn--primary btn--block btn--lg"
+              busy={busy}
+              pendingLabel="Joining…"
+            >
+              {title}
+            </PendingSubmitButton>
           </form>
         </div>
 
