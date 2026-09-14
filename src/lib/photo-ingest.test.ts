@@ -3,6 +3,25 @@ import { MAX_PHOTO_BYTES, MAX_PHOTO_EDGE_PX } from "./constants";
 import { PHOTO_COMPRESS_FAILED, PHOTO_TOO_LARGE } from "./photo-compress";
 import { compressPhotoForStorage } from "./photo-ingest";
 
+async function makeNoisySource(width: number, height: number, exifText?: string) {
+  const sharp = (await import("sharp")).default;
+  const raw = Buffer.alloc(width * height * 3);
+  for (let i = 0; i < raw.length; i += 1) {
+    raw[i] = (i * 13 + 47) % 256;
+  }
+  let pipeline = sharp(raw, { raw: { width, height, channels: 3 } }).jpeg({ quality: 95 });
+  if (exifText) {
+    pipeline = sharp(await pipeline.toBuffer())
+      .withMetadata({
+        exif: {
+          IFD0: { ImageDescription: exifText },
+        },
+      })
+      .jpeg({ quality: 95 });
+  }
+  return pipeline.toBuffer();
+}
+
 async function makeSource(options?: { width?: number; height?: number; exifText?: string }) {
   const sharp = (await import("sharp")).default;
   const width = options?.width ?? 2400;
@@ -17,11 +36,13 @@ async function makeSource(options?: { width?: number; height?: number; exifText?
   }).jpeg({ quality: 95 });
 
   if (options?.exifText) {
-    pipeline = sharp(await pipeline.toBuffer()).withMetadata({
-      exif: {
-        IFD0: { ImageDescription: options.exifText },
-      },
-    }).jpeg({ quality: 95 });
+    pipeline = sharp(await pipeline.toBuffer())
+      .withMetadata({
+        exif: {
+          IFD0: { ImageDescription: options.exifText },
+        },
+      })
+      .jpeg({ quality: 95 });
   }
 
   return pipeline.toBuffer();
@@ -69,5 +90,21 @@ describe("server photo ingest", () => {
   it("does not keep the original when the payload is empty", async () => {
     await expect(compressPhotoForStorage(Buffer.alloc(0))).rejects.toThrow(PHOTO_COMPRESS_FAILED);
     await expect(compressPhotoForStorage(Buffer.alloc(0))).rejects.not.toThrow(PHOTO_TOO_LARGE);
+  });
+
+  it("compresses a phone-sized original under 1 MB and drops EXIF", async () => {
+    const marker = "CAMERA-ORIGINAL-EXIF";
+    const input = await makeNoisySource(4032, 3024, marker);
+    expect(input.length).toBeGreaterThan(MAX_PHOTO_BYTES);
+    expect(input.includes(Buffer.from(marker))).toBe(true);
+
+    const out = await compressPhotoForStorage(input);
+    expect(out.contentType).toBe("image/webp");
+    expect(out.bytes).toBeLessThanOrEqual(MAX_PHOTO_BYTES);
+    expect(out.width).toBe(1600);
+    expect(out.height).toBe(1200);
+    expect(out.buffer.equals(input)).toBe(false);
+    expect(out.buffer.includes(Buffer.from(marker))).toBe(false);
+    expect(out.bytes).toBeLessThan(input.length / 4);
   });
 });
