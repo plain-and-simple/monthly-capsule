@@ -13,7 +13,7 @@ export function mapSignedUrlRows(
     result.set(path, null);
   }
   for (const row of rows ?? []) {
-    if (!row.path || row.error || !row.signedUrl) continue;
+    if (!row.path || !result.has(row.path) || row.error || !row.signedUrl) continue;
     result.set(row.path, row.signedUrl);
   }
   return result;
