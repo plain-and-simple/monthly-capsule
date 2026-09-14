@@ -27,6 +27,7 @@ import {
   forceOpenYearMonth,
   isCycleSubmitOpen,
 } from "@/lib/cycle";
+import { ownerEmailFailed } from "@/lib/email-policy";
 import { holdGroupMonthEmail, sendGroupMonthEmail } from "@/lib/email";
 import { forceCloseConfirmAccepted } from "@/lib/manage";
 import { capsuleHref, planForceOpen } from "@/lib/month-version";
@@ -164,11 +165,8 @@ export async function emailGroupNow(
     if (result.reason === "no-capsule" || result.reason === "no-month") {
       return { error: CYCLE_NO_CAPSULE };
     }
-    if (result.reason === "no-resend-key" || result.reason === "bad-from") {
-      return { error: result.error || result.message };
-    }
-    if (result.reason === "resend-error" && result.sent === 0) {
-      return { error: result.message };
+    if (ownerEmailFailed(result)) {
+      return { error: result.error || result.message || "Could not send." };
     }
     revalidateGroup(groupId, yearMonth, version);
     return { ok: true, message: result.message || CYCLE_SENT };

@@ -1,7 +1,24 @@
 import { groupDisplayName } from "@/lib/copy";
 
-export function capsuleEmailSubject(groupName: string, monthLabel: string): string {
-  return `${groupDisplayName(groupName)} — ${monthLabel}`;
+export const CAPSULE_EMAIL_SUBJECT = "Your monthly capsule is ready";
+
+export function capsuleEmailSubject(_groupName?: string, _monthLabel?: string): string {
+  return CAPSULE_EMAIL_SUBJECT;
+}
+
+export function capsuleEmailText(input: {
+  groupName: string;
+  monthLabel: string;
+  link: string;
+}): string {
+  const name = groupDisplayName(input.groupName);
+  return [
+    CAPSULE_EMAIL_SUBJECT,
+    "",
+    `${input.monthLabel} — ${name}`,
+    "",
+    `Read the whole capsule: ${input.link}`,
+  ].join("\n");
 }
 
 export function capsuleEmailHtml(input: {

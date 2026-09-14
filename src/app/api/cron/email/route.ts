@@ -10,6 +10,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const results = await sendDueCapsuleEmails();
-  return NextResponse.json({ ok: true, results });
+  const dryRun = new URL(request.url).searchParams.get("dry") === "1";
+  const results = await sendDueCapsuleEmails(new Date(), { dryRun });
+  return NextResponse.json({ ok: true, dryRun, results });
 }
