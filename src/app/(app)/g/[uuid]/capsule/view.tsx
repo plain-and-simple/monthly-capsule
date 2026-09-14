@@ -75,8 +75,13 @@ export async function CapsuleView({
             ← {name}
           </Link>
 
-          {canForceCycle(viewer.role) && !capsule.email_sent_at ? (
-            <EmailGroupForm groupId={uuid} yearMonth={yearMonth} version={month.version} />
+          {canForceCycle(viewer.role) ? (
+            <EmailGroupForm
+              groupId={uuid}
+              yearMonth={yearMonth}
+              version={month.version}
+              alreadySent={Boolean(capsule.email_sent_at)}
+            />
           ) : null}
 
           <article className="capsule">

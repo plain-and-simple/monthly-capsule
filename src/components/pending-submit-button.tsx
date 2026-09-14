@@ -3,29 +3,52 @@
 import { useEffect, useState, type ButtonHTMLAttributes, type ReactNode } from "react";
 import { useFormStatus } from "react-dom";
 
-export function useInstantBusy(pending: boolean) {
+export function useInstantBusy(pending: boolean, stuckMs?: number) {
   const [held, setHeld] = useState(false);
+  const [stuck, setStuck] = useState(false);
 
   useEffect(() => {
-    if (pending) setHeld(true);
-    else setHeld(false);
+    if (pending) {
+      setHeld(true);
+      setStuck(false);
+    } else {
+      setHeld(false);
+    }
   }, [pending]);
 
+  useEffect(() => {
+    if (stuck) return;
+    if (!held && !pending) return;
+    const wait = pending ? stuckMs : 2_500;
+    if (!wait) return;
+    const timer = window.setTimeout(() => {
+      setHeld(false);
+      if (pending) setStuck(true);
+    }, wait);
+    return () => window.clearTimeout(timer);
+  }, [held, pending, stuckMs, stuck]);
+
   return {
-    busy: held || pending,
-    markBusy: () => setHeld(true),
+    busy: stuck ? false : held || pending,
+    stuck,
+    markBusy: () => {
+      setStuck(false);
+      setHeld(true);
+    },
   };
 }
 
 type PendingSubmitButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   pendingLabel: string;
   busy?: boolean;
+  ignorePending?: boolean;
   children: ReactNode;
 };
 
 export function PendingSubmitButton({
   pendingLabel,
   busy: busyProp = false,
+  ignorePending = false,
   children,
   className,
   disabled,
@@ -36,15 +59,15 @@ export function PendingSubmitButton({
 }: PendingSubmitButtonProps) {
   const { pending, data } = useFormStatus();
   const [clicked, setClicked] = useState(false);
-  const busy = pending || clicked || busyProp;
+  const busy = ignorePending ? false : pending || clicked || busyProp;
   const isSubmitter =
     clicked ||
     name == null ||
     Boolean(pending && data && data.get(name) === String(value ?? ""));
 
   useEffect(() => {
-    if (!pending && !busyProp) setClicked(false);
-  }, [pending, busyProp]);
+    if (ignorePending || (!pending && !busyProp)) setClicked(false);
+  }, [pending, busyProp, ignorePending]);
 
   return (
     <button

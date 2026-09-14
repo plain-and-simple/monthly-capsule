@@ -3,8 +3,10 @@ import {
   CYCLE_ALREADY_OPEN,
   CYCLE_ALREADY_SENT,
   CYCLE_CONFIRM_CLOSE,
+  CYCLE_EMAIL_TIMEOUT,
   CYCLE_OWNER_ONLY,
   CYCLE_VERSION_CAP,
+  confirmResendAccepted,
   decideForceClose,
   decideForceEmail,
   decideForceOpen,
@@ -14,6 +16,7 @@ import {
   forceOpenStillActive,
   forceOpenYearMonth,
   isCycleSubmitOpen,
+  isNextRedirectError,
   nextClosedToOpenYearMonth,
   openSubmitYearMonth,
   type CycleGroup,
@@ -131,12 +134,15 @@ describe("F4 force close compiles the open period", () => {
 });
 
 describe("F5 / F6 email send vs skip", () => {
-  it("owner can send once; already sent blocks a second send", () => {
+  it("owner can send once; already sent needs confirm to resend", () => {
     expect(decideForceEmail("owner", { email_sent_at: null })).toBe("send");
     expect(decideForceEmail("owner", { email_sent_at: "2026-09-09T12:00:00Z" })).toBe(
       "already_sent",
     );
-    expect(CYCLE_ALREADY_SENT).toBe("Already sent.");
+    expect(decideForceEmail("owner", { email_sent_at: "2026-09-09T12:00:00Z" }, true)).toBe(
+      "resend",
+    );
+    expect(CYCLE_ALREADY_SENT).toBe("Already emailed — confirm Send again to resend.");
   });
 
   it("Not now holds; missing capsule cannot skip", () => {
@@ -146,6 +152,17 @@ describe("F5 / F6 email send vs skip", () => {
     );
     expect(decideForceEmail("owner", null)).toBe("no_capsule");
     expect(decideForceSkip("owner", null)).toBe("no_capsule");
+    expect(confirmResendAccepted("1")).toBe(true);
+    expect(confirmResendAccepted("0")).toBe(false);
+  });
+});
+
+describe("server action errors must not spin the owner UI forever", () => {
+  it("rethrows only Next.js redirects, not other digest errors", () => {
+    expect(isNextRedirectError({ digest: "NEXT_REDIRECT;replace;/join/x;307;" })).toBe(true);
+    expect(isNextRedirectError({ digest: "abc123@E394" })).toBe(false);
+    expect(isNextRedirectError(new Error("Resend failed"))).toBe(false);
+    expect(CYCLE_EMAIL_TIMEOUT).toBe("Email send timed out. Try again.");
   });
 });
 

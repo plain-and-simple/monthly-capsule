@@ -10,9 +10,12 @@ import {
   formatCapsuleSendResult,
   formatSkippedNoEmail,
   previewCapsuleSend,
+  RESEND_SEND_TIMEOUT_MS,
+  RESEND_TIMEOUT_MESSAGE,
   resendSendAccepted,
   sentEmailUpdate,
   shouldMarkCapsuleEmailed,
+  withTimeout,
 } from "@/lib/email-policy";
 import { nextOpenPhrase } from "@/lib/group-status";
 import { resolveCapsuleRecipients } from "@/lib/recipients";
@@ -136,7 +139,7 @@ export async function sendDueCapsuleEmails(
 export async function sendGroupMonthEmail(
   group: Group,
   yearMonth: string,
-  opts: { cron?: boolean; version?: number; dryRun?: boolean } = {},
+  opts: { cron?: boolean; version?: number; dryRun?: boolean; forceResend?: boolean } = {},
 ) {
   const { month, capsule } = await findGroupCapsule(group.id, yearMonth, opts.version);
   if (!month) {
@@ -167,7 +170,7 @@ export async function sendGroupMonthEmail(
       reason: capsule.email_sent_at ? "already-sent" : "held",
     });
   }
-  if (capsule.email_sent_at) {
+  if (capsule.email_sent_at && !opts.forceResend) {
     return sendResult({
       sent: 0,
       skippedNoEmail: 0,
@@ -177,7 +180,10 @@ export async function sendGroupMonthEmail(
     });
   }
 
-  return sendCapsuleEmail(group, month as Month, capsule as Capsule, { dryRun: opts.dryRun });
+  return sendCapsuleEmail(group, month as Month, capsule as Capsule, {
+    dryRun: opts.dryRun,
+    forceResend: opts.forceResend,
+  });
 }
 
 export async function holdGroupMonthEmail(groupId: string, yearMonth: string, version?: number) {
@@ -200,7 +206,7 @@ async function sendCapsuleEmail(
   group: Group,
   month: Month,
   capsule: Capsule,
-  opts: { dryRun?: boolean } = {},
+  opts: { dryRun?: boolean; forceResend?: boolean } = {},
 ) {
   const admin = createAdminClient();
   const { data: members } = await admin.from("members").select("*").eq("group_id", group.id);
@@ -307,17 +313,28 @@ async function sendCapsuleEmail(
   const resend = new Resend(key);
   let accepted = 0;
   let error: string | null = null;
+  const sendDeadline = Date.now() + RESEND_SEND_TIMEOUT_MS;
   for (const to of resolved.emails) {
+    const remaining = sendDeadline - Date.now();
+    if (remaining <= 0) {
+      error = RESEND_TIMEOUT_MESSAGE;
+      console.error("capsule email resend rejected", { capsuleId: capsule.id, to, error });
+      break;
+    }
     try {
       // Inbox avatar is not set here: Resend's send API has no sender-avatar
       // field (BIMI / Gravatar / provider profile only). From display is Capsule.
-      const result = await resend.emails.send({
-        from: from.from,
-        to: [to],
-        subject,
-        html,
-        text,
-      });
+      const result = await withTimeout(
+        resend.emails.send({
+          from: from.from,
+          to: [to],
+          subject,
+          html,
+          text,
+        }),
+        remaining,
+        RESEND_TIMEOUT_MESSAGE,
+      );
       const interpreted = resendSendAccepted(result);
       if (interpreted.ok) {
         accepted += 1;
@@ -337,11 +354,14 @@ async function sendCapsuleEmail(
     accepted,
   });
   if (markedSent) {
-    await admin
+    let stamped = admin
       .from("capsules")
       .update(sentEmailUpdate(new Date().toISOString()))
-      .eq("id", capsule.id)
-      .is("email_sent_at", null);
+      .eq("id", capsule.id);
+    if (!opts.forceResend) {
+      stamped = stamped.is("email_sent_at", null);
+    }
+    await stamped;
   } else {
     console.error("capsule email not stamped", {
       capsuleId: capsule.id,

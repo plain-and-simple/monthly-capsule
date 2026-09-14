@@ -34,8 +34,15 @@ describe("pending mutation UI", () => {
   it("shows busy on force-cycle, regen, and group open", () => {
     const cycle = source("src/components/cycle-form.tsx");
     expect(cycle).toContain('pendingLabel="Working…"');
-    expect(cycle).toContain('pendingLabel="Sending…"');
+    expect(cycle).toContain("OwnerEmailSubmit");
     expect(cycle).toContain('pendingLabel="Opening…"');
+    const email = source("src/components/email-group-form.tsx");
+    expect(email).toContain('pendingLabel="Sending…"');
+    expect(email).toContain("confirmResend");
+    expect(email).toContain("ignorePending");
+    expect(email).toContain("EMAIL_PENDING_GUARD_MS");
+    expect(source("src/components/pending-submit-button.tsx")).toContain("ignorePending");
+    expect(source("src/app/(app)/g/[uuid]/capsule/view.tsx")).toContain("alreadySent");
     expect(source("src/components/regen-pin-form.tsx")).toContain('pendingLabel="Making…"');
     expect(source("src/components/open-group-form.tsx")).toContain("Opening…");
     expect(source("src/app/(app)/manage/page.tsx")).toContain("OpenGroupForm");

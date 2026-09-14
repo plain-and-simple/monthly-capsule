@@ -10,6 +10,7 @@ import {
   type ForceCloseState,
   type ForceOpenState,
 } from "@/actions/cycle";
+import { OwnerEmailSubmit } from "@/components/email-group-form";
 import { PendingSubmitButton, useInstantBusy } from "@/components/pending-submit-button";
 import {
   CYCLE_CLOSE_COMPILE,
@@ -51,7 +52,6 @@ export function CycleForm({
     emailGroupNow,
     null,
   );
-  const { busy: emailBusy, markBusy: markEmailBusy } = useInstantBusy(emailPending);
   const [skipState, skipAction, skipPending] = useActionState<CycleEmailState, FormData>(
     skipGroupEmail,
     null,
@@ -77,22 +77,17 @@ export function CycleForm({
               </h2>
               <p className="muted small">{CYCLE_EMAIL_PROMPT}</p>
             </div>
-            {emailState?.error ? <p className="err">{emailState.error}</p> : null}
             {skipState?.error ? <p className="err">{skipState.error}</p> : null}
-            <form action={emailAction} onSubmit={markEmailBusy} aria-busy={emailBusy || undefined}>
-              <input type="hidden" name="groupId" value={groupId} />
-              <input type="hidden" name="yearMonth" value={askYearMonth} />
-              {askVersion != null ? (
-                <input type="hidden" name="version" value={String(askVersion)} />
-              ) : null}
-              <PendingSubmitButton
-                className="btn btn--primary btn--block"
-                busy={emailBusy}
-                pendingLabel="Sending…"
-              >
-                {CYCLE_SEND}
-              </PendingSubmitButton>
-            </form>
+            <OwnerEmailSubmit
+              groupId={groupId}
+              yearMonth={askYearMonth}
+              version={askVersion ?? undefined}
+              action={emailAction}
+              state={emailState}
+              pending={emailPending}
+              label={CYCLE_SEND}
+              buttonClass="btn btn--primary btn--block"
+            />
             <form action={skipAction} onSubmit={markSkipBusy} aria-busy={skipBusy || undefined}>
               <input type="hidden" name="groupId" value={groupId} />
               <input type="hidden" name="yearMonth" value={askYearMonth} />
@@ -128,20 +123,16 @@ export function CycleForm({
               <p className="muted small">Everyone can read it on the site.</p>
             </div>
             <div className="row">
-              <form action={emailAction} onSubmit={markEmailBusy} aria-busy={emailBusy || undefined}>
-                <input type="hidden" name="groupId" value={groupId} />
-                <input type="hidden" name="yearMonth" value={later.yearMonth} />
-                <input type="hidden" name="version" value={String(later.version)} />
-                {emailState?.error && !showEmailPrompt ? <p className="err">{emailState.error}</p> : null}
-                {emailState?.ok && !showEmailPrompt ? <p>{emailState.message}</p> : null}
-                <PendingSubmitButton
-                  className="btn btn--primary"
-                  busy={emailBusy}
-                  pendingLabel="Sending…"
-                >
-                  {CYCLE_EMAIL_LATER}
-                </PendingSubmitButton>
-              </form>
+              <OwnerEmailSubmit
+                groupId={groupId}
+                yearMonth={later.yearMonth}
+                version={later.version}
+                action={emailAction}
+                state={emailState}
+                pending={emailPending}
+                label={CYCLE_EMAIL_LATER}
+                buttonClass="btn btn--primary"
+              />
             </div>
           </div>
         </div>
