@@ -221,6 +221,8 @@ async function sendCapsuleEmail(group: Group, month: Month, capsule: Capsule) {
   let error: string | null = null;
   for (const to of resolved.emails) {
     try {
+      // Inbox avatar is not set here: Resend's send API has no sender-avatar
+      // field (BIMI / Gravatar / provider profile only). From stays as-is.
       const result = await resend.emails.send({
         from: from.from,
         to,
