@@ -18,6 +18,7 @@ describe("capsule email", () => {
     });
     expect(html).toContain("The plum tree finally did something.");
     expect(html).toContain("Read the whole capsule");
+    expect(html).toContain("PDF keepsake attached when available");
     expect(html).toContain("October 10");
     expect(html).not.toContain("Theo");
   });

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { EmailGroupForm } from "@/components/email-group-form";
 import { parseCapsuleArchive } from "@/lib/capsule-archive";
+import { DOWNLOAD_PDF_LABEL, capsulePdfHref } from "@/lib/capsule-pdf";
 import { ensureCapsuleArchive, findMonthEdition } from "@/lib/compile";
 import { groupDisplayName } from "@/lib/copy";
 import { initials } from "@/lib/group-status";
@@ -89,6 +90,11 @@ export async function CapsuleView({
                 {letters.length > 0
                   ? ` from ${letters.map((letter) => letter.preferred_name).join(", ")}`
                   : ""}
+              </p>
+              <p className="capsule__keepsake">
+                <a className="text-link" href={capsulePdfHref(uuid, yearMonth, month.version)}>
+                  {DOWNLOAD_PDF_LABEL}
+                </a>
               </p>
               {letters.length > 0 ? (
                 <ul className="capsule__contents">

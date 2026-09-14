@@ -855,6 +855,20 @@ button.listitem:hover {
   margin: 0.6rem 0 0.5rem;
 }
 
+.capsule__keepsake {
+  margin: 0.85rem 0 0;
+}
+
+.text-link {
+  color: var(--accent, #24473c);
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
+}
+
+.text-link:hover {
+  color: var(--ink);
+}
+
 .capsule__contents {
   list-style: none;
   margin: 1.5rem 0 0;

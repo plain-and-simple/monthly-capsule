@@ -32,7 +32,7 @@ export function capsuleEmailHtml(input: {
       <p style="margin:0;letter-spacing:0.14em;text-transform:uppercase;font-size:11px;color:#7b7268">${escapeHtml(name)}</p>
       <h1 style="margin:8px 0 8px;font-family:Georgia,serif;font-size:28px;line-height:1.15">${escapeHtml(input.monthLabel)}</h1>
       <p style="margin:0 0 16px;color:#7b7268;font-size:14px">${count} ${letterWord}.</p>
-      <p style="margin:0 0 20px"><a href="${escapeAttr(input.link)}" style="color:#24473c">Read the whole capsule</a></p>
+      <p style="margin:0 0 20px"><a href="${escapeAttr(input.link)}" style="color:#24473c">Read the whole capsule</a> · PDF keepsake attached when available.</p>
       ${letterBlocks || `<p style="color:#7b7268">No letters this month.</p>`}
       <p style="margin:24px 0 0;color:#7b7268;font-size:13px;text-align:center">You get this because you are in ${escapeHtml(name)}. Writing opens again on ${escapeHtml(input.nextOpen)}.</p>
     </div>

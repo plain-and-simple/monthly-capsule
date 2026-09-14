@@ -3,6 +3,8 @@ import { Resend } from "resend";
 import { capsuleEmailHtml, capsuleEmailSubject } from "@/lib/capsule-email";
 import { parseCapsuleArchive } from "@/lib/capsule-archive";
 import { appUrl, resendApiKey, resendFromEmail } from "@/lib/env";
+import { ensureCapsulePdf } from "@/lib/capsule-pdf-store";
+import { PDF_CONTENT_TYPE } from "@/lib/capsule-pdf";
 import {
   capsuleFromHeader,
   cronShouldSendCapsule,
@@ -216,6 +218,35 @@ async function sendCapsuleEmail(group: Group, month: Month, capsule: Capsule) {
     });
   }
 
+  let pdfAttachment:
+    | { filename: string; content: Buffer; contentType: string }
+    | undefined;
+  if (archive) {
+    try {
+      const pdf = await ensureCapsulePdf({
+        capsuleId: capsule.id,
+        groupId: group.id,
+        groupName: group.name,
+        yearMonth: month.year_month,
+        version: edition,
+        archive,
+        pdfStoragePath: capsule.pdf_storage_path,
+      });
+      if (pdf) {
+        pdfAttachment = {
+          filename: pdf.filename,
+          content: Buffer.from(pdf.bytes),
+          contentType: PDF_CONTENT_TYPE,
+        };
+      }
+    } catch (caught) {
+      console.error(
+        "capsule pdf attach failed",
+        caught instanceof Error ? caught.message : caught,
+      );
+    }
+  }
+
   const resend = new Resend(key);
   let accepted = 0;
   let error: string | null = null;
@@ -226,6 +257,17 @@ async function sendCapsuleEmail(group: Group, month: Month, capsule: Capsule) {
         to,
         subject,
         html,
+        ...(pdfAttachment
+          ? {
+              attachments: [
+                {
+                  filename: pdfAttachment.filename,
+                  content: pdfAttachment.content,
+                  contentType: pdfAttachment.contentType,
+                },
+              ],
+            }
+          : {}),
       });
       const interpreted = resendSendAccepted(result);
       if (interpreted.ok) {
