@@ -184,6 +184,14 @@ describe("send preview / owner failure", () => {
 const here = dirname(fileURLToPath(import.meta.url));
 
 describe("send path must not stamp blindly", () => {
+  it("send path does not set a Resend avatar", () => {
+    const source = readFileSync(resolve(here, "./email.ts"), "utf8");
+    const sendAt = source.indexOf("resend.emails.send");
+    const sendBlock = source.slice(sendAt, source.indexOf("resendSendAccepted", sendAt));
+    expect(sendAt).toBeGreaterThan(-1);
+    expect(sendBlock).not.toMatch(/\b(avatar|logo)\s*:/);
+  });
+
   it("checks Resend accept and recipient resolution before sentEmailUpdate", () => {
     const source = readFileSync(resolve(here, "./email.ts"), "utf8");
     expect(source).toContain("resolveCapsuleRecipients");

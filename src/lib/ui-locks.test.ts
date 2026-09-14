@@ -22,6 +22,35 @@ describe("submit model A UI", () => {
   });
 });
 
+describe("brand chrome locks", () => {
+  it("header mark is icon + PS, not the full wordmark", () => {
+    const brand = readFileSync(resolve(here, "../components/brand.tsx"), "utf8");
+    expect(brand).toContain("CapsuleSeal");
+    expect(brand).toContain("CHROME_MARK");
+    expect(brand).not.toContain("Plain and Simple");
+    expect(brand).not.toContain("Monthly Capsule");
+  });
+
+  it("page title stays the full product name", () => {
+    const layout = readFileSync(resolve(here, "../app/layout.tsx"), "utf8");
+    expect(layout).toContain('default: "Plain and Simple Monthly Capsule"');
+    expect(layout).toContain('template: "%s · Plain and Simple Monthly Capsule"');
+  });
+
+  it("favicon and apple-touch are icon-only assets", () => {
+    const icon = readFileSync(resolve(here, "../app/icon.svg"), "utf8");
+    expect(icon).toContain("rx=\"7\"");
+    expect(icon).toContain("<circle");
+    expect(icon).not.toContain("envelope");
+    expect(icon).not.toMatch(/M\s*\d+\s+\d+\s+L\s*16\s+\d+\s+L\s*\d+\s+\d+/i);
+
+    const apple = readFileSync(resolve(here, "../app/apple-icon.png"));
+    expect(apple.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))).toBe(
+      true,
+    );
+  });
+});
+
 describe("privacy and chrome locks", () => {
   it("People does not name who has not written", () => {
     const source = readFileSync(resolve(here, "../app/(app)/g/[uuid]/people/page.tsx"), "utf8");

@@ -148,37 +148,18 @@ select {
 }
 
 .brand__mark {
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  border: 1.5px solid var(--accent);
-  position: relative;
+  width: 32px;
+  height: 32px;
   flex: none;
-}
-
-.brand__mark::after {
-  content: "";
-  position: absolute;
-  inset: 4px;
-  border-radius: 50%;
-  background: var(--accent);
-  opacity: 0.18;
+  display: block;
 }
 
 .brand__name {
   font-family: var(--font-serif);
-  font-size: 0.95rem;
-  letter-spacing: 0.01em;
-  line-height: 1.2;
-}
-
-.brand__name b {
+  font-size: 1.05rem;
   font-weight: 600;
-}
-
-.brand__name span {
-  color: var(--muted);
-  font-weight: 400;
+  letter-spacing: 0.08em;
+  line-height: 1;
 }
 
 .topbar__account {
