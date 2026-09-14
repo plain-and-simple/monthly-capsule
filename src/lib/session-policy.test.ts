@@ -80,6 +80,15 @@ describe("single-group manage redirect", () => {
 });
 
 describe("RSC cookie-write regression", () => {
+  it("GET /submit does not call cookies().set helpers during render", () => {
+    const page = readFileSync(resolve(here, "../app/(app)/g/[uuid]/submit/page.tsx"), "utf8");
+    expect(page).not.toMatch(/\bsetSession\b/);
+    expect(page).not.toMatch(/\bsetAccountSession\b/);
+    expect(page).not.toMatch(/\bclearAccountSession\b/);
+    expect(page).not.toMatch(/\bclearSession\b/);
+    expect(page).not.toMatch(/cookies\(\)\.set/);
+  });
+
   it("GET /manage does not call cookies().set helpers during render", () => {
     const page = readFileSync(resolve(here, "../app/(app)/manage/page.tsx"), "utf8");
     expect(page).not.toMatch(/\bsetSession\b/);

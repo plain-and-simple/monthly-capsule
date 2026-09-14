@@ -13,6 +13,13 @@ describe("submit model A UI", () => {
     expect(source).toContain('value="draft"');
     expect(source).toContain('value="submit"');
   });
+
+  it("posts groupId without relying on the JS wrapper", () => {
+    const source = readFileSync(resolve(here, "../components/submit-form.tsx"), "utf8");
+    expect(source).toContain('name="groupId"');
+    expect(source).toContain("return action(formData)");
+    expect(source).toContain("new File");
+  });
 });
 
 describe("privacy and chrome locks", () => {

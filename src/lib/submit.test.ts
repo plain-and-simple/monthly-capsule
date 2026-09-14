@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   includedSubmissions,
@@ -8,6 +11,8 @@ import {
   writtenCount,
   writtenCountPhrase,
 } from "./submit";
+
+const here = dirname(fileURLToPath(import.meta.url));
 
 describe("submit model A", () => {
   it("treats blank intent as submit", () => {
@@ -73,5 +78,17 @@ describe("submit model A", () => {
     });
     expect(edited.status).toBe("submitted");
     expect(edited.submitted_at).toBeUndefined();
+  });
+});
+
+describe("submit action error handling", () => {
+  it("catches unhandled save failures instead of throwing a digest 500", () => {
+    const source = readFileSync(resolve(here, "../actions/submit.ts"), "utf8");
+    expect(source).toContain("function isRedirectError");
+    expect(source).toContain("collectPhotoFiles");
+    expect(source).toContain('from "@/lib/photo-files"');
+    expect(source).toContain('return { error: "Could not save." }');
+    expect(source).toMatch(/catch \(error\)/);
+    expect(source).toContain("if (isRedirectError(error)) throw error");
   });
 });
