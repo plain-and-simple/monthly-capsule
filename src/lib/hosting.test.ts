@@ -19,10 +19,11 @@ describe("hosting lock", () => {
     expect(url.pathname).toBe("/");
   });
 
-  it("raises the Server Action body limit so 6 photos can post (Next.js E394)", () => {
+  it("raises the Server Action body limit so 6 compressed photos can post (Next.js E394)", () => {
     const source = readFileSync(resolve(here, "../../next.config.ts"), "utf8");
     expect(source).toContain('bodySizeLimit: "16mb"');
     expect(source).toContain("E394");
+    expect(source).toContain("Do not lower");
   });
 
   it("keeps the session cookie host-only (no parent Domain)", () => {

@@ -4,7 +4,9 @@ import { revalidatePath } from "next/cache";
 import { submitBlockedReason } from "@/lib/account";
 import { MAX_PHOTOS, PHOTO_BUCKET } from "@/lib/constants";
 import { ensureMonth } from "@/lib/compile";
-import { collectPhotoFiles, photoContentType, validatePhotoList } from "@/lib/photo-files";
+import { PhotoCompressError, storedPhotoExtension } from "@/lib/photo-compress";
+import { collectPhotoFiles, validatePhotoList } from "@/lib/photo-files";
+import { compressPhotoForStorage } from "@/lib/photo-ingest";
 import { deleteStoredPhotos } from "@/lib/photos";
 import { resolveSubmitWindow } from "@/lib/cycle-store";
 import { requireGroupMember } from "@/lib/session";
@@ -30,8 +32,6 @@ export async function submitLetter(
     const body = String(formData.get("body") ?? "").trim();
     const intent = parseSubmitIntent(formData.get("intent"));
     const files = collectPhotoFiles(formData);
-    const widths = formData.getAll("widths").map((value) => Number(value));
-    const heights = formData.getAll("heights").map((value) => Number(value));
 
     if (body.length > 20_000) {
       return { error: "Letter is too long." };
@@ -91,6 +91,17 @@ export async function submitLetter(
     }
 
     if (files.length > 0) {
+      const compressed = [];
+      for (const file of files.slice(0, MAX_PHOTOS)) {
+        try {
+          compressed.push(await compressPhotoForStorage(Buffer.from(await file.arrayBuffer())));
+        } catch (error) {
+          const message =
+            error instanceof PhotoCompressError ? error.message : "Could not compress that photo. Try another.";
+          return { error: message };
+        }
+      }
+
       const { data: oldPhotos } = await admin
         .from("photos")
         .select("id, storage_path")
@@ -111,17 +122,13 @@ export async function submitLetter(
         sort_order: number;
       }[] = [];
 
-      for (let i = 0; i < Math.min(files.length, MAX_PHOTOS); i += 1) {
-        const file = files[i]!;
-        const width = Number.isInteger(widths[i]) && widths[i]! > 0 ? widths[i]! : 1;
-        const height = Number.isInteger(heights[i]) && heights[i]! > 0 ? heights[i]! : 1;
-        const contentType = photoContentType(file) ?? "image/jpeg";
-        const ext = contentType === "image/png" ? "png" : contentType === "image/webp" ? "webp" : "jpg";
+      for (let i = 0; i < compressed.length; i += 1) {
+        const photo = compressed[i]!;
+        const ext = storedPhotoExtension(photo.contentType);
         const storagePath = `${groupId}/${month.id}/${submissionId}/${i}.${ext}`;
-        const buffer = Buffer.from(await file.arrayBuffer());
 
-        const { error: uploadError } = await admin.storage.from(PHOTO_BUCKET).upload(storagePath, buffer, {
-          contentType,
+        const { error: uploadError } = await admin.storage.from(PHOTO_BUCKET).upload(storagePath, photo.buffer, {
+          contentType: photo.contentType,
           upsert: true,
         });
         if (uploadError) {
@@ -131,9 +138,9 @@ export async function submitLetter(
         rows.push({
           submission_id: submissionId,
           storage_path: storagePath,
-          width,
-          height,
-          bytes: file.size,
+          width: photo.width,
+          height: photo.height,
+          bytes: photo.bytes,
           sort_order: i,
         });
       }
