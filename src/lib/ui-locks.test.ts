@@ -25,12 +25,17 @@ describe("submit model A UI", () => {
 });
 
 describe("brand chrome locks", () => {
-  it("header mark is icon + PS, not the full wordmark", () => {
+  it("header mark is the PS lockup, not the full wordmark", () => {
     const brand = readFileSync(resolve(here, "../components/brand.tsx"), "utf8");
-    expect(brand).toContain("CapsuleSeal");
-    expect(brand).toContain("CHROME_MARK");
+    expect(brand).toContain("PsMark");
+    expect(brand).not.toContain("CHROME_MARK");
+    expect(brand).not.toContain("CapsuleSeal");
     expect(brand).not.toContain("Plain and Simple");
     expect(brand).not.toContain("Monthly Capsule");
+
+    const mark = readFileSync(resolve(here, "../components/ps-mark.tsx"), "utf8");
+    expect(mark).toContain("#e08b4a");
+    expect(mark).toContain("viewBox=\"0 0 322 173\"");
   });
 
   it("page title stays the full product name", () => {
@@ -41,9 +46,12 @@ describe("brand chrome locks", () => {
 
   it("favicon and apple-touch are icon-only assets", () => {
     const icon = readFileSync(resolve(here, "../app/icon.svg"), "utf8");
-    expect(icon).toContain("rx=\"7\"");
+    expect(icon).toContain("#f5f2ea");
+    expect(icon).toContain("#1a1712");
+    expect(icon).toContain("#e08b4a");
     expect(icon).toContain("<circle");
     expect(icon).not.toContain("envelope");
+    expect(icon).not.toContain("M1 4");
     expect(icon).not.toMatch(/M\s*\d+\s+\d+\s+L\s*16\s+\d+\s+L\s*\d+\s+\d+/i);
 
     const apple = readFileSync(resolve(here, "../app/apple-icon.png"));

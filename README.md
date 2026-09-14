@@ -13,7 +13,7 @@ Friends write a letter (and up to six photos) each month. After the window close
 
 ## Product locks
 
-- **Brand chrome** is the Capsule seal icon + `PS` (not the full wordmark). Favicon / apple-touch are icon-only. Page title (and the landing footer) still use **Plain and Simple Monthly Capsule**. Resend has no send-API sender avatar (skip). From display stays **Capsule**.
+- **Brand chrome** is the PS lockup (letters + letter-tile + step bar — the mark already includes `PS`). Favicon / apple-touch are the letter-tile icon only. Page title (and the landing footer) still use **Plain and Simple Monthly Capsule**. Resend has no send-API sender avatar (skip). From display stays **Capsule**.
 - **Account** is one field `preferred_name`, plus email and a hashed password (min 8). Memberships link an account to groups. **No phone. No SMS.**
 - **Manage** is email + password, rate-limited (5 / 15 minutes / IP + email). After login: 0 groups → empty + join hint; 1 → group home; many → pick list. **Forgot password?** emails a one-hour, single-use link via Resend. Same response whether the email has an account. The reset page sets a new password and signs in the same way Manage does.
 - Web join with a group UUID + PIN. PIN is generated at create, shown **once**, stored as a bcrypt hash only, never recovered.

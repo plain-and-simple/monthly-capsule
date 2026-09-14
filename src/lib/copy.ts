@@ -1,5 +1,5 @@
 export const PRODUCT_NAME = "Plain and Simple Monthly Capsule";
-/** Header chrome mark. Icon + these letters — not the full wordmark. */
+/** Letters drawn in the header lockup. The mark SVG already includes PS — do not also render this as text. */
 export const CHROME_MARK = "PS";
 
 export const LANDING_PROMISE = "Friends write once a month. You get one capsule.";

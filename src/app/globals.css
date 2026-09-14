@@ -142,24 +142,15 @@ select {
 .brand {
   display: inline-flex;
   align-items: center;
-  gap: 0.6rem;
   text-decoration: none;
   color: inherit;
 }
 
 .brand__mark {
-  width: 32px;
-  height: 32px;
+  height: 2.25rem;
+  width: auto;
   flex: none;
   display: block;
-}
-
-.brand__name {
-  font-family: var(--font-serif);
-  font-size: 1.05rem;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  line-height: 1;
 }
 
 .topbar__account {
