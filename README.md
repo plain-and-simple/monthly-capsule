@@ -17,7 +17,10 @@ Friends write a letter (and up to six photos) each month. After the window close
 - **Account** is one field `preferred_name`, plus email and a hashed password (min 8). Memberships link an account to groups. **No phone. No SMS.**
 - **Manage** is email + password, rate-limited (5 / 15 minutes / IP + email). After login: 0 groups → empty + join hint; 1 → group home; many → pick list. **Forgot password?** emails a one-hour, single-use link via Resend. Same response whether the email has an account. The reset page sets a new password and signs in the same way Manage does.
 - Web join with a group UUID + PIN. PIN is generated at create, shown **once**, stored as a bcrypt hash only, never recovered.
-- Join asks for preferred name. **Save login** (email + password) is optional. Skip → group session only until it expires; Manage will not list that group until they save.
+- Join asks for preferred name **after** a saved account (email + password). UUID + PIN still identify the group. **No PIN-only seat that can submit.**
+- Fresh site: **Create an account** (or Sign in), then **Join existing Capsule** (group ID + PIN). Manage empty state leads with Join existing Capsule.
+- Invite `/join/[uuid]`: a landing for that group. Signed in → Group PIN + preferred name. Not signed in → create account / sign in, then **return to the same invite landing** (`next=/join/{uuid}`).
+- Save login on group home / submit is only for leftover seats with no `account_id` (e.g. joined before this lock). It is required before draft or submit.
 - Owner may **Regenerate PIN**. Confirm first. New PIN is shown once. The old PIN dies immediately. Existing sessions stay valid.
 - Invite is the join URL plus an optional PIN the member types, plus share text. The server never returns a PIN after create/regen. Any member.
 - People is any member. **preferred_name only** — no emails, no PIN hash.
@@ -27,9 +30,9 @@ Friends write a letter (and up to six photos) each month. After the window close
 - Timezone is **America/Chicago** for every group. No picker.
 - Schedule fields: `submit_start_day` (default 1), `submit_end_day` (default 8), `email_day` (default 9).
   - Rule: `1 ≤ start ≤ end ≤ 28` **and** `end < email_day ≤ 28`.
-- One submission per member per month. In-window save upserts. **Save as draft** is stored but hidden from the compiled capsule. **Save and submit** includes it. After submit the letter stays editable until the window closes. Server rejects when the window is closed.
+- One submission per member per month. In-window save upserts. **Save as draft** is stored but hidden from the compiled capsule. **Save and submit** includes it. After submit the letter stays editable until the window closes. Server rejects when the window is closed. Server also rejects draft and submit when the acting member has no `account_id`.
 - Compile job runs after `submit_end_day` ends (Chicago). Idempotent `capsules` row plus a durable `archive` snapshot (letters, names, photo storage paths, HTML). The view page serves that archive so later edits do not rewrite history.
-- Email job runs on `email_day`. Sends every compiled edition at or before that Chicago month if `email_sent_at` is null and `email_held` is false (all versions, not only the latest). Recipients are `members.email` or, when that is null, the linked `accounts.email`. Addresses are deduped. Resend skips seats with no address. `email_sent_at` is set only after Resend accepts every attempted send. Subject is **Your monthly capsule is ready**. From display is **Capsule**. Owner Send is success only when the send is stamped; otherwise the owner sees the error (no silent drop). Cron `?dry=1` previews recipients without calling Resend.
+- Email job runs on `email_day`. Sends every compiled edition at or before that Chicago month if `email_sent_at` is null and `email_held` is false (all versions, not only the latest). Recipients are `members.email` or, when that is null, the linked `accounts.email`. Addresses are deduped. Resend skips seats with no address; the owner send result lists **count + names** (no silent skip). `email_sent_at` is set only after Resend accepts every attempted send. Subject is **Your monthly capsule is ready**. From display is **Capsule**. Owner Send is success only when the send is stamped; otherwise the owner sees the error (no silent drop). Cron `?dry=1` previews recipients without calling Resend.
 - Owner settings labels are exactly: **Submit opens**, **Submit closes**, **Email capsule**.
 - Owner **Capsule cycle** (force, unused = calendar path unchanged):
   - **Open submit early** opens **this Chicago calendar month** (or the next version of it). Already open → “Already open.” A compiled month does **not** walk to next calendar month — force-open again creates **v2 / v3** of the same month.
@@ -87,17 +90,17 @@ See `.env.example`.
 
 ## Screens
 
-1. **Home** `/` — left picture; right **Manage your capsule** (email → password → Continue). Upper-right **Create Capsule Group**. No three equal CTAs. No phone.
-2. **Manage** `/manage` — account groups. Empty + join hint, or a pick list (including one group) with owner/member. After login with exactly one group, go to group home. Your groups always returns to this list.
+1. **Home** `/` — **Create an account** (preferred name + email + password) or **Sign in**. Then **Create a capsule group** (studio code). No three equal CTAs. No phone. Invite links are a separate path.
+2. **Manage** `/manage` — account groups. Empty: **Join existing Capsule** plus create. With groups: pick list (including one group) with owner/member, plus Join existing Capsule. After login with exactly one group and no `next`, go to group home. Your groups always returns to this list.
 2a. **Forgot password** `/forgot` — email only. Always the same “if we have that account, we sent a link” copy. Rate-limited 5 / 15 minutes / IP + email.
 2b. **Reset password** `/reset/[token]` — set a new password (min 8). Invalid, used, or expired links ask you to request a new one. Success signs in like Manage.
 3. **Create** `/create` — studio code → preferred name + email + password + optional group name → UUID + PIN shown once (copy). Account owns the group.
-4. **Join** `/join` — join link or group ID + PIN + preferred name. Optional Save login (email + password). Skip → group session only.
-5. **Join link** `/join/[uuid]` — PIN + preferred name + optional Save login.
-6. **Group home** `/g/[uuid]` — name, open/closed, member count, Write your letter / Read the capsule, Earlier capsules, People, Invite, Settings (owner). Save login if this seat has no account.
+4. **Join** `/join` — signed in: group ID + PIN + preferred name. Not signed in: create account / sign in, then return here.
+5. **Join link** `/join/[uuid]` — invite landing. Signed in: PIN + preferred name. Not signed in: create account / sign in, then return to this landing.
+6. **Group home** `/g/[uuid]` — name, open/closed, member count, Write your letter / Read the capsule, Earlier capsules, People, Invite, Settings (owner). Save login if this leftover seat has no account.
 7. **People** `/g/[uuid]/people` — preferred names. Any member. No emails.
 8. **Invite** `/g/[uuid]/invite` — copy join URL, optional typed PIN, and share text (URL + PIN if typed). Server never returns a PIN.
-9. **Submit** `/g/[uuid]/submit` — letter + ≤6 photos; Save as draft (hidden from capsule) or Save and submit (included); still editable until the window closes; “Closed.” when shut.
+9. **Submit** `/g/[uuid]/submit` — letter + ≤6 photos; Save as draft (hidden from capsule) or Save and submit (included); still editable until the window closes; “Closed.” when shut. No account → Save login first.
 10. **Capsule** `/g/[uuid]/capsule/[YYYY-MM]` — first edition (v1). Later same-month compiles: `/g/[uuid]/capsule/[YYYY-MM]/v2`. Read-only archive; session required. Any member.
 11. **Owner settings** `/g/[uuid]/settings` — the three day-of-month fields, Capsule cycle (open early / close & make / email), and Regenerate PIN.
 
@@ -106,9 +109,9 @@ See `.env.example`.
 e2e is not set up. After env + **all** migrations (init, accounts, force-cycle, submission_status, capsule_archive, **month_versions**):
 
 1. **Create (GWT B).** Open `/`. Upper-right Create Capsule Group. Studio code (local default `plainandsimple` if `CREATE_GROUP_CODE` is unset). Preferred name, email, password (8+). Copy the join link and PIN. Continue to the group home. You are the owner.
-2. **Manage (GWT A).** Private window. `/` → Manage your capsule with that email + password. No SMS. One group → group home. Your groups (and the brand mark) open `/manage` even with one group, so you can create another. Sign out from `/manage`. **Forgot password?** from the login card → `/forgot` → same ack whether the email exists. Open the emailed `/reset/…` link, set a new password (8+), land signed in.
-3. **Join without save (GWT C).** Another private window. Open the join link. Preferred name. Leave Save login unchecked. You land in the group. Manage with a *new* email does not list this group. The owner’s Manage still does.
-4. **Join with save (GWT D).** Preferred name + check Save login + email + password. That account’s Manage finds the group. Or Save login from group home after a skip.
+2. **Manage (GWT A).** Private window. `/` → **Sign in** with that email + password (or Create an account first). No SMS. One group → group home. Your groups (and the brand mark) open `/manage` even with one group, so you can create another. Sign out from `/manage`. **Forgot password?** from the login card → `/forgot` → same ack whether the email exists. Open the emailed `/reset/…` link, set a new password (8+), land signed in.
+3. **Join existing (GWT C).** Sign up (or Sign in) first. **Join existing Capsule**: group ID + PIN + preferred name. Manage lists the group. There is no skip-save PIN-only seat that can submit.
+4. **Invite link (GWT D).** Private window. Open the join link while signed out: invite landing asks to create an account or sign in, then returns to the same `/join/{uuid}` for PIN + preferred name. A leftover seat with no `account_id` must Save login before draft or submit.
 5. **People (GWT E).** People shows preferred names only — no emails.
 6. **Invite / PIN / schedule.** Invite: copy link, type PIN, copy share text. Settings (owner): the three day fields; invalid combos rejected. Regenerate PIN asks to confirm; new PIN once; old PIN fails; sessions stay valid.
 7. If Chicago’s day is inside the window, submit a letter + photos. After the window, Submit shows Closed.

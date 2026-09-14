@@ -1,16 +1,23 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AppHeader } from "@/components/app-header";
-import { ManageForm } from "@/components/manage-form";
+import { AuthPanel } from "@/components/auth-panel";
 import { LANDING_CREATE_CTA, LANDING_LEDE, PRODUCT_NAME } from "@/lib/copy";
+import { parseReturnPath } from "@/lib/return-path";
 import { getAccount } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
-export default async function HomePage() {
+export default async function HomePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ next?: string }>;
+}) {
   const account = await getAccount();
+  const params = await searchParams;
+  const next = parseReturnPath(params.next ?? "");
   if (account) {
-    redirect("/manage");
+    redirect(next ?? "/manage");
   }
 
   return (
@@ -30,7 +37,7 @@ export default async function HomePage() {
             </div>
 
             <div className="card card--pad-lg">
-              <ManageForm />
+              <AuthPanel next={next} defaultMode="signup" />
             </div>
 
             <div className="ornament">
@@ -46,8 +53,8 @@ export default async function HomePage() {
 
             <div className="panel">
               <p className="small muted">
-                Have an invite link? Open it and you will land straight on Join — you will need the
-                Group PIN from whoever invited you.
+                Have an invite link? Open it. You will create an account or sign in, then enter the
+                Group PIN.
               </p>
             </div>
 

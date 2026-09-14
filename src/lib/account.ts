@@ -7,6 +7,9 @@ export const PREFERRED_NAME_REQUIRED = "Preferred name required.";
 export const EMAIL_REQUIRED = "Email required.";
 export const EMAIL_INVALID = "Email looks wrong.";
 export const ACCOUNT_EXISTS = "That email already has an account.";
+export const JOIN_ACCOUNT_REQUIRED = "Create an account or sign in first.";
+export const SUBMIT_ACCOUNT_REQUIRED =
+  "Save a login (email and password) before you can save a letter.";
 
 export const ACCOUNT_FIELDS = ["preferred_name", "email", "password"] as const;
 export const FORBIDDEN_ACCOUNT_FIELDS = [
@@ -64,35 +67,24 @@ export function managePath(destination: ManageDestination): string {
   return "/manage";
 }
 
-export type JoinIntent =
-  | { mode: "session_only"; preferredName: string }
-  | { mode: "save_login"; preferredName: string; email: string; password: string };
+export type JoinIntent = { preferredName: string };
 
-export function parseJoinIntent(input: {
-  preferred_name: string;
-  save_login: boolean;
-  email: string;
-  password: string;
-}): JoinIntent | { error: string } {
+/** Join collects preferred name only. The acting account must already be signed in. */
+export function parseJoinIntent(input: { preferred_name: string }): JoinIntent | { error: string } {
   const preferredName = parsePreferredName(input.preferred_name);
   if (!preferredName) {
     return { error: PREFERRED_NAME_REQUIRED };
   }
-  if (!input.save_login) {
-    return { mode: "session_only", preferredName };
-  }
-  if (!input.email.trim()) {
-    return { error: EMAIL_REQUIRED };
-  }
-  const email = parseEmail(input.email);
-  if (!email) {
-    return { error: EMAIL_INVALID };
-  }
-  const pwdError = passwordError(input.password);
-  if (pwdError) {
-    return { error: pwdError };
-  }
-  return { mode: "save_login", preferredName, email, password: input.password };
+  return { preferredName };
+}
+
+export function membershipHasAccount(member: { account_id: string | null }): boolean {
+  return Boolean(member.account_id);
+}
+
+export function submitBlockedReason(member: { account_id: string | null }): string | null {
+  if (membershipHasAccount(member)) return null;
+  return SUBMIT_ACCOUNT_REQUIRED;
 }
 
 export function parseCreateAccount(input: {

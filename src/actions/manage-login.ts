@@ -10,6 +10,7 @@ import {
 } from "@/lib/account";
 import { authenticateAccount, listAccountGroups } from "@/lib/memberships";
 import { clientIp, loginAttemptsBlocked, recordLoginAttempt } from "@/lib/rate-limit";
+import { parseReturnPath } from "@/lib/return-path";
 import { setAccountSession, setSession } from "@/lib/session";
 
 export type ManageLoginState = { error: string } | null;
@@ -39,6 +40,11 @@ export async function manageLogin(
     }
 
     await setAccountSession({ accountId: account.id });
+    const next = parseReturnPath(String(formData.get("next") ?? ""));
+    if (next) {
+      redirect(next);
+    }
+
     const groups = await listAccountGroups(account.id);
     const destination = manageDestination(groups.map((row) => row.group.id));
 

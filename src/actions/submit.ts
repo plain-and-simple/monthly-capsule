@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { submitBlockedReason } from "@/lib/account";
 import { MAX_PHOTOS, PHOTO_BUCKET } from "@/lib/constants";
 import { ensureMonth } from "@/lib/compile";
 import { collectPhotoFiles, photoContentType, validatePhotoList } from "@/lib/photo-files";
@@ -37,6 +38,10 @@ export async function submitLetter(
     }
 
     const { member, group } = await requireGroupMember(groupId);
+    const blocked = submitBlockedReason(member);
+    if (blocked) {
+      return { error: blocked };
+    }
     const window = await resolveSubmitWindow(group);
     if (!window.open || !window.yearMonth || window.version == null) {
       return { error: "Submit is closed." };

@@ -82,6 +82,41 @@ describe("privacy and chrome locks", () => {
     const source = readFileSync(resolve(here, "../app/(app)/manage/page.tsx"), "utf8");
     expect(source).toContain("membershipRoleLabel");
     expect(source).toContain("member.role");
+    expect(source).toContain("JOIN_EXISTING_CTA");
+    expect(source).toContain('href="/join"');
+  });
+});
+
+describe("account-before-join IA", () => {
+  it("does not let join skip signup or create a PIN-only seat", () => {
+    const joinForm = readFileSync(resolve(here, "../components/join-form.tsx"), "utf8");
+    expect(joinForm).not.toContain("save_login");
+    expect(joinForm).not.toContain("Skip to join");
+    expect(joinForm).toContain("signedInAs");
+
+    const joinAction = readFileSync(resolve(here, "../actions/join-group.ts"), "utf8");
+    expect(joinAction).toContain("JOIN_ACCOUNT_REQUIRED");
+    expect(joinAction).not.toContain("account_id: null");
+    expect(joinAction).not.toContain("email: null");
+
+    const invite = readFileSync(resolve(here, "../app/(app)/join/[uuid]/page.tsx"), "utf8");
+    expect(invite).toContain("JoinGate");
+    expect(invite).toContain("inviteJoinPath");
+
+    const home = readFileSync(resolve(here, "../app/page.tsx"), "utf8");
+    expect(home).toContain("AuthPanel");
+    expect(home).toContain("parseReturnPath");
+  });
+
+  it("blocks submit without a saved account and lists skipped recipients", () => {
+    const submit = readFileSync(resolve(here, "../actions/submit.ts"), "utf8");
+    expect(submit).toContain("submitBlockedReason");
+    const submitPage = readFileSync(resolve(here, "../app/(app)/g/[uuid]/submit/page.tsx"), "utf8");
+    expect(submitPage).toContain("SaveLoginForm");
+    expect(submitPage).toContain("membershipHasAccount");
+    const email = readFileSync(resolve(here, "./email.ts"), "utf8");
+    expect(email).toContain("skippedNames");
+    expect(email).toContain("formatSkippedNoEmail");
   });
 
   it("Manage login exposes Forgot password without redesigning the form", () => {

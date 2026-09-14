@@ -455,6 +455,20 @@ button.listitem[aria-busy="true"] {
   color: var(--ink);
 }
 
+button.textlink {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: var(--accent-deep);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+button.textlink:hover {
+  color: var(--ink);
+}
+
 .field {
   display: block;
 }

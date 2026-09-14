@@ -17,9 +17,14 @@ import {
   JOIN_PIN_LABEL,
   LANDING_CREATE_LABEL,
   LANDING_CUT_PHRASES,
+  LANDING_HAVE_LOGIN,
   LANDING_MANAGE_HEADING,
+  LANDING_NEED_ACCOUNT,
   LANDING_PROMISE,
   LANDING_SIGN_IN,
+  LANDING_SIGN_UP,
+  JOIN_AUTH_HINT,
+  JOIN_EXISTING_CTA,
   MANAGE_CREATE_LABEL,
   MANAGE_EMPTY_HEADING,
   MANAGE_EMPTY_HINT,
@@ -103,6 +108,15 @@ describe("join and manage labels", () => {
     expect(JOIN_PIN_LABEL).toBe("Group PIN");
     expect(ACCOUNT_PASSWORD_LABEL).toBe("Password");
     expect(JOIN_PIN_LABEL).not.toBe(ACCOUNT_PASSWORD_LABEL);
+  });
+
+  it("asks for an account before join, then Join existing Capsule", () => {
+    expect(LANDING_SIGN_UP).toBe("Create an account");
+    expect(LANDING_HAVE_LOGIN).toBe("Already have a login?");
+    expect(LANDING_NEED_ACCOUNT).toBe("Need an account?");
+    expect(JOIN_EXISTING_CTA).toBe("Join existing Capsule");
+    expect(JOIN_AUTH_HINT).toMatch(/Group PIN/);
+    expect(JOIN_EXISTING_CTA).not.toBe("Create Capsule Group");
   });
 
   it("labels preferred name and manage-0 copy", () => {

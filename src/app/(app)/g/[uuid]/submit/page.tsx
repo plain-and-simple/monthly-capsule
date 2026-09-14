@@ -1,5 +1,7 @@
 import Link from "next/link";
+import { SaveLoginForm } from "@/components/save-login-form";
 import { SubmitForm } from "@/components/submit-form";
+import { membershipHasAccount } from "@/lib/account";
 import { groupDisplayName } from "@/lib/copy";
 import { windowClosesPhrase } from "@/lib/group-status";
 import { resolveSubmitWindow } from "@/lib/cycle-store";
@@ -63,15 +65,19 @@ export default async function SubmitPage({ params }: { params: Promise<{ uuid: s
           <Link href={`/g/${uuid}`} className="backlink">
             ← {name}
           </Link>
-          <SubmitForm
-            groupId={uuid}
-            closed={!open}
-            initialBody={initialBody}
-            existingPhotoCount={existingPhotoCount}
-            initialStatus={initialStatus}
-            title={title}
-            closesPhrase={closes}
-          />
+          {open && !membershipHasAccount(member) ? (
+            <SaveLoginForm groupId={uuid} next={`/g/${uuid}/submit`} />
+          ) : (
+            <SubmitForm
+              groupId={uuid}
+              closed={!open}
+              initialBody={initialBody}
+              existingPhotoCount={existingPhotoCount}
+              initialStatus={initialStatus}
+              title={title}
+              closesPhrase={closes}
+            />
+          )}
         </div>
       </div>
     </main>

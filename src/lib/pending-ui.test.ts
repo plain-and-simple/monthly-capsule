@@ -26,6 +26,7 @@ describe("pending mutation UI", () => {
     expect(source("src/components/manage-form.tsx")).toContain('pendingLabel="Signing in…"');
     expect(source("src/components/forgot-password-form.tsx")).toContain('pendingLabel="Sending…"');
     expect(source("src/components/reset-password-form.tsx")).toContain('pendingLabel="Saving…"');
+    expect(source("src/components/sign-up-form.tsx")).toContain('pendingLabel="Creating…"');
     expect(source("src/components/sign-out-button.tsx")).toContain('pendingLabel="Signing out…"');
     expect(source("src/components/app-header.tsx")).toContain("SignOutButton");
   });

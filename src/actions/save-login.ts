@@ -1,11 +1,18 @@
 "use server";
 
+import { redirect } from "next/navigation";
 import { parseCreateAccount } from "@/lib/account";
 import { createAccount } from "@/lib/memberships";
+import { parseMembershipNext } from "@/lib/return-path";
 import { requireGroupMember, setAccountSession } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase";
 
 export type SaveLoginState = { error?: string; ok?: boolean } | null;
+
+function redirectAfterSave(groupId: string, formData: FormData): never | void {
+  const next = parseMembershipNext(groupId, String(formData.get("next") ?? ""));
+  redirect(next ?? `/g/${groupId}`);
+}
 
 export async function saveLogin(
   _prev: SaveLoginState,
@@ -16,6 +23,7 @@ export async function saveLogin(
   try {
     const { member } = await requireGroupMember(groupId);
     if (member.account_id) {
+      redirectAfterSave(groupId, formData);
       return { ok: true };
     }
 
@@ -52,6 +60,7 @@ export async function saveLogin(
     }
 
     await setAccountSession({ accountId: account.id });
+    redirectAfterSave(groupId, formData);
     return { ok: true };
   } catch (error) {
     if (error && typeof error === "object" && "digest" in error) {

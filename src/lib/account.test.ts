@@ -5,13 +5,16 @@ import {
   EMAIL_INVALID,
   EMAIL_REQUIRED,
   FORBIDDEN_ACCOUNT_FIELDS,
+  JOIN_ACCOUNT_REQUIRED,
   LOGIN_WRONG,
   MIN_PASSWORD_LENGTH,
   PASSWORD_TOO_SHORT,
   PREFERRED_NAME_REQUIRED,
+  SUBMIT_ACCOUNT_REQUIRED,
   accountShapeHasForbiddenField,
   manageDestination,
   managePath,
+  membershipHasAccount,
   membershipListedForAccount,
   parseCreateAccount,
   parseEmail,
@@ -20,6 +23,7 @@ import {
   parsePreferredName,
   passwordError,
   peoplePreferredNames,
+  submitBlockedReason,
   wantsSaveLogin,
 } from "./account";
 import { hashPassword, verifyPassword } from "./password";
@@ -99,55 +103,27 @@ describe("GWT B — Create requires preferred_name + email + password", () => {
   });
 });
 
-describe("GWT C — Join without save is a group session only", () => {
-  it("skip save → session_only, no email or password required", () => {
-    expect(
-      parseJoinIntent({
-        preferred_name: "Bess",
-        save_login: false,
-        email: "",
-        password: "",
-      }),
-    ).toEqual({ mode: "session_only", preferredName: "Bess" });
+describe("GWT C — Join is an account, never a PIN-only seat that can submit", () => {
+  it("join collects preferred name only; a seat without account_id cannot submit", () => {
+    expect(parseJoinIntent({ preferred_name: "Bess" })).toEqual({ preferredName: "Bess" });
+    expect(parseJoinIntent({ preferred_name: "" })).toEqual({ error: PREFERRED_NAME_REQUIRED });
+    expect(JOIN_ACCOUNT_REQUIRED).toBe("Create an account or sign in first.");
+    expect(membershipHasAccount({ account_id: null })).toBe(false);
+    expect(submitBlockedReason({ account_id: null })).toBe(SUBMIT_ACCOUNT_REQUIRED);
+    expect(membershipListedForAccount({ account_id: null }, "acct-1")).toBe(false);
     expect(wantsSaveLogin(undefined)).toBe(false);
-    expect(wantsSaveLogin("")).toBe(false);
-    expect(
-      membershipListedForAccount({ account_id: null }, "acct-1"),
-    ).toBe(false);
   });
 });
 
-describe("GWT D — Join with save links the membership", () => {
-  it("save login requires preferred_name + email + password", () => {
+describe("GWT D — Signed-in join links the membership", () => {
+  it("a saved account can join; leftover seats must save a login before submit", () => {
+    expect(parseJoinIntent({ preferred_name: "  Bess " })).toEqual({ preferredName: "Bess" });
+    expect(membershipHasAccount({ account_id: "acct-1" })).toBe(true);
+    expect(submitBlockedReason({ account_id: "acct-1" })).toBeNull();
+    expect(membershipListedForAccount({ account_id: "acct-1" }, "acct-1")).toBe(true);
+    expect(membershipListedForAccount({ account_id: "acct-2" }, "acct-1")).toBe(false);
     expect(wantsSaveLogin("1")).toBe(true);
-    expect(wantsSaveLogin("on")).toBe(true);
-    expect(
-      parseJoinIntent({
-        preferred_name: "Bess",
-        save_login: true,
-        email: "bess@example.com",
-        password: "secret123",
-      }),
-    ).toEqual({
-      mode: "save_login",
-      preferredName: "Bess",
-      email: "bess@example.com",
-      password: "secret123",
-    });
-    expect(
-      parseJoinIntent({
-        preferred_name: "Bess",
-        save_login: true,
-        email: "",
-        password: "secret123",
-      }),
-    ).toEqual({ error: EMAIL_REQUIRED });
-    expect(
-      membershipListedForAccount({ account_id: "acct-1" }, "acct-1"),
-    ).toBe(true);
-    expect(
-      membershipListedForAccount({ account_id: "acct-2" }, "acct-1"),
-    ).toBe(false);
+    expect(SUBMIT_ACCOUNT_REQUIRED).toMatch(/email and password/i);
   });
 });
 
