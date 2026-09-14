@@ -100,13 +100,17 @@ export function SubmitForm({
       action={async (formData) => {
         formData.set("groupId", groupId);
         photos.forEach((photo) => {
-          formData.append("photos", photo.blob, photo.name);
+          const file = new File([photo.blob], photo.name, {
+            type: photo.blob.type || "image/jpeg",
+          });
+          formData.append("photos", file);
           formData.append("widths", String(photo.width));
           formData.append("heights", String(photo.height));
         });
-        await action(formData);
+        return action(formData);
       }}
     >
+      <input type="hidden" name="groupId" value={groupId} />
       <div className="stack stack--tight">
         <div className="row row--between">
           <h1>{title}</h1>

@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { MAX_PHOTOS, PHOTO_BUCKET } from "@/lib/constants";
 import { ensureMonth } from "@/lib/compile";
-import { deleteStoredPhotos, validatePhotoList } from "@/lib/photos";
+import { collectPhotoFiles, photoContentType, validatePhotoList } from "@/lib/photo-files";
+import { deleteStoredPhotos } from "@/lib/photos";
 import { resolveSubmitWindow } from "@/lib/cycle-store";
 import { requireGroupMember } from "@/lib/session";
 import { nextSubmissionWrite, parseSubmitIntent, type SubmitStatus } from "@/lib/submit";
@@ -15,124 +16,137 @@ export type SubmitState = {
   status?: SubmitStatus;
 } | null;
 
+function isRedirectError(error: unknown): boolean {
+  return Boolean(error && typeof error === "object" && "digest" in error);
+}
+
 export async function submitLetter(
   _prev: SubmitState,
   formData: FormData,
 ): Promise<SubmitState> {
-  const groupId = String(formData.get("groupId") ?? "");
-  const body = String(formData.get("body") ?? "").trim();
-  const intent = parseSubmitIntent(formData.get("intent"));
-  const files = formData.getAll("photos").filter((value): value is File => value instanceof File && value.size > 0);
-  const widths = formData.getAll("widths").map((value) => Number(value));
-  const heights = formData.getAll("heights").map((value) => Number(value));
+  try {
+    const groupId = String(formData.get("groupId") ?? "");
+    const body = String(formData.get("body") ?? "").trim();
+    const intent = parseSubmitIntent(formData.get("intent"));
+    const files = collectPhotoFiles(formData);
+    const widths = formData.getAll("widths").map((value) => Number(value));
+    const heights = formData.getAll("heights").map((value) => Number(value));
 
-  if (body.length > 20_000) {
-    return { error: "Letter is too long." };
-  }
-
-  const { member, group } = await requireGroupMember(groupId);
-  const window = await resolveSubmitWindow(group);
-  if (!window.open || !window.yearMonth || window.version == null) {
-    return { error: "Submit is closed." };
-  }
-
-  const photoError = validatePhotoList(files);
-  if (photoError) {
-    return { error: photoError };
-  }
-
-  const yearMonth = window.yearMonth;
-  const month = await ensureMonth(groupId, yearMonth, "open", window.version);
-  const admin = createAdminClient();
-
-  const { data: existing } = await admin
-    .from("submissions")
-    .select("*")
-    .eq("month_id", month.id)
-    .eq("member_id", member.id)
-    .maybeSingle();
-
-  const now = new Date().toISOString();
-  const patch = nextSubmissionWrite({
-    existing: existing ? { status: (existing.status as string | null) ?? null } : null,
-    body,
-    intent,
-    now,
-  });
-  let submissionId: string;
-
-  if (existing) {
-    const { error } = await admin.from("submissions").update(patch).eq("id", existing.id);
-    if (error) return { error: "Could not save." };
-    submissionId = existing.id;
-  } else {
-    const { data: created, error } = await admin
-      .from("submissions")
-      .insert({
-        month_id: month.id,
-        member_id: member.id,
-        ...patch,
-      })
-      .select("id")
-      .single();
-    if (error || !created) return { error: "Could not save." };
-    submissionId = created.id;
-  }
-
-  if (files.length > 0) {
-    const { data: oldPhotos } = await admin
-      .from("photos")
-      .select("id, storage_path")
-      .eq("submission_id", submissionId);
-
-    const oldPaths = (oldPhotos ?? []).map((photo) => photo.storage_path as string);
-    await deleteStoredPhotos(oldPaths);
-    if (oldPhotos && oldPhotos.length > 0) {
-      await admin.from("photos").delete().eq("submission_id", submissionId);
+    if (body.length > 20_000) {
+      return { error: "Letter is too long." };
     }
 
-    const rows: {
-      submission_id: string;
-      storage_path: string;
-      width: number;
-      height: number;
-      bytes: number;
-      sort_order: number;
-    }[] = [];
+    const { member, group } = await requireGroupMember(groupId);
+    const window = await resolveSubmitWindow(group);
+    if (!window.open || !window.yearMonth || window.version == null) {
+      return { error: "Submit is closed." };
+    }
 
-    for (let i = 0; i < Math.min(files.length, MAX_PHOTOS); i += 1) {
-      const file = files[i]!;
-      const width = Number.isInteger(widths[i]) && widths[i]! > 0 ? widths[i]! : 1;
-      const height = Number.isInteger(heights[i]) && heights[i]! > 0 ? heights[i]! : 1;
-      const ext = file.type === "image/png" ? "png" : file.type === "image/webp" ? "webp" : "jpg";
-      const storagePath = `${groupId}/${month.id}/${submissionId}/${i}.${ext}`;
-      const buffer = Buffer.from(await file.arrayBuffer());
+    const photoError = validatePhotoList(files);
+    if (photoError) {
+      return { error: photoError };
+    }
 
-      const { error: uploadError } = await admin.storage.from(PHOTO_BUCKET).upload(storagePath, buffer, {
-        contentType: file.type,
-        upsert: true,
-      });
-      if (uploadError) {
-        return { error: "Could not store photo." };
+    const yearMonth = window.yearMonth;
+    const month = await ensureMonth(groupId, yearMonth, "open", window.version);
+    const admin = createAdminClient();
+
+    const { data: existing } = await admin
+      .from("submissions")
+      .select("*")
+      .eq("month_id", month.id)
+      .eq("member_id", member.id)
+      .maybeSingle();
+
+    const now = new Date().toISOString();
+    const patch = nextSubmissionWrite({
+      existing: existing ? { status: (existing.status as string | null) ?? null } : null,
+      body,
+      intent,
+      now,
+    });
+    let submissionId: string;
+
+    if (existing) {
+      const { error } = await admin.from("submissions").update(patch).eq("id", existing.id);
+      if (error) return { error: "Could not save." };
+      submissionId = existing.id;
+    } else {
+      const { data: created, error } = await admin
+        .from("submissions")
+        .insert({
+          month_id: month.id,
+          member_id: member.id,
+          ...patch,
+        })
+        .select("id")
+        .single();
+      if (error || !created) return { error: "Could not save." };
+      submissionId = created.id;
+    }
+
+    if (files.length > 0) {
+      const { data: oldPhotos } = await admin
+        .from("photos")
+        .select("id, storage_path")
+        .eq("submission_id", submissionId);
+
+      const oldPaths = (oldPhotos ?? []).map((photo) => photo.storage_path as string);
+      await deleteStoredPhotos(oldPaths);
+      if (oldPhotos && oldPhotos.length > 0) {
+        await admin.from("photos").delete().eq("submission_id", submissionId);
       }
 
-      rows.push({
-        submission_id: submissionId,
-        storage_path: storagePath,
-        width,
-        height,
-        bytes: file.size,
-        sort_order: i,
-      });
+      const rows: {
+        submission_id: string;
+        storage_path: string;
+        width: number;
+        height: number;
+        bytes: number;
+        sort_order: number;
+      }[] = [];
+
+      for (let i = 0; i < Math.min(files.length, MAX_PHOTOS); i += 1) {
+        const file = files[i]!;
+        const width = Number.isInteger(widths[i]) && widths[i]! > 0 ? widths[i]! : 1;
+        const height = Number.isInteger(heights[i]) && heights[i]! > 0 ? heights[i]! : 1;
+        const contentType = photoContentType(file) ?? "image/jpeg";
+        const ext = contentType === "image/png" ? "png" : contentType === "image/webp" ? "webp" : "jpg";
+        const storagePath = `${groupId}/${month.id}/${submissionId}/${i}.${ext}`;
+        const buffer = Buffer.from(await file.arrayBuffer());
+
+        const { error: uploadError } = await admin.storage.from(PHOTO_BUCKET).upload(storagePath, buffer, {
+          contentType,
+          upsert: true,
+        });
+        if (uploadError) {
+          return { error: "Could not store photo." };
+        }
+
+        rows.push({
+          submission_id: submissionId,
+          storage_path: storagePath,
+          width,
+          height,
+          bytes: file.size,
+          sort_order: i,
+        });
+      }
+
+      const { error: photoInsertError } = await admin.from("photos").insert(rows);
+      if (photoInsertError) {
+        return { error: "Could not save photos." };
+      }
     }
 
-    const { error: photoInsertError } = await admin.from("photos").insert(rows);
-    if (photoInsertError) {
-      return { error: "Could not save photos." };
-    }
+    revalidatePath(`/g/${groupId}`);
+    revalidatePath(`/g/${groupId}/submit`);
+    return { ok: true, status: intent };
+  } catch (error) {
+    // redirect() / notFound() use a digest; rethrow those. ensureMonth and
+    // photo/storage failures must not become the Next.js digest 500 page.
+    if (isRedirectError(error)) throw error;
+    console.error("submitLetter failed", error);
+    return { error: "Could not save." };
   }
-
-  revalidatePath(`/g/${groupId}`);
-  revalidatePath(`/g/${groupId}/submit`);
-  return { ok: true, status: intent };
 }
