@@ -26,7 +26,7 @@ Friends write a letter (and up to six photos) each month. After the window close
 - People is any member. **preferred_name only** — no emails, no PIN hash.
 - Settings (schedule, **Capsule cycle** force open/close/email, regen PIN) is owner only. Members never see force actions.
 - Creating a group requires a studio code from `CREATE_GROUP_CODE` (default `plainandsimple` if unset). Compared trim + case-insensitive. Server rejects a missing or wrong code. Then preferred name + email + password. The account owns the group.
-- Photos: max 6 per submission. Client resizes to a 1600px long edge. Server checks MIME + size.
+- Photos: max 6 per submission. Client compresses before upload (1600px long edge, WebP if the browser can encode it else JPEG, quality ~0.8, hard cap 1 MB; retry lower quality or reject). Server re-encodes with `sharp` at the same caps, strips EXIF, and stores only that object — never the camera original. Re-encode failure is a friendly error, not keep-original.
 - Timezone is **America/Chicago** for every group. No picker.
 - Schedule fields: `submit_start_day` (default 1), `submit_end_day` (default 8), `email_day` (default 9).
   - Rule: `1 ≤ start ≤ end ≤ 28` **and** `end < email_day ≤ 28`.

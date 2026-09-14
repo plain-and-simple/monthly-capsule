@@ -12,6 +12,8 @@ describe("submit model A UI", () => {
     expect(source).toContain("SUBMIT_AND_SEND");
     expect(source).toContain('value="draft"');
     expect(source).toContain('value="submit"');
+    expect(source).toContain("compressPhotoFile");
+    expect(source).not.toContain("0.85");
   });
 
   it("posts groupId without relying on the JS wrapper", () => {

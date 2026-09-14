@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { MAX_PHOTO_BYTES } from "./constants";
 import { collectPhotoFiles, isPhotoUpload, photoContentType, validatePhotoList } from "./photo-files";
 
 describe("submit photo uploads", () => {
@@ -28,5 +29,15 @@ describe("submit photo uploads", () => {
   it("rejects a non-image type", () => {
     const blob = new Blob([new Uint8Array([1])], { type: "application/pdf" });
     expect(validatePhotoList([blob])).toBe("Photos must be JPEG, PNG, or WebP.");
+  });
+
+  it("rejects a photo over the 1 MB compressed cap", () => {
+    const blob = new Blob([new Uint8Array(MAX_PHOTO_BYTES + 1)], { type: "image/jpeg" });
+    expect(validatePhotoList([blob])).toBe("Photo is too large.");
+  });
+
+  it("respects the max photo count", () => {
+    const files = Array.from({ length: 7 }, () => new Blob([new Uint8Array([1])], { type: "image/jpeg" }));
+    expect(validatePhotoList(files)).toBe("Max 6 photos.");
   });
 });
