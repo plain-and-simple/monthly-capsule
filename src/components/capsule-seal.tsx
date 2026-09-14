@@ -10,17 +10,17 @@ export function CapsuleSeal({ className }: { className?: string }) {
       focusable="false"
     >
       <rect
-        x="4.5"
-        y="10"
-        width="23"
-        height="12"
-        rx="6"
+        x="3.5"
+        y="9"
+        width="25"
+        height="14"
+        rx="7"
         fill="var(--card)"
         stroke="var(--accent)"
-        strokeWidth="1.85"
+        strokeWidth="2"
       />
-      <circle cx="16" cy="16" r="2.2" fill="var(--stamp)" />
-      <circle cx="15.25" cy="15.25" r="0.65" fill="var(--card)" opacity="0.8" />
+      <circle cx="16" cy="16" r="3.1" fill="var(--stamp)" />
+      <circle cx="15.05" cy="15.05" r="0.9" fill="var(--card)" opacity="0.85" />
     </svg>
   );
 }

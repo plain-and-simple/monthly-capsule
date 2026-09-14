@@ -39,7 +39,7 @@ describe("brand chrome locks", () => {
 
   it("favicon and apple-touch are icon-only assets", () => {
     const icon = readFileSync(resolve(here, "../app/icon.svg"), "utf8");
-    expect(icon).toContain("rx=\"6\"");
+    expect(icon).toContain("rx=\"7\"");
     expect(icon).toContain("<circle");
     expect(icon).not.toContain("envelope");
     expect(icon).not.toMatch(/M\s*\d+\s+\d+\s+L\s*16\s+\d+\s+L\s*\d+\s+\d+/i);
