@@ -28,13 +28,13 @@ Friends write a letter (and up to six photos) each month. After the window close
   - Rule: `1 ≤ start ≤ end ≤ 28` **and** `end < email_day ≤ 28`.
 - One submission per member per month. In-window save upserts. **Save as draft** is stored but hidden from the compiled capsule. **Save and submit** includes it. After submit the letter stays editable until the window closes. Server rejects when the window is closed.
 - Compile job runs after `submit_end_day` ends (Chicago). Idempotent `capsules` row plus a durable `archive` snapshot (letters, names, photo storage paths, HTML). The view page serves that archive so later edits do not rewrite history.
-- Email job runs on `email_day`. Sends only if a capsule exists, `email_sent_at` is null, and `email_held` is false. Recipients are `members.email` or, when that is null, the linked `accounts.email`. Addresses are deduped. Resend skips seats with no address. `email_sent_at` is set only after Resend accepts every attempted send.
+- Email job runs on `email_day`. Sends every compiled edition at or before that Chicago month if `email_sent_at` is null and `email_held` is false (all versions, not only the latest). Recipients are `members.email` or, when that is null, the linked `accounts.email`. Addresses are deduped. Resend skips seats with no address. `email_sent_at` is set only after Resend accepts every attempted send. Subject is **Your monthly capsule is ready**. From display is **Capsule**. Owner Send is success only when the send is stamped; otherwise the owner sees the error (no silent drop). Cron `?dry=1` previews recipients without calling Resend.
 - Owner settings labels are exactly: **Submit opens**, **Submit closes**, **Email capsule**.
 - Owner **Capsule cycle** (force, unused = calendar path unchanged):
   - **Open submit early** opens **this Chicago calendar month** (or the next version of it). Already open → “Already open.” A compiled month does **not** walk to next calendar month — force-open again creates **v2 / v3** of the same month.
   - Submissions do **not** roll over: each edition has its own `months` row and empty submission set. Closing v1 freezes those letters; v2 starts empty.
   - **Close & make capsule** (confirm; danger) compiles that edition via `compileGroupMonth` (idempotent per `month_id`). Email is a separate optional step and targets that version’s URL.
-  - After compile: **Email the group?** → **Send** (Resend; show sent N / skipped no-email / Resend error; mark sent only on accept) or **Not now** (`email_held`; cron `email_day` will not send until the owner Sends later).
+  - After compile: **Email the group?** → **Send** (Resend; show sent N / skipped no-email / Resend error; mark sent only on accept; unstamped send is an error) or **Not now** (`email_held`; cron `email_day` will not send until the owner Sends later).
   - **Email group** later from View or Settings when a capsule exists and is unsent.
 - Sessions: httpOnly, Secure (prod), SameSite=Lax, host-only cookies on `capsule.plainandsimple.app`. `capsule_session` binds `member_id` + `group_id`. `capsule_account` binds `account_id`.
 - Capsules are session-gated. No public unauthenticated pages.
@@ -78,7 +78,7 @@ See `.env.example`.
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Publishable / anon key (not used for table I/O) |
 | `SUPABASE_SERVICE_ROLE_KEY` | Server only. Never expose to the browser. |
 | `RESEND_API_KEY` | Skip email send if unset; `email_sent_at` stays null |
-| `RESEND_FROM_EMAIL` | Verified Resend sender. Default if unset: `Plain and Simple <capsules@plainandsimple.app>`. Domain must be verified in Resend or every send fails. |
+| `RESEND_FROM_EMAIL` | Verified Resend sender. Default if unset: `Capsule <capsules@plainandsimple.app>`. Display name is always **Capsule**; domain must be verified in Resend or every send fails. |
 | `COOKIE_SECRET` | ≥16 random chars; signs the session JWT |
 | `APP_URL` | Origin, no trailing slash. Local: `http://localhost:3000`. Prod: `https://capsule.plainandsimple.app` |
 | `CRON_SECRET` | Vercel Cron `Authorization: Bearer …` |
@@ -114,6 +114,7 @@ e2e is not set up. After env + **all** migrations (init, accounts, force-cycle, 
 
 ```bash
 curl -H "Authorization: Bearer $CRON_SECRET" http://localhost:3000/api/cron/compile
+curl -H "Authorization: Bearer $CRON_SECRET" "http://localhost:3000/api/cron/email?dry=1"
 curl -H "Authorization: Bearer $CRON_SECRET" http://localhost:3000/api/cron/email
 ```
 
@@ -124,7 +125,7 @@ Compile is idempotent (unique `capsules.month_id`) and writes `capsules.archive`
 Vercel Cron (`vercel.json`), UTC:
 
 - `GET /api/cron/compile` at `10 6 * * *` — after midnight Chicago (CST=06:00 UTC, CDT=05:00 UTC). Compiles the month whose submit window has ended.
-- `GET /api/cron/email` at `0 15 * * *` — 09:00/10:00 Chicago. Emails members who have an address.
+- `GET /api/cron/email` at `0 15 * * *` — 09:00/10:00 Chicago. Emails every due unsent edition (subject **Your monthly capsule is ready**, From **Capsule**). `?dry=1` previews without sending.
 
 Both require `Authorization: Bearer $CRON_SECRET`.
 
