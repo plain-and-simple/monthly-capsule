@@ -10,7 +10,8 @@ import {
 } from "@/lib/copy";
 import { decorateManagedGroup, membershipRoleLabel } from "@/lib/group-status";
 import { listAccountGroups } from "@/lib/memberships";
-import { requireAccount } from "@/lib/session";
+import { getSession, requireAccount } from "@/lib/session";
+import { decideOpenGroupUi } from "@/lib/session-policy";
 import { createAdminClient } from "@/lib/supabase";
 import type { Group } from "@/lib/types";
 
@@ -18,7 +19,10 @@ export const dynamic = "force-dynamic";
 
 export default async function ManagePage() {
   const account = await requireAccount();
-  const groups = await listAccountGroups(account.id);
+  const [groups, session] = await Promise.all([
+    listAccountGroups(account.id),
+    getSession(),
+  ]);
 
   const admin = createAdminClient();
   const groupIds = groups.map(({ group }) => group.id);
@@ -96,6 +100,11 @@ export default async function ManagePage() {
                       <li key={group.id}>
                         <OpenGroupForm
                           groupId={group.id}
+                          open={decideOpenGroupUi({
+                            groupId: group.id,
+                            memberId: member.id,
+                            session,
+                          })}
                           name={name}
                           roleLabel={membershipRoleLabel(member.role)}
                           meta={decorated.meta}

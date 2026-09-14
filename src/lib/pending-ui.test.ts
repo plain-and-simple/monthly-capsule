@@ -45,6 +45,8 @@ describe("pending mutation UI", () => {
     expect(source("src/app/(app)/g/[uuid]/capsule/view.tsx")).toContain("alreadySent");
     expect(source("src/components/regen-pin-form.tsx")).toContain('pendingLabel="Making…"');
     expect(source("src/components/open-group-form.tsx")).toContain("Opening…");
+    expect(source("src/components/open-group-form.tsx")).toContain("OPEN_GROUP_PATH");
+    expect(source("src/components/open-group-form.tsx")).toContain('method="post"');
     expect(source("src/app/(app)/manage/page.tsx")).toContain("OpenGroupForm");
   });
 
