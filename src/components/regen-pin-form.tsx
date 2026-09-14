@@ -3,10 +3,12 @@
 import { useActionState, useState } from "react";
 import { regeneratePin, type RegenPinState } from "@/actions/regenerate-pin";
 import { CopyButton } from "@/components/copy-button";
+import { PendingSubmitButton, useInstantBusy } from "@/components/pending-submit-button";
 import { REGEN_CONFIRM_VALUE } from "@/lib/manage";
 
 export function RegenPinForm({ groupId }: { groupId: string }) {
   const [state, action, pending] = useActionState<RegenPinState, FormData>(regeneratePin, null);
+  const { busy, markBusy } = useInstantBusy(pending);
   const [confirming, setConfirming] = useState(false);
 
   if (state?.ok) {
@@ -44,7 +46,7 @@ export function RegenPinForm({ groupId }: { groupId: string }) {
   }
 
   return (
-    <form action={action} className="stack">
+    <form action={action} className="stack" onSubmit={markBusy} aria-busy={busy || undefined}>
       <h2>Group PIN</h2>
       <p className="small muted">
         The old PIN stops working right away. People already in the group stay in.
@@ -56,14 +58,14 @@ export function RegenPinForm({ groupId }: { groupId: string }) {
         <button
           className="btn btn--secondary"
           type="button"
-          disabled={pending}
+          disabled={busy}
           onClick={() => setConfirming(false)}
         >
           Cancel
         </button>
-        <button className="btn btn--primary" type="submit" disabled={pending}>
-          {pending ? "Making…" : "Make a new PIN"}
-        </button>
+        <PendingSubmitButton className="btn btn--primary" busy={busy} pendingLabel="Making…">
+          Make a new PIN
+        </PendingSubmitButton>
       </div>
     </form>
   );

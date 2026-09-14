@@ -183,6 +183,11 @@ select {
   text-underline-offset: 3px;
 }
 
+.signout[aria-busy="true"] {
+  cursor: progress;
+  opacity: 0.7;
+}
+
 .footer {
   border-top: 1px solid var(--line);
   padding: 1.25rem 0 2rem;
@@ -374,6 +379,42 @@ a {
 .btn[aria-disabled="true"] {
   opacity: 0.45;
   cursor: not-allowed;
+}
+
+.btn[aria-busy="true"] {
+  cursor: progress;
+}
+
+.btn[aria-busy="true"]::before {
+  content: "";
+  width: 0.7em;
+  height: 0.7em;
+  border: 1.5px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.65s linear infinite;
+}
+
+button.listitem[disabled],
+button.listitem[aria-busy="true"] {
+  cursor: progress;
+  opacity: 0.7;
+}
+
+.status--pending .dot {
+  animation: pulse 1s ease-in-out infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.25;
+  }
 }
 
 .btn-note {

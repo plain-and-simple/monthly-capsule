@@ -2,16 +2,18 @@
 
 import { useActionState } from "react";
 import { saveLogin, type SaveLoginState } from "@/actions/save-login";
+import { PendingSubmitButton, useInstantBusy } from "@/components/pending-submit-button";
 
 export function SaveLoginForm({ groupId }: { groupId: string }) {
   const [state, action, pending] = useActionState<SaveLoginState, FormData>(saveLogin, null);
+  const { busy, markBusy } = useInstantBusy(pending);
 
   if (state?.ok) {
     return <p className="small muted">Login saved. Manage will find this group.</p>;
   }
 
   return (
-    <form action={action} className="card stack">
+    <form action={action} className="card stack" onSubmit={markBusy} aria-busy={busy || undefined}>
       <div className="stack stack--tight">
         <h2>Save login</h2>
         <p className="muted small">Optional. Email and password so Manage can find this group later.</p>
@@ -33,9 +35,9 @@ export function SaveLoginForm({ groupId }: { groupId: string }) {
         />
       </label>
       {state?.error ? <p className="err">{state.error}</p> : null}
-      <button className="btn btn--secondary" type="submit" disabled={pending}>
-        {pending ? "Saving…" : "Save login"}
-      </button>
+      <PendingSubmitButton className="btn btn--secondary" busy={busy} pendingLabel="Saving…">
+        Save login
+      </PendingSubmitButton>
     </form>
   );
 }

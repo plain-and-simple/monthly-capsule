@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 import { manageLogin, type ManageLoginState } from "@/actions/manage-login";
+import { PendingSubmitButton, useInstantBusy } from "@/components/pending-submit-button";
 import { ACCOUNT_PASSWORD_LABEL, LANDING_SIGN_IN } from "@/lib/copy";
 
 export function ManageForm() {
@@ -9,9 +10,10 @@ export function ManageForm() {
     manageLogin,
     null,
   );
+  const { busy, markBusy } = useInstantBusy(pending);
 
   return (
-    <form action={action} className="stack">
+    <form action={action} className="stack" onSubmit={markBusy} aria-busy={busy || undefined}>
       <h2>{LANDING_SIGN_IN}</h2>
       <div>
         <label className="field">
@@ -31,9 +33,13 @@ export function ManageForm() {
         </label>
       </div>
       {state?.error ? <p className="err">{state.error}</p> : null}
-      <button className="btn btn--primary btn--block btn--lg" type="submit" disabled={pending}>
-        {pending ? "Signing in…" : LANDING_SIGN_IN}
-      </button>
+      <PendingSubmitButton
+        className="btn btn--primary btn--block btn--lg"
+        busy={busy}
+        pendingLabel="Signing in…"
+      >
+        {LANDING_SIGN_IN}
+      </PendingSubmitButton>
     </form>
   );
 }

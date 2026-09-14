@@ -7,7 +7,7 @@ import { groupDisplayName } from "@/lib/copy";
 import { initials } from "@/lib/group-status";
 import { canForceCycle } from "@/lib/manage";
 import { capsuleTitle, DEFAULT_MONTH_VERSION } from "@/lib/month-version";
-import { signedPhotoUrl } from "@/lib/photos";
+import { signedPhotoUrls } from "@/lib/photos";
 import { monthLabel } from "@/lib/schedule";
 import { requireGroupMember } from "@/lib/session";
 import { missedCountPhrase } from "@/lib/submit";
@@ -52,19 +52,18 @@ export async function CapsuleView({
     parseCapsuleArchive(capsule.archive) ??
     (await ensureCapsuleArchive(group, yearMonth, month.id, capsule, month.version));
 
-  const letters = await Promise.all(
-    archive.letters.map(async (letter, index) => ({
-      key: `${letter.preferred_name}-${index}`,
-      preferred_name: letter.preferred_name,
-      body: letter.body,
-      photos: await Promise.all(
-        letter.photos.map(async (photo) => ({
-          ...photo,
-          url: await signedPhotoUrl(photo.storage_path),
-        })),
-      ),
-    })),
+  const photoUrls = await signedPhotoUrls(
+    archive.letters.flatMap((letter) => letter.photos.map((photo) => photo.storage_path)),
   );
+  const letters = archive.letters.map((letter, index) => ({
+    key: `${letter.preferred_name}-${index}`,
+    preferred_name: letter.preferred_name,
+    body: letter.body,
+    photos: letter.photos.map((photo) => ({
+      ...photo,
+      url: photoUrls.get(photo.storage_path) ?? null,
+    })),
+  }));
 
   const title = capsuleTitle(monthLabel(yearMonth), month.version);
 

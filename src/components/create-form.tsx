@@ -5,6 +5,8 @@ import Link from "next/link";
 import { createGroup, type CreateState } from "@/actions/create-group";
 import { CopyButton } from "@/components/copy-button";
 import { CreateSteps } from "@/components/create-steps";
+import { PendingLink } from "@/components/pending-link";
+import { PendingSubmitButton, useInstantBusy } from "@/components/pending-submit-button";
 import {
   ACCOUNT_PASSWORD_LABEL,
   PREFERRED_NAME_LABEL,
@@ -41,6 +43,7 @@ function DaySelect({
 
 export function CreateForm({ signedInAs }: { signedInAs?: string | null }) {
   const [state, action, pending] = useActionState<CreateState, FormData>(createGroup, null);
+  const { busy, markBusy } = useInstantBusy(pending);
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [studioCode, setStudioCode] = useState("");
   const [preferredName, setPreferredName] = useState("");
@@ -92,9 +95,9 @@ export function CreateForm({ signedInAs }: { signedInAs?: string | null }) {
               away, and anyone already in the group stays in.
             </p>
           </div>
-          <Link className="btn btn--secondary btn--block" href={`/g/${state.groupId}`}>
+          <PendingLink className="btn btn--secondary btn--block" href={`/g/${state.groupId}`} pendingLabel="Opening…">
             I have saved these — go to {groupName}
-          </Link>
+          </PendingLink>
           <p className="tiny muted">{hero.hint}</p>
         </div>
       </div>
@@ -237,7 +240,7 @@ export function CreateForm({ signedInAs }: { signedInAs?: string | null }) {
           <CreateSteps current={3} />
         </div>
         <div className="card card--pad-lg">
-          <form action={action} className="stack">
+          <form action={action} className="stack" onSubmit={markBusy} aria-busy={busy || undefined}>
             <div className="stack stack--tight">
               <h1>Name the group</h1>
               <p className="muted small">
@@ -293,9 +296,13 @@ export function CreateForm({ signedInAs }: { signedInAs?: string | null }) {
               <span className="field__hint">Days of the month. America/Chicago.</span>
             </div>
             {state && !state.ok ? <p className="err">{state.error}</p> : null}
-            <button className="btn btn--primary btn--block" type="submit" disabled={pending}>
-              {pending ? "Creating…" : "Create group"}
-            </button>
+            <PendingSubmitButton
+              className="btn btn--primary btn--block"
+              busy={busy}
+              pendingLabel="Creating…"
+            >
+              Create group
+            </PendingSubmitButton>
           </form>
         </div>
       </div>

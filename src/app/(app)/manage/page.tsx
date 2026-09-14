@@ -1,13 +1,13 @@
 import Link from "next/link";
-import { openManagedGroup } from "@/actions/open-group";
 import { AppHeader } from "@/components/app-header";
+import { OpenGroupForm } from "@/components/open-group-form";
 import {
   LANDING_CREATE_CTA,
   MANAGE_EMPTY_HINT,
   MANAGE_EMPTY_TITLE,
   groupDisplayName,
 } from "@/lib/copy";
-import { decorateManagedGroup, initials, membershipRoleLabel } from "@/lib/group-status";
+import { decorateManagedGroup, membershipRoleLabel } from "@/lib/group-status";
 import { listAccountGroups } from "@/lib/memberships";
 import { requireAccount } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase";
@@ -90,33 +90,13 @@ export default async function ManagePage() {
                     const name = groupDisplayName(group.name);
                     return (
                       <li key={group.id}>
-                        <form action={openManagedGroup}>
-                          <input type="hidden" name="groupId" value={group.id} />
-                          <button className="listitem" type="submit">
-                            <span className="avatar avatar--lg">{initials(name)}</span>
-                            <span className="listitem__body">
-                              <span className="listitem__heading">
-                                <span className="listitem__title">{name}</span>
-                                <span className="badge">{membershipRoleLabel(member.role)}</span>
-                              </span>
-                              <span className="listitem__meta">{decorated.meta}</span>
-                            </span>
-                            <span className="listitem__end">
-                              <span
-                                className={
-                                  decorated.status === "Open"
-                                    ? "badge badge--open"
-                                    : decorated.status === "Capsule ready"
-                                      ? "badge"
-                                      : "badge"
-                                }
-                              >
-                                {decorated.status === "Open" ? <span className="dot" /> : null}
-                                {decorated.status}
-                              </span>
-                            </span>
-                          </button>
-                        </form>
+                        <OpenGroupForm
+                          groupId={group.id}
+                          name={name}
+                          roleLabel={membershipRoleLabel(member.role)}
+                          meta={decorated.meta}
+                          status={decorated.status}
+                        />
                       </li>
                     );
                   })}

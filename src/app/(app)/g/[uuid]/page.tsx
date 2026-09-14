@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { GroupChrome } from "@/components/group-chrome";
+import { PendingLink } from "@/components/pending-link";
 import { SaveLoginForm } from "@/components/save-login-form";
 import {
   GROUP_EARLIER_CAPSULES,
@@ -145,25 +146,31 @@ export default async function GroupHomePage({
 
               {open && myStatus === "submitted" ? (
                 <div className="row" style={{ justifyContent: "center" }}>
-                  <Link className="btn btn--secondary" href={`/g/${uuid}/submit`}>
+                  <PendingLink className="btn btn--secondary" href={`/g/${uuid}/submit`} pendingLabel="Opening…">
                     {GROUP_PRIMARY_EDIT}
-                  </Link>
+                  </PendingLink>
                 </div>
               ) : open ? (
                 <>
-                  <Link className="btn btn--primary btn--block btn--lg" href={`/g/${uuid}/submit`}>
+                  <PendingLink
+                    className="btn btn--primary btn--block btn--lg"
+                    href={`/g/${uuid}/submit`}
+                    pendingLabel="Opening…"
+                  >
                     {myStatus === "draft" ? "Continue your draft" : GROUP_PRIMARY_SUBMIT}
-                  </Link>
+                  </PendingLink>
                   <p className="btn-note">You can keep editing until the window closes.</p>
                 </>
               ) : latestCapsule ? (
                 <>
-                  <Link
+                  <PendingLink
                     className="btn btn--primary btn--block btn--lg"
                     href={capsuleHref(uuid, latestCapsule.yearMonth, latestCapsule.version)}
+                    pendingLabel="Opening…"
+                    prefetch={false}
                   >
                     {GROUP_PRIMARY_VIEW}
-                  </Link>
+                  </PendingLink>
                   <p className="btn-note">Writing opens again on {nextOpenDate}.</p>
                 </>
               ) : null}
@@ -190,6 +197,7 @@ export default async function GroupHomePage({
                     <Link
                       className="listitem"
                       href={capsuleHref(uuid, row.yearMonth, row.version)}
+                      prefetch={false}
                     >
                       <span className="listitem__body">
                         <span className="listitem__title">
@@ -215,7 +223,10 @@ export default async function GroupHomePage({
               <div className="stack">
                 <p className="small muted">
                   Last month:{" "}
-                  <Link href={capsuleHref(uuid, latestCapsule.yearMonth, latestCapsule.version)}>
+                  <Link
+                    href={capsuleHref(uuid, latestCapsule.yearMonth, latestCapsule.version)}
+                    prefetch={false}
+                  >
                     the {capsuleTitle(monthLabel(latestCapsule.yearMonth), latestCapsule.version)}{" "}
                     capsule
                   </Link>
