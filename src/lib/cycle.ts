@@ -11,6 +11,7 @@ import {
   openEdition,
   type CycleMonthRow,
 } from "@/lib/month-version";
+import { RESEND_TIMEOUT_MESSAGE } from "@/lib/email-policy";
 
 export type CycleGroup = ScheduleDays & {
   force_open_year_month: string | null;
@@ -23,10 +24,12 @@ export const CYCLE_OPENED = "Opened.";
 export const CYCLE_COMPILED = "Capsule ready.";
 export const CYCLE_EMAIL_PROMPT = "Email the group?";
 export const CYCLE_SENT = "Sent.";
-export const CYCLE_ALREADY_SENT = "Already sent.";
+export const CYCLE_ALREADY_SENT = "Already emailed — confirm Send again to resend.";
+export const CYCLE_EMAIL_TIMEOUT = RESEND_TIMEOUT_MESSAGE;
 export const CYCLE_SKIPPED = "Not now.";
 export const CYCLE_NO_CAPSULE = "No capsule yet.";
 export const CYCLE_VERSION_CAP = "This month cannot take another version.";
+export const CONFIRM_RESEND_VALUE = "1";
 
 export type CycleTarget = {
   yearMonth: string;
@@ -133,8 +136,19 @@ export function forceCloseTarget(
 
 export type ForceOpenDecision = "ok" | "already_open" | "forbidden";
 export type ForceCloseDecision = "ok" | "forbidden" | "unconfirmed";
-export type ForceEmailDecision = "send" | "already_sent" | "forbidden" | "no_capsule";
+export type ForceEmailDecision = "send" | "resend" | "already_sent" | "forbidden" | "no_capsule";
 export type ForceSkipDecision = "hold" | "already_sent" | "forbidden" | "no_capsule";
+
+/** redirect() throws with digest NEXT_REDIRECT; other Next.js errors also have digest. */
+export function isNextRedirectError(error: unknown): boolean {
+  if (!error || typeof error !== "object" || !("digest" in error)) return false;
+  const digest = (error as { digest: unknown }).digest;
+  return typeof digest === "string" && digest.startsWith("NEXT_REDIRECT");
+}
+
+export function confirmResendAccepted(value: FormDataEntryValue | null): boolean {
+  return String(value ?? "") === CONFIRM_RESEND_VALUE;
+}
 
 export function decideForceOpen(role: string, alreadyOpen: boolean): ForceOpenDecision {
   if (role !== "owner") return "forbidden";
@@ -151,10 +165,11 @@ export function decideForceClose(role: string, confirmed: boolean): ForceCloseDe
 export function decideForceEmail(
   role: string,
   capsule: { email_sent_at: string | null } | null,
+  confirmResend = false,
 ): ForceEmailDecision {
   if (role !== "owner") return "forbidden";
   if (!capsule) return "no_capsule";
-  if (capsule.email_sent_at) return "already_sent";
+  if (capsule.email_sent_at) return confirmResend ? "resend" : "already_sent";
   return "send";
 }
 

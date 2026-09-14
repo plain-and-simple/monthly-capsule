@@ -36,6 +36,28 @@ export function ownerCanEmailCapsule(capsule: Pick<CapsuleEmailFlags, "email_sen
   return !capsule.email_sent_at;
 }
 
+/** Per-recipient Resend budget. Must finish before a Hobby function is killed. */
+export const RESEND_SEND_TIMEOUT_MS = 8_000;
+/** Client pending guard if the action POST never returns a result. */
+export const EMAIL_PENDING_GUARD_MS = 12_000;
+export const RESEND_TIMEOUT_MESSAGE = "Email send timed out. Try again.";
+
+export async function withTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  message: string,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(message)), ms);
+  });
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 export function holdEmailUpdate(): { email_held: true } {
   return { email_held: true };
 }

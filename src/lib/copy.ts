@@ -65,6 +65,8 @@ export const CYCLE_SECTION = "Capsule cycle";
 export const CYCLE_OPEN_EARLY = "Open submit early";
 export const CYCLE_CLOSE_COMPILE = "Close & make capsule";
 export const CYCLE_SEND = "Send";
+export const CYCLE_SEND_AGAIN = "Send again";
+export const CYCLE_SEND_AGAIN_HINT = "Sends again from Capsule with the locked subject.";
 export const CYCLE_NOT_NOW = "Not now";
 export const CYCLE_EMAIL_LATER = "Email group";
 

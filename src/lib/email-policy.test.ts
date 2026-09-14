@@ -14,9 +14,11 @@ import {
   ownerCanEmailCapsule,
   ownerEmailFailed,
   previewCapsuleSend,
+  RESEND_TIMEOUT_MESSAGE,
   resendSendAccepted,
   sentEmailUpdate,
   shouldMarkCapsuleEmailed,
+  withTimeout,
 } from "./email-policy";
 
 describe("cron email_day vs owner hold", () => {
@@ -191,6 +193,13 @@ describe("send preview / owner failure", () => {
     expect(ownerEmailFailed({ markedSent: false })).toBe(true);
     expect(ownerEmailFailed({ markedSent: true })).toBe(false);
   });
+
+  it("times out a hung promise instead of waiting forever", async () => {
+    await expect(withTimeout(new Promise(() => {}), 20, RESEND_TIMEOUT_MESSAGE)).rejects.toThrow(
+      RESEND_TIMEOUT_MESSAGE,
+    );
+    await expect(withTimeout(Promise.resolve("ok"), 50, RESEND_TIMEOUT_MESSAGE)).resolves.toBe("ok");
+  });
 });
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -206,6 +215,9 @@ describe("send path must not stamp blindly", () => {
 
   it("checks Resend accept and recipient resolution before sentEmailUpdate", () => {
     const source = readFileSync(resolve(here, "./email.ts"), "utf8");
+    expect(source).toContain("withTimeout");
+    expect(source).toContain("RESEND_TIMEOUT_MESSAGE");
+    expect(source).toContain("forceResend");
     expect(source).toContain("resolveCapsuleRecipients");
     expect(source).toContain("resendSendAccepted");
     expect(source).toContain("shouldMarkCapsuleEmailed");
@@ -216,6 +228,10 @@ describe("send path must not stamp blindly", () => {
     expect(source).toContain("to: [to]");
     const cycle = readFileSync(resolve(here, "../actions/cycle.ts"), "utf8");
     expect(cycle).toContain("ownerEmailFailed");
+    expect(cycle).toContain("forceResend");
+    expect(cycle).toContain("confirmResendAccepted");
+    expect(cycle).toContain("isNextRedirectError");
+    expect(cycle).not.toContain("function isRedirectError");
     const cron = readFileSync(resolve(here, "../app/api/cron/email/route.ts"), "utf8");
     expect(cron).toContain('searchParams.get("dry") === "1"');
   });

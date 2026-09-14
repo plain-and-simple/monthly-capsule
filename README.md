@@ -39,7 +39,7 @@ Friends write a letter (and up to six photos) each month. After the window close
   - Submissions do **not** roll over: each edition has its own `months` row and empty submission set. Closing v1 freezes those letters; v2 starts empty.
   - **Close & make capsule** (confirm; danger) compiles that edition via `compileGroupMonth` (idempotent per `month_id`). Email is a separate optional step and targets that version’s URL.
   - After compile: **Email the group?** → **Send** (Resend; show sent N / skipped no-email / Resend error; mark sent only on accept; unstamped send is an error) or **Not now** (`email_held`; cron `email_day` will not send until the owner Sends later).
-  - **Email group** later from View or Settings when a capsule exists and is unsent.
+  - **Email group** later from View or Settings when a capsule exists and is unsent. Already emailed → visible error, then owner **Send again** (resends with the locked subject/From). Send always finishes with success or error — never a stuck Sending… spinner.
 - Sessions: httpOnly, Secure (prod), SameSite=Lax, host-only cookies on `capsule.plainandsimple.app`. `capsule_session` binds `member_id` + `group_id`. `capsule_account` binds `account_id`.
 - Capsules are session-gated. No public unauthenticated pages.
 

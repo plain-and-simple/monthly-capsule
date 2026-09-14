@@ -10,6 +10,7 @@ import {
   CYCLE_OPEN_EARLY,
   CYCLE_SECTION,
   CYCLE_SEND,
+  CYCLE_SEND_AGAIN,
   FORGOT_PASSWORD_ACK,
   FORGOT_PASSWORD_HEADING,
   FORGOT_PASSWORD_LEDE,
@@ -159,6 +160,7 @@ describe("join and manage labels", () => {
     expect(CYCLE_OPEN_EARLY).toBe("Open submit early");
     expect(CYCLE_CLOSE_COMPILE).toBe("Close & make capsule");
     expect(CYCLE_SEND).toBe("Send");
+    expect(CYCLE_SEND_AGAIN).toBe("Send again");
     expect(CYCLE_NOT_NOW).toBe("Not now");
     expect(CYCLE_EMAIL_LATER).toBe("Email group");
   });
