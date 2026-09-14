@@ -6,12 +6,12 @@ import { cache } from "react";
 import { ACCOUNT_COOKIE, SESSION_COOKIE } from "@/lib/constants";
 import { cookieSecret } from "@/lib/env";
 import { sessionCookieOptions } from "@/lib/hosting";
-import { decideAccountSession } from "@/lib/session-policy";
+import { decideAccountSession, decideGroupGate } from "@/lib/session-policy";
 import { createAdminClient } from "@/lib/supabase";
 import type { Account, AccountSessionPayload, Group, Member, SessionPayload } from "@/lib/types";
 
-export async function setSession(payload: SessionPayload): Promise<void> {
-  const token = await new SignJWT({
+export async function mintSessionToken(payload: SessionPayload): Promise<string> {
+  return new SignJWT({
     memberId: payload.memberId,
     groupId: payload.groupId,
   })
@@ -19,7 +19,10 @@ export async function setSession(payload: SessionPayload): Promise<void> {
     .setIssuedAt()
     .setExpirationTime("400d")
     .sign(cookieSecret());
+}
 
+export async function setSession(payload: SessionPayload): Promise<void> {
+  const token = await mintSessionToken(payload);
   const jar = await cookies();
   jar.set(SESSION_COOKIE, token, sessionCookieOptions(process.env.NODE_ENV === "production"));
 }
@@ -55,18 +58,29 @@ export const requireGroupMember = cache(async (groupId: string): Promise<{
   group: Group;
 }> => {
   const session = await getSession();
-  if (!session || session.groupId !== groupId) {
-    redirect(`/join/${groupId}`);
+  const lookup = Boolean(session && session.groupId === groupId);
+
+  let member: Member | null = null;
+  let group: Group | null = null;
+  if (lookup && session) {
+    const admin = createAdminClient();
+    const [{ data: memberRow }, { data: groupRow }] = await Promise.all([
+      admin.from("members").select("*").eq("id", session.memberId).maybeSingle(),
+      admin.from("groups").select("*").eq("id", groupId).maybeSingle(),
+    ]);
+    member = (memberRow as Member | null) ?? null;
+    group = (groupRow as Group | null) ?? null;
   }
 
-  const admin = createAdminClient();
-  const [{ data: member }, { data: group }] = await Promise.all([
-    admin.from("members").select("*").eq("id", session.memberId).maybeSingle(),
-    admin.from("groups").select("*").eq("id", groupId).maybeSingle(),
-  ]);
-
-  if (!member || member.group_id !== groupId || !group) {
-    redirect(`/join/${groupId}`);
+  const decision = decideGroupGate({
+    requestedGroupId: groupId,
+    session,
+    memberFound: Boolean(member),
+    memberGroupId: member?.group_id ?? null,
+    groupFound: Boolean(group),
+  });
+  if (decision.action === "join" || decision.action === "manage") {
+    redirect(decision.path);
   }
 
   return {

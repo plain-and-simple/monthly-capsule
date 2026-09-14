@@ -86,6 +86,8 @@ describe("privacy and chrome locks", () => {
     expect(source).toContain("member.role");
     expect(source).toContain("JOIN_EXISTING_CTA");
     expect(source).toContain('href="/join"');
+    expect(source).toContain("decideOpenGroupUi");
+    expect(source).not.toContain("@/actions/open-group");
   });
 });
 
