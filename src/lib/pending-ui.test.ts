@@ -27,7 +27,10 @@ describe("pending mutation UI", () => {
     expect(source("src/components/forgot-password-form.tsx")).toContain('pendingLabel="Sending…"');
     expect(source("src/components/reset-password-form.tsx")).toContain('pendingLabel="Saving…"');
     expect(source("src/components/sign-up-form.tsx")).toContain('pendingLabel="Creating…"');
-    expect(source("src/components/sign-out-button.tsx")).toContain('pendingLabel="Signing out…"');
+    expect(source("src/components/sign-out-button.tsx")).toContain("Signing out…");
+    expect(source("src/components/sign-out-button.tsx")).toContain("onSubmit");
+    expect(source("src/components/sign-out-button.tsx")).toContain("CLIENT_PENDING_GUARD_MS");
+    expect(source("src/components/sign-out-button.tsx")).not.toMatch(/\bdisabled=/);
     expect(source("src/components/app-header.tsx")).toContain("SignOutButton");
   });
 
@@ -42,6 +45,10 @@ describe("pending mutation UI", () => {
     expect(email).toContain("ignorePending");
     expect(email).toContain("EMAIL_PENDING_GUARD_MS");
     expect(source("src/components/pending-submit-button.tsx")).toContain("ignorePending");
+    expect(source("src/components/pending-submit-button.tsx")).toContain("CLIENT_PENDING_GUARD_MS");
+    expect(source("src/components/pending-submit-button.tsx")).toContain("flushSync");
+    expect(source("src/components/pending-submit-button.tsx")).toContain("disabled={disabled}");
+    expect(source("src/components/pending-submit-button.tsx")).not.toContain("disabled={busy || disabled}");
     expect(source("src/app/(app)/g/[uuid]/capsule/view.tsx")).toContain("alreadySent");
     expect(source("src/components/regen-pin-form.tsx")).toContain('pendingLabel="Making…"');
     expect(source("src/components/open-group-form.tsx")).toContain("Opening…");

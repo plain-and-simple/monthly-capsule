@@ -231,6 +231,8 @@ describe("send path must not stamp blindly", () => {
     expect(cycle).toContain("forceResend");
     expect(cycle).toContain("confirmResendAccepted");
     expect(cycle).toContain("isNextRedirectError");
+    expect(cycle).toContain("withTimeout");
+    expect(cycle).toContain("EMAIL_ACTION_TIMEOUT_MS");
     expect(cycle).not.toContain("function isRedirectError");
     const cron = readFileSync(resolve(here, "../app/api/cron/email/route.ts"), "utf8");
     expect(cron).toContain('searchParams.get("dry") === "1"');

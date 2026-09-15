@@ -367,6 +367,8 @@ describe("session cookie + redirect uses Route Handler 303", () => {
     expect(source).toContain("NextResponse.redirect");
     expect(source).toContain("SEE_OTHER");
     expect(source).toContain("response.cookies.set");
+    expect(source).toContain("Cache-Control");
+    expect(source).toContain("expires: new Date(0)");
     expect(source).not.toMatch(/cookies\(\)/);
     expect(source).toContain("respondSessionOpen");
   });

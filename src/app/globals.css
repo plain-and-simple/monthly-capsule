@@ -177,6 +177,7 @@ select {
 .signout[aria-busy="true"] {
   cursor: progress;
   opacity: 0.7;
+  pointer-events: none;
 }
 
 .footer {
@@ -374,6 +375,7 @@ a {
 
 .btn[aria-busy="true"] {
   cursor: progress;
+  pointer-events: none;
 }
 
 .btn[aria-busy="true"]::before {
@@ -390,6 +392,7 @@ button.listitem[disabled],
 button.listitem[aria-busy="true"] {
   cursor: progress;
   opacity: 0.7;
+  pointer-events: none;
 }
 
 .status--pending .dot {
