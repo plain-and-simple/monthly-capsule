@@ -31,6 +31,23 @@ export const ROLE_MEMBER_LABEL = "Member";
 export const SIGN_OUT = "Sign out";
 export const LEAVE_GROUP = "Leave this group";
 
+export const PEOPLE_REMOVE = "Remove";
+export const PEOPLE_REMOVE_CONFIRM =
+  "Remove them from the group? They cannot submit while the window is open. Letters already in a capsule stay.";
+export const PEOPLE_REMOVE_CONFIRM_ACTION = "Remove";
+export const PEOPLE_REMOVED = "Removed.";
+
+export const STUDIO_ADMIN_HEADING = "Studio";
+export const STUDIO_ADMIN_LEDE = "Counts only. No letters, photos, or emails.";
+export const STUDIO_ADMIN_GROUPS = "Groups";
+export const STUDIO_ADMIN_MEMBERS = "Members";
+export const STUDIO_ADMIN_COMPILES = "Compiles";
+export const STUDIO_BAN_HEADING = "Ban an account";
+export const STUDIO_BAN_HINT = "Manage login, submit, create, and join all fail.";
+export const STUDIO_BAN_CONFIRM = "Ban this account?";
+export const STUDIO_BAN_ACTION = "Ban";
+export const STUDIO_BAN_DONE = "Account banned.";
+
 export const JOIN_PIN_LABEL = "Group PIN";
 export const ACCOUNT_PASSWORD_LABEL = "Password";
 export const PREFERRED_NAME_LABEL = "Preferred name";

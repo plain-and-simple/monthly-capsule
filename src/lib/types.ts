@@ -18,6 +18,7 @@ export type Account = {
   preferred_name: string;
   email: string;
   password_hash: string;
+  banned_at: string | null;
   created_at: string;
 };
 
@@ -29,6 +30,7 @@ export type Member = {
   role: Role;
   account_id: string | null;
   joined_at: string;
+  removed_at: string | null;
 };
 
 export type AccountSessionPayload = {

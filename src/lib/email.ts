@@ -209,7 +209,11 @@ async function sendCapsuleEmail(
   opts: { dryRun?: boolean; forceResend?: boolean } = {},
 ) {
   const admin = createAdminClient();
-  const { data: members } = await admin.from("members").select("*").eq("group_id", group.id);
+  const { data: members } = await admin
+    .from("members")
+    .select("*")
+    .eq("group_id", group.id)
+    .is("removed_at", null);
   const roster = (members ?? []) as Member[];
 
   const accountIds = [

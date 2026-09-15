@@ -1,7 +1,8 @@
 import Link from "next/link";
+import { KickMemberForm } from "@/components/kick-member-form";
 import { groupDisplayName } from "@/lib/copy";
 import { initials } from "@/lib/group-status";
-import { ROSTER_SELECT, toRoster } from "@/lib/manage";
+import { ROSTER_SELECT, canKickMember, toRoster } from "@/lib/manage";
 import { requireGroupMember } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase";
 import type { Role } from "@/lib/types";
@@ -16,12 +17,14 @@ export default async function PeoplePage({ params }: { params: Promise<{ uuid: s
     .from("members")
     .select(ROSTER_SELECT)
     .eq("group_id", uuid)
+    .is("removed_at", null)
     .order("joined_at", { ascending: true });
 
   const people = toRoster(
     (data ?? []) as Array<{ id: string; preferred_name: string; role: Role }>,
   );
   const name = groupDisplayName(group.name);
+  const actorIsOwner = member.role === "owner";
 
   return (
     <main className="main">
@@ -43,9 +46,17 @@ export default async function PeoplePage({ params }: { params: Promise<{ uuid: s
                 person.id === member.id ? "You" : null,
                 person.role === "owner" ? "started the group" : null,
               ].filter(Boolean);
+              const showKick =
+                actorIsOwner &&
+                canKickMember({
+                  actorRole: member.role,
+                  actorMemberId: member.id,
+                  targetRole: person.role,
+                  targetMemberId: person.id,
+                });
               return (
                 <li key={person.id}>
-                  <div className="listitem">
+                  <div className="listitem listitem--actions">
                     <span className="avatar">{initials(person.preferred_name)}</span>
                     <span className="listitem__body">
                       <span className="listitem__title">{person.preferred_name}</span>
@@ -53,6 +64,7 @@ export default async function PeoplePage({ params }: { params: Promise<{ uuid: s
                         <span className="listitem__meta">{bits.join(" · ")}</span>
                       ) : null}
                     </span>
+                    {showKick ? <KickMemberForm groupId={uuid} memberId={person.id} /> : null}
                   </div>
                 </li>
               );

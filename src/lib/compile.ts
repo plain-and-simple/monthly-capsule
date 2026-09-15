@@ -179,7 +179,7 @@ export async function snapshotMonthArchive(
       .select("*")
       .eq("month_id", monthId)
       .order("submitted_at", { ascending: true }),
-    admin.from("members").select("id", { count: "exact", head: true }).eq("group_id", group.id),
+    admin.from("members").select("id", { count: "exact", head: true }).eq("group_id", group.id).is("removed_at", null),
   ]);
 
   const included = includedSubmissions((submissions ?? []) as Submission[]);

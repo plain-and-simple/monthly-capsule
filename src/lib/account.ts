@@ -10,6 +10,7 @@ export const ACCOUNT_EXISTS = "That email already has an account.";
 export const JOIN_ACCOUNT_REQUIRED = "Create an account or sign in first.";
 export const SUBMIT_ACCOUNT_REQUIRED =
   "Save a login (email and password) before you can save a letter.";
+export const ACCOUNT_BANNED = "This account is not allowed.";
 
 export const ACCOUNT_FIELDS = ["preferred_name", "email", "password"] as const;
 export const FORBIDDEN_ACCOUNT_FIELDS = [
@@ -82,7 +83,21 @@ export function membershipHasAccount(member: { account_id: string | null }): boo
   return Boolean(member.account_id);
 }
 
-export function submitBlockedReason(member: { account_id: string | null }): string | null {
+export function membershipIsActive(member: { removed_at?: string | null }): boolean {
+  return member.removed_at == null;
+}
+
+export function accountIsBanned(account: { banned_at?: string | null } | null | undefined): boolean {
+  return Boolean(account?.banned_at);
+}
+
+export function submitBlockedReason(
+  member: { account_id: string | null },
+  account?: { banned_at?: string | null } | null,
+): string | null {
+  if (accountIsBanned(account)) {
+    return ACCOUNT_BANNED;
+  }
   if (membershipHasAccount(member)) return null;
   return SUBMIT_ACCOUNT_REQUIRED;
 }

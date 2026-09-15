@@ -66,6 +66,8 @@ describe("privacy and chrome locks", () => {
     const source = readFileSync(resolve(here, "../app/(app)/g/[uuid]/people/page.tsx"), "utf8");
     expect(source).not.toContain("Not yet");
     expect(source).not.toContain("Written");
+    expect(source).toContain("KickMemberForm");
+    expect(source).toContain("canKickMember");
   });
 
   it("group home signs out instead of an ambiguous Leave", () => {

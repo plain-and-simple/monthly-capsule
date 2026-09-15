@@ -35,6 +35,18 @@ export function canForceCycle(role: Role): boolean {
   return role === "owner";
 }
 
+export function canKickMember(input: {
+  actorRole: Role;
+  actorMemberId: string;
+  targetRole: Role;
+  targetMemberId: string;
+}): boolean {
+  if (input.actorRole !== "owner") return false;
+  if (input.targetRole === "owner") return false;
+  if (input.actorMemberId === input.targetMemberId) return false;
+  return true;
+}
+
 export function groupChromeLinks(role: Role): GroupChromeLink[] {
   const links: GroupChromeLink[] = ["people", "invite"];
   if (canAccessSettings(role)) {
@@ -70,9 +82,14 @@ export function inviteMessage(shareUrl: string, typedPin: string, groupName: str
 
 export const REGEN_CONFIRM_VALUE = "1";
 export const FORCE_CLOSE_CONFIRM_VALUE = "1";
+export const KICK_CONFIRM_VALUE = "1";
 
 export function regenConfirmAccepted(confirm: FormDataEntryValue | null): boolean {
   return String(confirm ?? "") === REGEN_CONFIRM_VALUE;
+}
+
+export function kickConfirmAccepted(confirm: FormDataEntryValue | null): boolean {
+  return String(confirm ?? "") === KICK_CONFIRM_VALUE;
 }
 
 export function forceCloseConfirmAccepted(confirm: FormDataEntryValue | null): boolean {

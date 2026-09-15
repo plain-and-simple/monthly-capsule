@@ -787,6 +787,15 @@ button.listitem:hover {
   flex: none;
 }
 
+.kick-confirm {
+  flex: 1 1 100%;
+  margin-left: 2.8rem;
+}
+
+.listitem--actions {
+  flex-wrap: wrap;
+}
+
 .avatar {
   width: 34px;
   height: 34px;

@@ -1,9 +1,11 @@
 import "server-only";
 import {
+  ACCOUNT_BANNED,
   JOIN_ACCOUNT_REQUIRED,
   LOGIN_RATE_LIMITED,
   LOGIN_WRONG,
   PREFERRED_NAME_REQUIRED,
+  accountIsBanned,
   manageDestination,
   managePath,
   parseCreateAccount,
@@ -16,6 +18,7 @@ import { JOIN_RATE_LIMITED, pinJoinError, pinJoinOutcome } from "@/lib/manage";
 import {
   authenticateAccount,
   createAccount,
+  findAccountByEmail,
   linkMembership,
   listAccountGroups,
 } from "@/lib/memberships";
@@ -55,6 +58,11 @@ export async function planManageLogin(formData: FormData): Promise<SessionOpenRe
     return { ok: false, error: LOGIN_RATE_LIMITED, path: back };
   }
   await recordLoginAttempt(parsed.email, ip);
+
+  const existing = await findAccountByEmail(parsed.email);
+  if (accountIsBanned(existing)) {
+    return { ok: false, error: ACCOUNT_BANNED, path: back };
+  }
 
   const account = await authenticateAccount(parsed.email, parsed.password);
   if (!account) {
@@ -157,6 +165,9 @@ export async function planJoinGroup(formData: FormData): Promise<SessionOpenResu
   }
   if (!account) {
     return { ok: false, error: JOIN_ACCOUNT_REQUIRED, path: back };
+  }
+  if (accountIsBanned(account)) {
+    return { ok: false, error: ACCOUNT_BANNED, path: back };
   }
 
   const intent = parseJoinIntent({ preferred_name: preferredNameInput });

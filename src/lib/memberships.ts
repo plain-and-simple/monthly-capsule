@@ -1,5 +1,5 @@
 import "server-only";
-import { ACCOUNT_EXISTS } from "@/lib/account";
+import { ACCOUNT_EXISTS, accountIsBanned } from "@/lib/account";
 import { hashPassword, verifyPassword } from "@/lib/password";
 import { createAdminClient } from "@/lib/supabase";
 import type { Account, Group, Member } from "@/lib/types";
@@ -15,6 +15,7 @@ export async function listAccountGroups(accountId: string): Promise<AccountGroup
     .from("members")
     .select("*")
     .eq("account_id", accountId)
+    .is("removed_at", null)
     .order("joined_at", { ascending: true });
 
   if (error || !members || members.length === 0) {
@@ -39,6 +40,12 @@ export async function findAccountByEmail(email: string): Promise<Account | null>
   return (data as Account | null) ?? null;
 }
 
+export async function findAccountById(accountId: string): Promise<Account | null> {
+  const admin = createAdminClient();
+  const { data } = await admin.from("accounts").select("*").eq("id", accountId).maybeSingle();
+  return (data as Account | null) ?? null;
+}
+
 export async function createAccount(input: {
   preferredName: string;
   email: string;
@@ -46,6 +53,9 @@ export async function createAccount(input: {
 }): Promise<Account | { error: string }> {
   const existing = await findAccountByEmail(input.email);
   if (existing) {
+    if (accountIsBanned(existing)) {
+      return { error: ACCOUNT_EXISTS };
+    }
     const ok = await verifyPassword(input.password, existing.password_hash);
     if (!ok) {
       return { error: ACCOUNT_EXISTS };
@@ -76,8 +86,33 @@ export async function authenticateAccount(
 ): Promise<Account | null> {
   const account = await findAccountByEmail(email);
   if (!account) return null;
+  if (accountIsBanned(account)) return null;
   const ok = await verifyPassword(password, account.password_hash);
   return ok ? account : null;
+}
+
+export async function banAccountByEmail(email: string): Promise<Account | { error: string }> {
+  const account = await findAccountByEmail(email);
+  if (!account) {
+    return { error: "Unknown account." };
+  }
+  if (accountIsBanned(account)) {
+    return { error: "Already banned." };
+  }
+
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("accounts")
+    .update({ banned_at: new Date().toISOString() })
+    .eq("id", account.id)
+    .is("banned_at", null)
+    .select("*")
+    .maybeSingle();
+
+  if (error || !data) {
+    return { error: "Could not ban." };
+  }
+  return data as Account;
 }
 
 export async function updateAccountPassword(
@@ -110,6 +145,7 @@ export async function linkMembership(input: {
     .select("*")
     .eq("group_id", input.groupId)
     .eq("account_id", input.account.id)
+    .is("removed_at", null)
     .maybeSingle();
 
   if (byAccount) {
@@ -133,6 +169,7 @@ export async function linkMembership(input: {
     .select("*")
     .eq("group_id", input.groupId)
     .eq("email", input.account.email)
+    .is("removed_at", null)
     .maybeSingle();
 
   if (byEmail) {

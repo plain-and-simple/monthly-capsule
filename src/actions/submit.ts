@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { submitBlockedReason } from "@/lib/account";
+import { membershipIsActive, submitBlockedReason } from "@/lib/account";
 import { MAX_PHOTOS, PHOTO_BUCKET } from "@/lib/constants";
 import { ensureMonth } from "@/lib/compile";
 import { PhotoCompressError, storedPhotoExtension } from "@/lib/photo-compress";
@@ -9,6 +9,7 @@ import { collectPhotoFiles, validatePhotoList } from "@/lib/photo-files";
 import { compressPhotoForStorage } from "@/lib/photo-ingest";
 import { deleteStoredPhotos } from "@/lib/photos";
 import { resolveSubmitWindow } from "@/lib/cycle-store";
+import { findAccountById } from "@/lib/memberships";
 import { requireGroupMember } from "@/lib/session";
 import { nextSubmissionWrite, parseSubmitIntent, type SubmitStatus } from "@/lib/submit";
 import { createAdminClient } from "@/lib/supabase";
@@ -38,7 +39,11 @@ export async function submitLetter(
     }
 
     const { member, group } = await requireGroupMember(groupId);
-    const blocked = submitBlockedReason(member);
+    if (!membershipIsActive(member)) {
+      return { error: "Could not save." };
+    }
+    const linkedAccount = member.account_id ? await findAccountById(member.account_id) : null;
+    const blocked = submitBlockedReason(member, linkedAccount);
     if (blocked) {
       return { error: blocked };
     }

@@ -1,6 +1,6 @@
 "use server";
 
-import { parseCreateAccount } from "@/lib/account";
+import { ACCOUNT_BANNED, accountIsBanned, parseCreateAccount } from "@/lib/account";
 import {
   DEFAULT_EMAIL_DAY,
   DEFAULT_SUBMIT_END_DAY,
@@ -57,6 +57,9 @@ export async function createGroup(_prev: CreateState, formData: FormData): Promi
         return { ok: false, error: "Sign in again." };
       }
       account = data as Account;
+      if (accountIsBanned(account)) {
+        return { ok: false, error: ACCOUNT_BANNED };
+      }
     } else {
       const parsed = parseCreateAccount({
         preferred_name: String(formData.get("preferred_name") ?? ""),
@@ -69,6 +72,9 @@ export async function createGroup(_prev: CreateState, formData: FormData): Promi
       const created = await createAccount(parsed);
       if ("error" in created) {
         return { ok: false, error: created.error };
+      }
+      if (accountIsBanned(created)) {
+        return { ok: false, error: ACCOUNT_BANNED };
       }
       account = created;
     }

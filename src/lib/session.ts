@@ -3,6 +3,7 @@ import { jwtVerify, SignJWT } from "jose";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { cache } from "react";
+import { membershipIsActive } from "@/lib/account";
 import { ACCOUNT_COOKIE, SESSION_COOKIE } from "@/lib/constants";
 import { cookieSecret } from "@/lib/env";
 import { sessionCookieOptions } from "@/lib/hosting";
@@ -70,6 +71,9 @@ export const requireGroupMember = cache(async (groupId: string): Promise<{
     ]);
     member = (memberRow as Member | null) ?? null;
     group = (groupRow as Group | null) ?? null;
+    if (member && !membershipIsActive(member)) {
+      member = null;
+    }
   }
 
   const decision = decideGroupGate({

@@ -1,9 +1,9 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { manageDestination, managePath } from "@/lib/account";
+import { ACCOUNT_BANNED, accountIsBanned, manageDestination, managePath } from "@/lib/account";
 import { RESET_LINK_INVALID } from "@/lib/copy";
-import { listAccountGroups, updateAccountPassword } from "@/lib/memberships";
+import { listAccountGroups, findAccountById, updateAccountPassword } from "@/lib/memberships";
 import { hashPassword } from "@/lib/password";
 import { parseResetPassword } from "@/lib/password-reset";
 import { consumeAccountResetTokens, peekPasswordReset } from "@/lib/password-reset-store";
@@ -25,6 +25,14 @@ export async function completePasswordReset(
     const peeked = await peekPasswordReset(token);
     if (!peeked.ok) {
       return { error: RESET_LINK_INVALID };
+    }
+
+    const existing = await findAccountById(peeked.accountId);
+    if (!existing) {
+      return { error: RESET_LINK_INVALID };
+    }
+    if (accountIsBanned(existing)) {
+      return { error: ACCOUNT_BANNED };
     }
 
     const updated = await updateAccountPassword(

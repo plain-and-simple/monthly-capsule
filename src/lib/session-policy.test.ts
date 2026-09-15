@@ -16,6 +16,7 @@ import {
   SIGNED_OUT_PATH,
   SEE_OTHER,
   SIGNUP_PATH,
+  STUDIO_PATH,
   cookieWriteAllowed,
   decideAccountSession,
   decideGroupGate,
@@ -339,6 +340,7 @@ describe("session cookie + redirect uses Route Handler 303", () => {
     expect(JOIN_GROUP_PATH).toBe("/api/session/join");
     expect(SAVE_LOGIN_PATH).toBe("/api/session/save-login");
     expect(LOGOUT_PATH).toBe("/api/session/logout");
+    expect(STUDIO_PATH).toBe("/api/session/studio");
 
     for (const relative of [
       "../app/api/session/login/route.ts",
