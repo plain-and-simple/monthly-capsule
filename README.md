@@ -60,6 +60,7 @@ cp .env.example .env.local
 # fill in values
 npm install
 npm test
+npm run test:e2e
 npm run dev
 ```
 
@@ -87,6 +88,11 @@ See `.env.example`.
 | `APP_URL` | Origin, no trailing slash. Local: `http://localhost:3000`. Prod: `https://capsule.plainandsimple.app` |
 | `CRON_SECRET` | Vercel Cron `Authorization: Bearer …` |
 | `CREATE_GROUP_CODE` | Studio code to create a group. Trim + case-insensitive. Default if unset: `plainandsimple`. Set on Vercel for production. |
+| `E2E_BASE_URL` | Playwright origin. Leave empty for `http://127.0.0.1:3000`. Never defaults to production. |
+| `E2E_EMAIL` / `E2E_PASSWORD` | Optional test account. Auth/submit/group tests skip when unset. |
+| `E2E_GROUP_PIN` / `E2E_GROUP_ID` | Optional join-path secrets. Join submit skips when unset. |
+| `E2E_CRON_SECRET` | Optional. `GET /api/cron/email?dry=1` (no Resend send). Skip when unset. |
+| `E2E_ALLOW_PRODUCTION` | Must be `1` to run e2e against `https://capsule.plainandsimple.app`. Any other value fails closed. |
 
 ## Screens
 
@@ -104,9 +110,52 @@ See `.env.example`.
 10. **Capsule** `/g/[uuid]/capsule/[YYYY-MM]` — first edition (v1). Later same-month compiles: `/g/[uuid]/capsule/[YYYY-MM]/v2`. Read-only archive; session required. Any member.
 11. **Owner settings** `/g/[uuid]/settings` — the three day-of-month fields, Capsule cycle (open early / close & make / email), and Regenerate PIN.
 
+## End-to-end tests (Playwright)
+
+Browser smoke lives in `e2e/` and runs in GitHub Actions on pull requests and `main`. Grok is out of scope — this is repo/CI only.
+
+**Safe by default.** `E2E_BASE_URL` unset starts a local Next server. Pointing at `capsule.plainandsimple.app` throws unless `E2E_ALLOW_PRODUCTION=1`. CI smoke does not need secrets. Authenticated Ready paths skip unless `E2E_EMAIL` + `E2E_PASSWORD` are set (and in CI, `E2E_BASE_URL` must also be a preview/staging origin).
+
+### GitHub Actions secrets (leave empty for smoke-only)
+
+Create these as empty placeholders, then fill only for preview/staging:
+
+| Secret | Purpose |
+| --- | --- |
+| `E2E_BASE_URL` | Preview origin. Unset = local `next start` in CI (never production). |
+| `E2E_EMAIL` | Test account email |
+| `E2E_PASSWORD` | Test account password |
+| `E2E_GROUP_PIN` | Optional group PIN for the join path |
+| `E2E_GROUP_ID` | Optional group UUID for the join path |
+| `E2E_CRON_SECRET` | Same value as app `CRON_SECRET` on that origin. Enables `?dry=1` email preview (no Resend charge). |
+| `E2E_ALLOW_PRODUCTION` | Set to `1` only if you intentionally target production. |
+
+Do not put the studio / create-group code in e2e. `/admin` only asserts that a **wrong** code is rejected.
+
+### Local
+
+```bash
+npx playwright install chromium
+npm run test:e2e
+```
+
+That starts `next dev` at `http://127.0.0.1:3000` unless `E2E_BASE_URL` is set. Smoke covers landing, sign-in UI, join gate, create studio gate, `/admin` bad-code reject, and unauthorized cron email/compile (401). Cron `?dry=1` is how this repo previews recipients without calling Resend; `RESEND_API_KEY` unset also skips send.
+
+Authenticated Ready (sign in → Your groups → open group → draft if the window is open):
+
+```bash
+export E2E_EMAIL=
+export E2E_PASSWORD=
+export E2E_GROUP_PIN=
+export E2E_BASE_URL=http://127.0.0.1:3000   # or a Vercel preview
+npm run test:e2e
+```
+
+Fill the exports in your shell. Never commit real credentials. HTML report: `npx playwright show-report`.
+
 ## Dogfood path
 
-e2e is not set up. After env + **all** migrations (init, accounts, force-cycle, submission_status, capsule_archive, **month_versions**):
+After env + **all** migrations (init, accounts, force-cycle, submission_status, capsule_archive, **month_versions**). Prefer `npm run test:e2e` for the smoke; the steps below are still the manual Ready path:
 
 1. **Create (GWT B).** Open `/`. Upper-right Create Capsule Group. Studio code (local default `plainandsimple` if `CREATE_GROUP_CODE` is unset). Preferred name, email, password (8+). Copy the join link and PIN. Continue to the group home. You are the owner.
 2. **Manage (GWT A).** Private window. `/` → **Sign in** with that email + password (or Create an account first). No SMS. One group → group home. Your groups (and the brand mark) open `/manage` even with one group, so you can create another. Sign out from `/manage`. **Forgot password?** from the login card → `/forgot` → same ack whether the email exists. Open the emailed `/reset/…` link, set a new password (8+), land signed in.
