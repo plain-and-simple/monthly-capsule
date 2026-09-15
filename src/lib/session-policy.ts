@@ -13,6 +13,7 @@ export const JOIN_GROUP_PATH = "/api/session/join";
 export const SAVE_LOGIN_PATH = "/api/session/save-login";
 export const LOGOUT_PATH = "/api/session/logout";
 export const LEAVE_GROUP_PATH = "/api/session/leave";
+export const STUDIO_PATH = "/api/session/studio";
 export const SIGNED_OUT_NOTICE = "signed-out";
 export const SIGNED_OUT_PATH = `/?notice=${SIGNED_OUT_NOTICE}`;
 export const SEE_OTHER = 303;

@@ -20,6 +20,7 @@ async function openGroup(request: Request, groupIdRaw: string): Promise<NextResp
       .select("id")
       .eq("account_id", account.id)
       .eq("group_id", groupId)
+      .is("removed_at", null)
       .maybeSingle();
     memberId = typeof member?.id === "string" ? member.id : null;
   }

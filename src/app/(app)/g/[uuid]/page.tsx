@@ -38,7 +38,7 @@ export default async function GroupHomePage({
   const name = groupDisplayName(group.name);
 
   const [{ count }, { data: compiledMonths }] = await Promise.all([
-    admin.from("members").select("id", { count: "exact", head: true }).eq("group_id", uuid),
+    admin.from("members").select("id", { count: "exact", head: true }).eq("group_id", uuid).is("removed_at", null),
     admin
       .from("months")
       .select("id, year_month, version")

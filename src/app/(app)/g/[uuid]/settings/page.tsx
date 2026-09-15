@@ -33,7 +33,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ uuid:
         .eq("year_month", yearMonth)
         .eq("version", version)
         .maybeSingle(),
-      admin.from("members").select("id", { count: "exact", head: true }).eq("group_id", uuid),
+      admin.from("members").select("id", { count: "exact", head: true }).eq("group_id", uuid).is("removed_at", null),
     ]);
     if (month) {
       const { data: submissions } = await admin

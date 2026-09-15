@@ -19,6 +19,7 @@ export const PHOTO_BUCKET = "capsule-photos";
 
 export const SESSION_COOKIE = "capsule_session";
 export const ACCOUNT_COOKIE = "capsule_account";
+export const STUDIO_COOKIE = "capsule_studio";
 
 export const LOGIN_ATTEMPT_WINDOW_MS = 15 * 60 * 1000;
 export const LOGIN_ATTEMPT_MAX = 5;

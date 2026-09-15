@@ -8,11 +8,13 @@ import {
   canAccessPeople,
   canAccessSettings,
   canForceCycle,
+  canKickMember,
   canMintRegenPin,
   canRegeneratePin,
   groupChromeLinks,
   invitePayload,
   inviteShareText,
+  kickConfirmAccepted,
   payloadHasPinField,
   pinJoinError,
   pinJoinOutcome,
@@ -205,5 +207,28 @@ describe("regen PIN confirm (scenarios 12–13)", () => {
     expect(canRegeneratePin("member")).toBe(false);
     expect(canMintRegenPin("member", true)).toBe(false);
     expect(canMintRegenPin("member", false)).toBe(false);
+  });
+});
+
+describe("owner kick confirm", () => {
+  it("owner can remove a member after confirm; members cannot", () => {
+    expect(kickConfirmAccepted(null)).toBe(false);
+    expect(kickConfirmAccepted("1")).toBe(true);
+    expect(
+      canKickMember({
+        actorRole: "owner",
+        actorMemberId: "o",
+        targetRole: "member",
+        targetMemberId: "m",
+      }),
+    ).toBe(true);
+    expect(
+      canKickMember({
+        actorRole: "member",
+        actorMemberId: "m",
+        targetRole: "member",
+        targetMemberId: "other",
+      }),
+    ).toBe(false);
   });
 });

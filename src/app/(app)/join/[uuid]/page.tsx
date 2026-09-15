@@ -27,7 +27,7 @@ export default async function JoinPage({
   const admin = createAdminClient();
   const [{ data: group }, { count }] = await Promise.all([
     admin.from("groups").select("name").eq("id", uuid).maybeSingle(),
-    admin.from("members").select("id", { count: "exact", head: true }).eq("group_id", uuid),
+    admin.from("members").select("id", { count: "exact", head: true }).eq("group_id", uuid).is("removed_at", null),
   ]);
   const next = inviteJoinPath(uuid);
 

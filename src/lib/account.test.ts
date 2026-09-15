@@ -110,6 +110,10 @@ describe("GWT C — Join is an account, never a PIN-only seat that can submit", 
     expect(JOIN_ACCOUNT_REQUIRED).toBe("Create an account or sign in first.");
     expect(membershipHasAccount({ account_id: null })).toBe(false);
     expect(submitBlockedReason({ account_id: null })).toBe(SUBMIT_ACCOUNT_REQUIRED);
+    expect(submitBlockedReason({ account_id: "acct-1" })).toBeNull();
+    expect(
+      submitBlockedReason({ account_id: "acct-1" }, { banned_at: "2026-09-15T00:00:00.000Z" }),
+    ).toBe("This account is not allowed.");
     expect(membershipListedForAccount({ account_id: null }, "acct-1")).toBe(false);
     expect(wantsSaveLogin(undefined)).toBe(false);
   });

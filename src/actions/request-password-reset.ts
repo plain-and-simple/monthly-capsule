@@ -1,6 +1,6 @@
 "use server";
 
-import { LOGIN_RATE_LIMITED } from "@/lib/account";
+import { LOGIN_RATE_LIMITED, accountIsBanned } from "@/lib/account";
 import { appUrl } from "@/lib/env";
 import { findAccountByEmail } from "@/lib/memberships";
 import { sendPasswordResetEmail } from "@/lib/password-reset-mail";
@@ -34,7 +34,7 @@ export async function requestPasswordReset(
     await recordPasswordResetAttempt(parsed.email, ip);
 
     const account = await findAccountByEmail(parsed.email);
-    if (account) {
+    if (account && !accountIsBanned(account)) {
       const token = await issuePasswordReset(account.id);
       await sendPasswordResetEmail({
         to: account.email,
