@@ -2,11 +2,17 @@ import { AppHeader } from "@/components/app-header";
 import { JoinForm } from "@/components/join-form";
 import { JoinGate } from "@/components/join-gate";
 import { getAccount } from "@/lib/session";
+import { parseFlashError } from "@/lib/session-policy";
 
 export const dynamic = "force-dynamic";
 
-export default async function JoinHomePage() {
+export default async function JoinHomePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string }>;
+}) {
   const account = await getAccount();
+  const error = parseFlashError((await searchParams).error);
   return (
     <>
       <AppHeader
@@ -16,9 +22,9 @@ export default async function JoinHomePage() {
       />
       <main className="main">
         {account ? (
-          <JoinForm signedInAs={account.preferred_name} />
+          <JoinForm signedInAs={account.preferred_name} error={error} />
         ) : (
-          <JoinGate next="/join" />
+          <JoinGate next="/join" error={error} />
         )}
       </main>
       <footer className="footer">

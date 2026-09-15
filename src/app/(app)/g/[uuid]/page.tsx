@@ -16,6 +16,7 @@ import { resolveSubmitWindow } from "@/lib/cycle-store";
 import { capsuleHref, capsuleTitle, normalizeMonthVersion } from "@/lib/month-version";
 import { monthLabel } from "@/lib/schedule";
 import { requireGroupMember } from "@/lib/session";
+import { parseFlashError } from "@/lib/session-policy";
 import { writtenCount, writtenCountPhrase } from "@/lib/submit";
 import { createAdminClient } from "@/lib/supabase";
 import type { Submission } from "@/lib/types";
@@ -24,10 +25,13 @@ export const dynamic = "force-dynamic";
 
 export default async function GroupHomePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ uuid: string }>;
+  searchParams: Promise<{ error?: string }>;
 }) {
   const { uuid } = await params;
+  const error = parseFlashError((await searchParams).error);
   const { group, member } = await requireGroupMember(uuid);
   const { open, yearMonth, version, closed } = await resolveSubmitWindow(group);
   const admin = createAdminClient();
@@ -235,7 +239,9 @@ export default async function GroupHomePage({
             </>
           ) : null}
 
-          {member.account_id ? null : <SaveLoginForm groupId={uuid} next={`/g/${uuid}`} />}
+          {member.account_id ? null : (
+            <SaveLoginForm groupId={uuid} next={`/g/${uuid}`} error={error} />
+          )}
         </div>
       </div>
     </main>

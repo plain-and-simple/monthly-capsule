@@ -7,7 +7,37 @@
 export const CLEAR_ACCOUNT_SESSION_PATH = "/api/session/clear";
 export const OPEN_SOLO_GROUP_PATH = "/api/session/open-solo";
 export const OPEN_GROUP_PATH = "/api/session/open-group";
+export const LOGIN_PATH = "/api/session/login";
+export const SIGNUP_PATH = "/api/session/signup";
+export const JOIN_GROUP_PATH = "/api/session/join";
+export const SAVE_LOGIN_PATH = "/api/session/save-login";
+export const LOGOUT_PATH = "/api/session/logout";
+export const LEAVE_GROUP_PATH = "/api/session/leave";
 export const SEE_OTHER = 303;
+export const FLASH_ERROR_MAX = 200;
+
+/** User-facing form error carried on a 303. Reject empty or oversized values. */
+export function parseFlashError(value: string | null | undefined): string | null {
+  if (value == null) return null;
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length > FLASH_ERROR_MAX) return null;
+  return trimmed;
+}
+
+export function flashErrorPath(
+  path: string,
+  error: string,
+  extra: Record<string, string | null | undefined> = {},
+): string {
+  const [base, query] = path.split("?");
+  const params = new URLSearchParams(query ?? "");
+  for (const [key, val] of Object.entries(extra)) {
+    if (val) params.set(key, val);
+  }
+  params.set("error", error);
+  const qs = params.toString();
+  return qs ? `${base}?${qs}` : `${base}`;
+}
 
 export type CookieWriteContext = "server_component" | "server_action" | "route_handler";
 

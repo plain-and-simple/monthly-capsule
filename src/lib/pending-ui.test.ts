@@ -47,7 +47,15 @@ describe("pending mutation UI", () => {
     expect(source("src/components/open-group-form.tsx")).toContain("Opening…");
     expect(source("src/components/open-group-form.tsx")).toContain("OPEN_GROUP_PATH");
     expect(source("src/components/open-group-form.tsx")).toContain('method="post"');
+    expect(source("src/components/open-group-form.tsx")).toContain("CLIENT_PENDING_GUARD_MS");
     expect(source("src/app/(app)/manage/page.tsx")).toContain("OpenGroupForm");
+    expect(source("src/components/manage-form.tsx")).toContain("LOGIN_PATH");
+    expect(source("src/components/sign-up-form.tsx")).toContain("SIGNUP_PATH");
+    expect(source("src/components/join-form.tsx")).toContain("JOIN_GROUP_PATH");
+    expect(source("src/components/save-login-form.tsx")).toContain("SAVE_LOGIN_PATH");
+    expect(source("src/components/sign-out-button.tsx")).toContain("LOGOUT_PATH");
+    expect(source("src/components/pending-submit-button.tsx")).toContain("CLIENT_PENDING_GUARD_MS");
+    expect(source("src/components/pending-link.tsx")).toContain("CLIENT_PENDING_GUARD_MS");
   });
 
   it("adds loading fallbacks for slow navigations and batches capsule photo URLs", () => {
@@ -59,5 +67,10 @@ describe("pending mutation UI", () => {
     expect(source("src/app/(app)/g/[uuid]/page.tsx")).toContain("prefetch={false}");
     expect(source("src/app/(app)/g/[uuid]/capsule/view.tsx")).toContain("signedPhotoUrls");
     expect(source("src/app/(app)/g/[uuid]/capsule/view.tsx")).not.toContain("await signedPhotoUrl(");
+    expect(source("src/app/(app)/error.tsx")).toContain("RouteError");
+    expect(source("src/app/(app)/g/[uuid]/error.tsx")).toContain("RouteError");
+    expect(source("src/app/(app)/g/[uuid]/capsule/[yearMonth]/error.tsx")).toContain("RouteError");
+    expect(source("src/app/error.tsx")).toContain("RouteError");
   });
 });
+

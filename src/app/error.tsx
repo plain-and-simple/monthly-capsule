@@ -2,7 +2,7 @@
 
 import { RouteError } from "@/components/route-error";
 
-export default function SubmitError({
+export default function ErrorPage({
   error,
   reset,
 }: {

@@ -2,17 +2,26 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { planLeave } from "./session-open";
 import {
   CLEAR_ACCOUNT_SESSION_PATH,
+  FLASH_ERROR_MAX,
+  JOIN_GROUP_PATH,
+  LOGIN_PATH,
+  LOGOUT_PATH,
   OPEN_GROUP_PATH,
   OPEN_SOLO_GROUP_PATH,
+  SAVE_LOGIN_PATH,
   SEE_OTHER,
+  SIGNUP_PATH,
   cookieWriteAllowed,
   decideAccountSession,
   decideGroupGate,
   decideManageSolo,
   decideOpenGroupRequest,
   decideOpenGroupUi,
+  flashErrorPath,
+  parseFlashError,
 } from "./session-policy";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -118,12 +127,17 @@ describe("RSC cookie-write regression", () => {
 
   it("Route Handlers perform the cookie writes", () => {
     const clearer = readFileSync(resolve(here, "../app/api/session/clear/route.ts"), "utf8");
-    expect(clearer).toContain("clearAccountSession");
+    expect(clearer).toContain("seeOtherWithCookies");
+    expect(clearer).toContain("clearAccount");
     expect(clearer).toContain('export async function GET');
+    expect(clearer).not.toContain('from "next/navigation"');
 
     const opener = readFileSync(resolve(here, "../app/api/session/open-solo/route.ts"), "utf8");
-    expect(opener).toContain("setSession");
+    expect(opener).toContain("seeOtherWithCookies");
+    expect(opener).toContain("mintSessionToken");
     expect(opener).toContain('export async function GET');
+    expect(opener).not.toMatch(/\bsetSession\b/);
+    expect(opener).not.toContain('from "next/navigation"');
   });
 });
 
@@ -274,9 +288,7 @@ describe("open-group hang regression", () => {
 
   it("open-group Route Handler sets the cookie on the response and redirects 303", () => {
     const route = readFileSync(resolve(here, "../app/api/session/open-group/route.ts"), "utf8");
-    expect(route).toContain("NextResponse.redirect");
-    expect(route).toContain("SEE_OTHER");
-    expect(route).toContain("response.cookies.set");
+    expect(route).toContain("seeOtherWithCookies");
     expect(route).toContain("mintSessionToken");
     expect(route).toContain("export async function POST");
     expect(route).not.toContain('from "next/navigation"');
@@ -294,3 +306,69 @@ describe("open-group hang regression", () => {
     expect(body).toContain('decision.action === "manage"');
   });
 });
+
+describe("leave destination", () => {
+  it("clears the group cookie and returns to manage when an account remains", () => {
+    expect(planLeave(true)).toEqual({ path: "/manage", clearSession: true });
+    expect(planLeave(false)).toEqual({ path: "/", clearSession: true });
+  });
+});
+
+describe("flash error on 303", () => {
+  it("keeps a short user-facing message and drops empty or oversized values", () => {
+    expect(parseFlashError("PIN is 6 digits.")).toBe("PIN is 6 digits.");
+    expect(parseFlashError("  ")).toBeNull();
+    expect(parseFlashError("x".repeat(FLASH_ERROR_MAX + 1))).toBeNull();
+    expect(flashErrorPath("/join", "Unknown group.")).toBe("/join?error=Unknown+group.");
+    expect(flashErrorPath("/", "Email or password is wrong.", { next: "/join" })).toBe(
+      "/?next=%2Fjoin&error=Email+or+password+is+wrong.",
+    );
+  });
+});
+
+describe("session cookie + redirect uses Route Handler 303", () => {
+  it("login, signup, join, save-login, and logout post to Route Handlers", () => {
+    expect(LOGIN_PATH).toBe("/api/session/login");
+    expect(SIGNUP_PATH).toBe("/api/session/signup");
+    expect(JOIN_GROUP_PATH).toBe("/api/session/join");
+    expect(SAVE_LOGIN_PATH).toBe("/api/session/save-login");
+    expect(LOGOUT_PATH).toBe("/api/session/logout");
+
+    for (const relative of [
+      "../app/api/session/login/route.ts",
+      "../app/api/session/signup/route.ts",
+      "../app/api/session/join/route.ts",
+      "../app/api/session/save-login/route.ts",
+    ]) {
+      const route = readFileSync(resolve(here, relative), "utf8");
+      expect(route).toContain("respondSessionOpen");
+      expect(route).toContain("export async function POST");
+      expect(route).not.toContain('from "next/navigation"');
+    }
+
+    const logout = readFileSync(resolve(here, "../app/api/session/logout/route.ts"), "utf8");
+    expect(logout).toContain("seeOtherWithCookies");
+    expect(logout).not.toContain("respondSessionOpen");
+  });
+
+  it("session-open planners never write cookies or call redirect()", () => {
+    const source = readFileSync(resolve(here, "./session-open.ts"), "utf8");
+    expect(source).not.toMatch(/\bsetSession\(/);
+    expect(source).not.toMatch(/\bsetAccountSession\(/);
+    expect(source).not.toMatch(/\bclearSession\(/);
+    expect(source).not.toMatch(/\bclearAccountSession\(/);
+    expect(source).not.toContain('from "next/navigation"');
+    expect(source).toContain("planManageLogin");
+    expect(source).toContain("planJoinGroup");
+  });
+
+  it("helper sets cookies on the 303 response, not cookies().set", () => {
+    const source = readFileSync(resolve(here, "./session-redirect.ts"), "utf8");
+    expect(source).toContain("NextResponse.redirect");
+    expect(source).toContain("SEE_OTHER");
+    expect(source).toContain("response.cookies.set");
+    expect(source).not.toMatch(/cookies\(\)/);
+    expect(source).toContain("respondSessionOpen");
+  });
+});
+

@@ -7,13 +7,21 @@ import { windowClosesPhrase } from "@/lib/group-status";
 import { resolveSubmitWindow } from "@/lib/cycle-store";
 import { monthLabel } from "@/lib/schedule";
 import { requireGroupMember } from "@/lib/session";
+import { parseFlashError } from "@/lib/session-policy";
 import { createAdminClient } from "@/lib/supabase";
 import type { SubmitStatus } from "@/lib/submit";
 
 export const dynamic = "force-dynamic";
 
-export default async function SubmitPage({ params }: { params: Promise<{ uuid: string }> }) {
+export default async function SubmitPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ uuid: string }>;
+  searchParams: Promise<{ error?: string }>;
+}) {
   const { uuid } = await params;
+  const error = parseFlashError((await searchParams).error);
   const { group, member } = await requireGroupMember(uuid);
   const submitWindow = await resolveSubmitWindow(group);
   const open = submitWindow.open;
@@ -66,7 +74,7 @@ export default async function SubmitPage({ params }: { params: Promise<{ uuid: s
             ← {name}
           </Link>
           {open && !membershipHasAccount(member) ? (
-            <SaveLoginForm groupId={uuid} next={`/g/${uuid}/submit`} />
+            <SaveLoginForm groupId={uuid} next={`/g/${uuid}/submit`} error={error} />
           ) : (
             <SubmitForm
               groupId={uuid}

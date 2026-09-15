@@ -1,21 +1,31 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState } from "react";
-import { manageLogin, type ManageLoginState } from "@/actions/manage-login";
 import { PendingSubmitButton, useInstantBusy } from "@/components/pending-submit-button";
 import { ACCOUNT_PASSWORD_LABEL, FORGOT_PASSWORD_LINK, LANDING_SIGN_IN } from "@/lib/copy";
+import { LOGIN_PATH } from "@/lib/session-policy";
 
-export function ManageForm({ next }: { next?: string | null }) {
-  const [state, action, pending] = useActionState<ManageLoginState, FormData>(
-    manageLogin,
-    null,
-  );
-  const { busy, markBusy } = useInstantBusy(pending);
+export function ManageForm({
+  next,
+  error,
+  returnTo = "/",
+}: {
+  next?: string | null;
+  error?: string | null;
+  returnTo?: string;
+}) {
+  const { busy, markBusy } = useInstantBusy(false);
 
   return (
-    <form action={action} className="stack" onSubmit={markBusy} aria-busy={busy || undefined}>
+    <form
+      action={LOGIN_PATH}
+      method="post"
+      className="stack"
+      onSubmit={markBusy}
+      aria-busy={busy || undefined}
+    >
       <h2>{LANDING_SIGN_IN}</h2>
+      <input type="hidden" name="return" value={returnTo} />
       {next ? <input type="hidden" name="next" value={next} /> : null}
       <div>
         <label className="field">
@@ -37,7 +47,7 @@ export function ManageForm({ next }: { next?: string | null }) {
       <p className="small">
         <Link href="/forgot">{FORGOT_PASSWORD_LINK}</Link>
       </p>
-      {state?.error ? <p className="err">{state.error}</p> : null}
+      {error ? <p className="err">{error}</p> : null}
       <PendingSubmitButton
         className="btn btn--primary btn--block btn--lg"
         busy={busy}

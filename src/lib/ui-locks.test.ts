@@ -106,10 +106,10 @@ describe("account-before-join IA", () => {
     expect(joinForm).not.toContain("Skip to join");
     expect(joinForm).toContain("signedInAs");
 
-    const joinAction = readFileSync(resolve(here, "../actions/join-group.ts"), "utf8");
-    expect(joinAction).toContain("JOIN_ACCOUNT_REQUIRED");
-    expect(joinAction).not.toContain("account_id: null");
-    expect(joinAction).not.toContain("email: null");
+    const joinPlan = readFileSync(resolve(here, "./session-open.ts"), "utf8");
+    expect(joinPlan).toContain("JOIN_ACCOUNT_REQUIRED");
+    expect(joinPlan).not.toContain("account_id: null");
+    expect(joinPlan).not.toContain("email: null");
 
     const invite = readFileSync(resolve(here, "../app/(app)/join/[uuid]/page.tsx"), "utf8");
     expect(invite).toContain("JoinGate");
