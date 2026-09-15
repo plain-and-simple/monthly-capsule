@@ -14,7 +14,9 @@ export type AuthCookieWrite = {
 };
 
 export function seeOther(request: Request, path: string): NextResponse {
-  return NextResponse.redirect(new URL(path, request.url), SEE_OTHER);
+  const response = NextResponse.redirect(new URL(path, request.url), SEE_OTHER);
+  response.headers.set("Cache-Control", "no-store");
+  return response;
 }
 
 export function applyAuthCookies(response: NextResponse, tokens: AuthCookieWrite): NextResponse {
@@ -26,10 +28,10 @@ export function applyAuthCookies(response: NextResponse, tokens: AuthCookieWrite
     response.cookies.set(SESSION_COOKIE, tokens.session, opts);
   }
   if (tokens.clearAccount) {
-    response.cookies.set(ACCOUNT_COOKIE, "", { ...opts, maxAge: 0 });
+    response.cookies.set(ACCOUNT_COOKIE, "", { ...opts, maxAge: 0, expires: new Date(0) });
   }
   if (tokens.clearSession) {
-    response.cookies.set(SESSION_COOKIE, "", { ...opts, maxAge: 0 });
+    response.cookies.set(SESSION_COOKIE, "", { ...opts, maxAge: 0, expires: new Date(0) });
   }
   return response;
 }

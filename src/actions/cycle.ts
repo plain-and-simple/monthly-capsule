@@ -30,7 +30,7 @@ import {
   isCycleSubmitOpen,
   isNextRedirectError,
 } from "@/lib/cycle";
-import { ownerEmailFailed } from "@/lib/email-policy";
+import { EMAIL_ACTION_TIMEOUT_MS, ownerEmailFailed, withTimeout } from "@/lib/email-policy";
 import { holdGroupMonthEmail, sendGroupMonthEmail } from "@/lib/email";
 import { forceCloseConfirmAccepted } from "@/lib/manage";
 import { capsuleHref, planForceOpen } from "@/lib/month-version";
@@ -145,35 +145,12 @@ export async function emailGroupNow(
   _prev: CycleEmailState,
   formData: FormData,
 ): Promise<CycleEmailState> {
-  const groupId = String(formData.get("groupId") ?? "");
-  const yearMonth = String(formData.get("yearMonth") ?? "");
-  const version = parseEdition(formData);
-
   try {
-    const { member, group } = await requireGroupMember(groupId);
-    const { capsule } = await findGroupCapsule(groupId, yearMonth, version);
-    const decision = decideForceEmail(
-      member.role,
-      capsule ? { email_sent_at: capsule.email_sent_at as string | null } : null,
-      confirmResendAccepted(formData.get("confirmResend")),
+    return await withTimeout(
+      sendOwnerGroupEmail(formData),
+      EMAIL_ACTION_TIMEOUT_MS,
+      CYCLE_EMAIL_TIMEOUT,
     );
-    if (decision === "forbidden") return { error: CYCLE_OWNER_ONLY };
-    if (decision === "no_capsule") return { error: CYCLE_NO_CAPSULE };
-    if (decision === "already_sent") return { error: CYCLE_ALREADY_SENT };
-
-    const result = await sendGroupMonthEmail(group, yearMonth, {
-      version,
-      forceResend: decision === "resend",
-    });
-    if (result.reason === "already-sent") return { error: CYCLE_ALREADY_SENT };
-    if (result.reason === "no-capsule" || result.reason === "no-month") {
-      return { error: CYCLE_NO_CAPSULE };
-    }
-    if (ownerEmailFailed(result)) {
-      return { error: result.error || result.message || "Could not send." };
-    }
-    revalidateGroup(groupId, yearMonth, version);
-    return { ok: true, message: result.message || CYCLE_SENT };
   } catch (error) {
     if (isNextRedirectError(error)) throw error;
     if (error instanceof Error && error.message === CYCLE_EMAIL_TIMEOUT) {
@@ -181,6 +158,37 @@ export async function emailGroupNow(
     }
     return { error: "Could not send." };
   }
+}
+
+async function sendOwnerGroupEmail(formData: FormData): Promise<CycleEmailState> {
+  const groupId = String(formData.get("groupId") ?? "");
+  const yearMonth = String(formData.get("yearMonth") ?? "");
+  const version = parseEdition(formData);
+
+  const { member, group } = await requireGroupMember(groupId);
+  const { capsule } = await findGroupCapsule(groupId, yearMonth, version);
+  const decision = decideForceEmail(
+    member.role,
+    capsule ? { email_sent_at: capsule.email_sent_at as string | null } : null,
+    confirmResendAccepted(formData.get("confirmResend")),
+  );
+  if (decision === "forbidden") return { error: CYCLE_OWNER_ONLY };
+  if (decision === "no_capsule") return { error: CYCLE_NO_CAPSULE };
+  if (decision === "already_sent") return { error: CYCLE_ALREADY_SENT };
+
+  const result = await sendGroupMonthEmail(group, yearMonth, {
+    version,
+    forceResend: decision === "resend",
+  });
+  if (result.reason === "already-sent") return { error: CYCLE_ALREADY_SENT };
+  if (result.reason === "no-capsule" || result.reason === "no-month") {
+    return { error: CYCLE_NO_CAPSULE };
+  }
+  if (ownerEmailFailed(result)) {
+    return { error: result.error || result.message || "Could not send." };
+  }
+  revalidateGroup(groupId, yearMonth, version);
+  return { ok: true, message: result.message || CYCLE_SENT };
 }
 
 export async function skipGroupEmail(

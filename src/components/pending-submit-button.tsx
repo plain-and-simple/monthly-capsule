@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useState, type ButtonHTMLAttributes, type ReactNode } from "react";
-import { useFormStatus } from "react-dom";
-import { CLIENT_PENDING_GUARD_MS } from "@/lib/pending-ui";
+import { useEffect, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from "react";
+import { flushSync, useFormStatus } from "react-dom";
+import { CLIENT_PENDING_GUARD_MS, pendingGuardRemainingMs } from "@/lib/pending-ui";
 
 export function useInstantBusy(pending: boolean, stuckMs = CLIENT_PENDING_GUARD_MS) {
   const [held, setHeld] = useState(false);
   const [stuck, setStuck] = useState(false);
+  const startedAtRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (pending) {
@@ -19,11 +20,21 @@ export function useInstantBusy(pending: boolean, stuckMs = CLIENT_PENDING_GUARD_
 
   useEffect(() => {
     if (stuck) return;
-    if (!held && !pending) return;
+    const active = held || pending;
+    if (!active) {
+      startedAtRef.current = null;
+      return;
+    }
+    if (startedAtRef.current == null) {
+      startedAtRef.current = Date.now();
+    }
+    const remaining = pendingGuardRemainingMs(startedAtRef.current, Date.now(), stuckMs);
     const timer = window.setTimeout(() => {
-      setHeld(false);
-      setStuck(true);
-    }, stuckMs);
+      flushSync(() => {
+        setHeld(false);
+        setStuck(true);
+      });
+    }, remaining);
     return () => window.clearTimeout(timer);
   }, [held, pending, stuckMs, stuck]);
 
@@ -59,6 +70,7 @@ export function PendingSubmitButton({
   const { pending, data } = useFormStatus();
   const [clicked, setClicked] = useState(false);
   const [timedOut, setTimedOut] = useState(false);
+  const startedAtRef = useRef<number | null>(null);
   const rawBusy = pending || clicked || busyProp;
   const busy = ignorePending || timedOut ? false : rawBusy;
   const isSubmitter =
@@ -68,16 +80,23 @@ export function PendingSubmitButton({
 
   useEffect(() => {
     if (!rawBusy) {
+      startedAtRef.current = null;
       setTimedOut(false);
       return;
     }
-    const timer = window.setTimeout(() => setTimedOut(true), CLIENT_PENDING_GUARD_MS);
+    if (startedAtRef.current == null) {
+      startedAtRef.current = Date.now();
+    }
+    const remaining = pendingGuardRemainingMs(startedAtRef.current, Date.now());
+    const timer = window.setTimeout(() => {
+      flushSync(() => setTimedOut(true));
+    }, remaining);
     return () => window.clearTimeout(timer);
   }, [rawBusy]);
 
   useEffect(() => {
-    if (ignorePending || timedOut || (!pending && !busyProp)) setClicked(false);
-  }, [pending, busyProp, ignorePending, timedOut]);
+    if (ignorePending || timedOut) setClicked(false);
+  }, [ignorePending, timedOut]);
 
   return (
     <button
@@ -86,11 +105,16 @@ export function PendingSubmitButton({
       className={className}
       name={name}
       value={value}
-      disabled={busy || disabled}
+      disabled={disabled}
       aria-busy={busy || undefined}
+      aria-disabled={busy || disabled || undefined}
       onClick={(event) => {
         onClick?.(event);
         if (event.defaultPrevented) return;
+        if (busy) {
+          event.preventDefault();
+          return;
+        }
         setClicked(true);
       }}
     >

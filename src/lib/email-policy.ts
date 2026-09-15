@@ -43,6 +43,8 @@ export function ownerCanEmailCapsule(capsule: Pick<CapsuleEmailFlags, "email_sen
 
 /** Per-recipient Resend budget. Must finish before a Hobby function is killed. */
 export const RESEND_SEND_TIMEOUT_MS = 8_000;
+/** Whole owner Send action: Resend budget plus lookup, then return before the 12s UI guard. */
+export const EMAIL_ACTION_TIMEOUT_MS = 9_000;
 /** Client pending guard if the action POST never returns a result. */
 export const EMAIL_PENDING_GUARD_MS = CLIENT_PENDING_GUARD_MS;
 export const RESEND_TIMEOUT_MESSAGE = "Email send timed out. Try again.";
