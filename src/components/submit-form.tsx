@@ -2,9 +2,10 @@
 
 import { useActionState, useRef, useState } from "react";
 import { submitLetter, type SubmitState } from "@/actions/submit";
+import { MutationToast } from "@/components/app-toast";
 import { PendingSubmitButton, useInstantBusy } from "@/components/pending-submit-button";
 import { MAX_PHOTOS } from "@/lib/constants";
-import { SUBMIT_AND_SEND, SUBMIT_DRAFT } from "@/lib/copy";
+import { SUBMIT_AND_SEND, SUBMIT_DRAFT, SUBMIT_SAVED_DRAFT, SUBMIT_SUBMITTED } from "@/lib/copy";
 import { PHOTO_COMPRESS_FAILED, compressPhotoFile } from "@/lib/photo-compress";
 import type { SubmitStatus } from "@/lib/submit";
 
@@ -62,14 +63,20 @@ export function SubmitForm({
   const status = state?.status ?? initialStatus;
   const statusLine =
     state?.ok && status === "draft"
-      ? "Saved as draft"
+      ? SUBMIT_SAVED_DRAFT
       : state?.ok && status === "submitted"
-        ? "Submitted"
+        ? SUBMIT_SUBMITTED
         : status === "draft"
           ? "Draft saved"
           : status === "submitted"
             ? "Submitted — still editable"
             : null;
+  const toastMessage =
+    state?.ok && status === "draft"
+      ? SUBMIT_SAVED_DRAFT
+      : state?.ok && status === "submitted"
+        ? SUBMIT_SUBMITTED
+        : null;
 
   if (closed) {
     return (
@@ -177,6 +184,7 @@ export function SubmitForm({
 
       {photoError ? <p className="err">{photoError}</p> : null}
       {state?.error ? <p className="err">{state.error}</p> : null}
+      <MutationToast pending={busy} ok={state?.ok} message={toastMessage} />
       <div className="stack stack--tight">
         <PendingSubmitButton
           className="btn btn--primary btn--block btn--lg"

@@ -2,6 +2,7 @@
 
 import { useActionState, useState } from "react";
 import { emailGroupNow, type CycleEmailState } from "@/actions/cycle";
+import { MutationToast } from "@/components/app-toast";
 import { PendingSubmitButton, useInstantBusy } from "@/components/pending-submit-button";
 import { CYCLE_EMAIL_LATER, CYCLE_SEND_AGAIN, CYCLE_SEND_AGAIN_HINT } from "@/lib/copy";
 import {
@@ -90,7 +91,7 @@ export function OwnerEmailSubmit({
       {needsConfirm ? <input type="hidden" name="confirmResend" value={CONFIRM_RESEND_VALUE} /> : null}
       {needsConfirm ? <p className="muted small">{CYCLE_SEND_AGAIN_HINT}</p> : null}
       {error ? <p className="err">{error}</p> : null}
-      {state?.ok ? <p>{state.message}</p> : null}
+      <MutationToast pending={busy} ok={state?.ok} message={state?.ok ? state.message : null} />
       <PendingSubmitButton
         className={buttonClass}
         busy={busy}

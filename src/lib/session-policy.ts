@@ -13,8 +13,15 @@ export const JOIN_GROUP_PATH = "/api/session/join";
 export const SAVE_LOGIN_PATH = "/api/session/save-login";
 export const LOGOUT_PATH = "/api/session/logout";
 export const LEAVE_GROUP_PATH = "/api/session/leave";
+export const SIGNED_OUT_NOTICE = "signed-out";
+export const SIGNED_OUT_PATH = `/?notice=${SIGNED_OUT_NOTICE}`;
 export const SEE_OTHER = 303;
 export const FLASH_ERROR_MAX = 200;
+
+/** Allowlisted 303 notice. Unknown values are ignored. */
+export function parseFlashNotice(value: string | null | undefined): typeof SIGNED_OUT_NOTICE | null {
+  return value === SIGNED_OUT_NOTICE ? SIGNED_OUT_NOTICE : null;
+}
 
 /** User-facing form error carried on a 303. Reject empty or oversized values. */
 export function parseFlashError(value: string | null | undefined): string | null {
