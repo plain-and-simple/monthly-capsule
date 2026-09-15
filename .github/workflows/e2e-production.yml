@@ -1,0 +1,85 @@
+name: E2E production
+
+# Authenticated e2e against production AFTER Vercel Production is Ready.
+# Not on PRs. Not on push to main (that races the prod deploy).
+#
+# Why deployment_status: this repo already receives Vercel GitHub Deployments
+# named Production / Preview with state success. Preview is ignored.
+# Do not set jobs.*.environment to Production — that would create another
+# GitHub Deployment and loop this workflow.
+on:
+  deployment_status:
+
+concurrency:
+  group: e2e-production
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  e2e-production:
+    name: E2E production
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: >-
+      github.event.deployment_status.state == 'success' &&
+      (github.event.deployment.environment == 'Production' ||
+      github.event.deployment.environment == 'production' ||
+      github.event.deployment_status.environment == 'Production' ||
+      github.event.deployment_status.environment == 'production')
+    env:
+      E2E_BASE_URL: ${{ secrets.E2E_BASE_URL }}
+      E2E_EMAIL: ${{ secrets.E2E_EMAIL }}
+      E2E_PASSWORD: ${{ secrets.E2E_PASSWORD }}
+      E2E_GROUP_PIN: ${{ secrets.E2E_GROUP_PIN }}
+      E2E_GROUP_ID: ${{ secrets.E2E_GROUP_ID }}
+      E2E_CRON_SECRET: ${{ secrets.E2E_CRON_SECRET }}
+      E2E_ALLOW_PRODUCTION: ${{ secrets.E2E_ALLOW_PRODUCTION }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.deployment.sha }}
+      - name: Require production e2e secrets
+        run: |
+          missing=0
+          for name in E2E_BASE_URL E2E_EMAIL E2E_PASSWORD E2E_GROUP_PIN E2E_GROUP_ID E2E_ALLOW_PRODUCTION; do
+            if [ -z "${!name}" ]; then
+              echo "Missing required repository secret: $name"
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            echo "Set repository secrets with gh secret set. Do not put values in workflow files."
+            exit 1
+          fi
+          if [ "$E2E_ALLOW_PRODUCTION" != "1" ]; then
+            echo "E2E_ALLOW_PRODUCTION must be the literal 1"
+            exit 1
+          fi
+          python3 - <<'PY'
+          import os
+          import sys
+          from urllib.parse import urlparse
+
+          host = urlparse(os.environ.get("E2E_BASE_URL", "")).hostname
+          if host != "capsule.plainandsimple.app":
+              print("E2E_BASE_URL host must be capsule.plainandsimple.app")
+              sys.exit(1)
+          print("Production e2e target host OK")
+          PY
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report-production
+          path: |
+            playwright-report
+            test-results
+          retention-days: 7

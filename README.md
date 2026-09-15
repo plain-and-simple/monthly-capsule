@@ -112,23 +112,32 @@ See `.env.example`.
 
 ## End-to-end tests (Playwright)
 
-Browser smoke lives in `e2e/` and runs in GitHub Actions on pull requests and `main`. Grok is out of scope — this is repo/CI only.
+Browser tests live in `e2e/`. Grok is out of scope — this is repo/CI only.
 
-**Safe by default.** `E2E_BASE_URL` unset starts a local Next server. Pointing at `capsule.plainandsimple.app` throws unless `E2E_ALLOW_PRODUCTION=1`. CI smoke does not need secrets. Authenticated Ready paths skip unless `E2E_EMAIL` + `E2E_PASSWORD` are set (and in CI, `E2E_BASE_URL` must also be a preview/staging origin).
+**Safe by default.** `E2E_BASE_URL` unset starts a local Next server. Pointing at `capsule.plainandsimple.app` throws unless `E2E_ALLOW_PRODUCTION=1`.
 
-### GitHub Actions secrets (leave empty for smoke-only)
+### CI triggers
 
-Create these as empty placeholders, then fill only for preview/staging:
+| Workflow | Trigger | What runs |
+| --- | --- | --- |
+| `CI` | `pull_request` and `push` to `main` | Unit + typecheck. E2E **local smoke only** (`next start`). Does **not** receive `E2E_BASE_URL` / auth / `E2E_ALLOW_PRODUCTION` secrets. |
+| `E2E production` | GitHub `deployment_status` when Vercel marks **Production** `success` | Authenticated Playwright against the production origin from repo secrets. |
+
+Push to `main` is not used for production e2e — that job can finish before Vercel Production is Ready. `deployment_status` is the trigger because this repo already has Vercel GitHub Deployments named `Production` / `Preview`. The production workflow must be on `main` before it will fire. Preview deployments are ignored.
+
+### GitHub Actions secrets (repository scope)
+
+Used only by `.github/workflows/e2e-production.yml`. Do not map them into the PR/main smoke job.
 
 | Secret | Purpose |
 | --- | --- |
-| `E2E_BASE_URL` | Preview origin. Unset = local `next start` in CI (never production). |
+| `E2E_BASE_URL` | Production origin (`https://capsule.plainandsimple.app`). |
 | `E2E_EMAIL` | Test account email |
 | `E2E_PASSWORD` | Test account password |
-| `E2E_GROUP_PIN` | Optional group PIN for the join path |
-| `E2E_GROUP_ID` | Optional group UUID for the join path |
-| `E2E_CRON_SECRET` | Same value as app `CRON_SECRET` on that origin. Enables `?dry=1` email preview (no Resend charge). |
-| `E2E_ALLOW_PRODUCTION` | Set to `1` only if you intentionally target production. |
+| `E2E_GROUP_PIN` | Group PIN for the join path |
+| `E2E_GROUP_ID` | Group UUID for the join path |
+| `E2E_CRON_SECRET` | Same value as app `CRON_SECRET` on production. Enables `?dry=1` email preview (no Resend charge). Optional; cron dry-run skips when unset. |
+| `E2E_ALLOW_PRODUCTION` | Must be the literal `1` to hit production. |
 
 Do not put the studio / create-group code in e2e. `/admin` only asserts that a **wrong** code is rejected.
 

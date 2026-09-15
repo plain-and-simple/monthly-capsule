@@ -14,12 +14,21 @@ function listFiles(dir: string): string[] {
   });
 }
 
+function readWorkflow(name: string): string {
+  return readFileSync(resolve(repoRoot, ".github/workflows", name), "utf8");
+}
+
+function workflowTriggers(yaml: string): string {
+  const match = yaml.match(/^on:\n([\s\S]*?)\n(?:concurrency|permissions|env|jobs):/m);
+  return match?.[1] ?? "";
+}
+
 describe("e2e suite locks", () => {
   it("does not hardcode the studio code or production credentials", () => {
     const files = [
       ...listFiles(resolve(repoRoot, "e2e")),
       resolve(repoRoot, "playwright.config.ts"),
-      resolve(repoRoot, ".github/workflows/ci.yml"),
+      ...listFiles(resolve(repoRoot, ".github/workflows")),
     ];
     const sources = files
       .filter((path) => /\.(ts|yml)$/.test(path))
@@ -33,6 +42,29 @@ describe("e2e suite locks", () => {
     expect(sources).not.toMatch(/E2E_EMAIL\s*[:=]\s*['"][^'"\s]+@/);
     expect(sources).toContain("E2E_ALLOW_PRODUCTION");
     expect(sources).toContain("BAD_STUDIO_CODE");
+  });
+
+  it("keeps PR and main CI smoke off production e2e secrets", () => {
+    const ci = readWorkflow("ci.yml");
+    const triggers = workflowTriggers(ci);
+    expect(triggers).toMatch(/pull_request:/);
+    expect(triggers).toMatch(/branches:\s*\[main\]/);
+    expect(triggers).not.toMatch(/deployment_status/);
+    expect(ci).not.toMatch(/\$\{\{\s*secrets\.E2E_/);
+  });
+
+  it("runs authenticated production e2e only after Vercel Production is Ready", () => {
+    const prod = readWorkflow("e2e-production.yml");
+    const triggers = workflowTriggers(prod);
+    expect(triggers).toMatch(/deployment_status:/);
+    expect(triggers).not.toMatch(/pull_request/);
+    expect(prod).toContain("github.event.deployment_status.state == 'success'");
+    expect(prod).toContain("environment == 'Production'");
+    expect(prod).toContain("secrets.E2E_BASE_URL");
+    expect(prod).toContain("secrets.E2E_EMAIL");
+    expect(prod).toContain("secrets.E2E_PASSWORD");
+    expect(prod).toContain("secrets.E2E_ALLOW_PRODUCTION");
+    expect(prod).not.toMatch(/^\s+environment:\s*Production\s*$/m);
   });
 
   it("documents empty secret placeholders in README and .env.example", () => {
