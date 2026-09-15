@@ -24,32 +24,27 @@ jobs:
       - run: npm run typecheck
 
   e2e:
-    name: E2E
+    name: E2E smoke
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      # Local smoke server only. Never production. No Resend key (sends stay skipped).
+      # Local `next start` smoke only. Never production.
+      # Do not map secrets.E2E_* here — repo secrets would leak to every PR
+      # and hit capsule.plainandsimple.app. Production e2e lives in
+      # .github/workflows/e2e-production.yml after Vercel Production is Ready.
       COOKIE_SECRET: e2e-ci-cookie-secret-value
       NEXT_PUBLIC_SUPABASE_URL: https://example.invalid
       NEXT_PUBLIC_SUPABASE_ANON_KEY: e2e-anon-key
       SUPABASE_SERVICE_ROLE_KEY: e2e-service-role-key
       CRON_SECRET: e2e-ci-cron-secret
       APP_URL: http://127.0.0.1:3000
-      # Optional GitHub secrets — leave unset for smoke-only. Placeholders:
-      # E2E_BASE_URL          Preview origin. Unset = local next start.
-      # E2E_EMAIL
-      # E2E_PASSWORD
-      # E2E_GROUP_PIN
-      # E2E_GROUP_ID
-      # E2E_CRON_SECRET       GET /api/cron/email?dry=1 (no Resend send)
-      # E2E_ALLOW_PRODUCTION  Must be the literal 1 to hit capsule.plainandsimple.app
-      E2E_BASE_URL: ${{ secrets.E2E_BASE_URL }}
-      E2E_EMAIL: ${{ secrets.E2E_EMAIL }}
-      E2E_PASSWORD: ${{ secrets.E2E_PASSWORD }}
-      E2E_GROUP_PIN: ${{ secrets.E2E_GROUP_PIN }}
-      E2E_GROUP_ID: ${{ secrets.E2E_GROUP_ID }}
-      E2E_CRON_SECRET: ${{ secrets.E2E_CRON_SECRET }}
-      E2E_ALLOW_PRODUCTION: ${{ secrets.E2E_ALLOW_PRODUCTION }}
+      E2E_BASE_URL: ""
+      E2E_EMAIL: ""
+      E2E_PASSWORD: ""
+      E2E_GROUP_PIN: ""
+      E2E_GROUP_ID: ""
+      E2E_CRON_SECRET: ""
+      E2E_ALLOW_PRODUCTION: ""
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
