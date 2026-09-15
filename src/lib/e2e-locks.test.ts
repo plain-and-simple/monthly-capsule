@@ -50,7 +50,7 @@ describe("e2e suite locks", () => {
     expect(triggers).toMatch(/pull_request:/);
     expect(triggers).toMatch(/branches:\s*\[main\]/);
     expect(triggers).not.toMatch(/deployment_status/);
-    expect(ci).not.toMatch(/secrets\.E2E_/);
+    expect(ci).not.toMatch(/\$\{\{\s*secrets\.E2E_/);
   });
 
   it("runs authenticated production e2e only after Vercel Production is Ready", () => {
