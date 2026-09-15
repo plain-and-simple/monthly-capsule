@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { initials } from "@/lib/group-status";
+import { CLIENT_PENDING_GUARD_MS } from "@/lib/pending-ui";
 import { OPEN_GROUP_PATH, type OpenGroupUiDecision } from "@/lib/session-policy";
 
 function OpenGroupRow({
@@ -57,6 +58,12 @@ function OpenGroupLink({
 }) {
   const [clicked, setClicked] = useState(false);
 
+  useEffect(() => {
+    if (!clicked) return;
+    const timer = window.setTimeout(() => setClicked(false), CLIENT_PENDING_GUARD_MS);
+    return () => window.clearTimeout(timer);
+  }, [clicked]);
+
   return (
     <Link
       className="listitem"
@@ -103,6 +110,12 @@ export function OpenGroupForm({
   status: string;
 }) {
   const [clicked, setClicked] = useState(false);
+
+  useEffect(() => {
+    if (!clicked) return;
+    const timer = window.setTimeout(() => setClicked(false), CLIENT_PENDING_GUARD_MS);
+    return () => window.clearTimeout(timer);
+  }, [clicked]);
 
   if (open.action === "link") {
     return (

@@ -5,10 +5,12 @@ export function JoinGate({
   next,
   groupName,
   memberCount,
+  error,
 }: {
   next: string;
   groupName?: string | null;
   memberCount?: number;
+  error?: string | null;
 }) {
   const invited = Boolean(groupName);
   const title = groupName ? `Join ${groupDisplayName(groupName)}` : JOIN_EXISTING_CTA;
@@ -27,7 +29,7 @@ export function JoinGate({
           <p className="muted small">{JOIN_AUTH_HINT}</p>
         </div>
         <div className="card card--pad-lg">
-          <AuthPanel next={next} defaultMode="signup" />
+          <AuthPanel next={next} returnTo={next} error={error} defaultMode="signup" />
         </div>
       </div>
     </div>

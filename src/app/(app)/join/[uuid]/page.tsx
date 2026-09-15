@@ -5,12 +5,20 @@ import { JoinGate } from "@/components/join-gate";
 import { sessionRejoinsGroup } from "@/lib/manage";
 import { inviteJoinPath } from "@/lib/return-path";
 import { getAccount, getSession } from "@/lib/session";
+import { parseFlashError } from "@/lib/session-policy";
 import { createAdminClient } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
 
-export default async function JoinPage({ params }: { params: Promise<{ uuid: string }> }) {
+export default async function JoinPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ uuid: string }>;
+  searchParams: Promise<{ error?: string }>;
+}) {
   const { uuid } = await params;
+  const error = parseFlashError((await searchParams).error);
   const [session, account] = await Promise.all([getSession(), getAccount()]);
   if (sessionRejoinsGroup(session, uuid)) {
     redirect(`/g/${uuid}`);
@@ -37,12 +45,14 @@ export default async function JoinPage({ params }: { params: Promise<{ uuid: str
             signedInAs={account.preferred_name}
             groupName={group?.name ?? null}
             memberCount={count ?? undefined}
+            error={error}
           />
         ) : (
           <JoinGate
             next={next}
             groupName={group?.name ?? null}
             memberCount={count ?? undefined}
+            error={error}
           />
         )}
       </main>

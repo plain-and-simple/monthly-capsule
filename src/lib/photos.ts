@@ -1,7 +1,9 @@
 import "server-only";
 import { PHOTO_BUCKET } from "@/lib/constants";
+import { SIGNED_URL_TIMEOUT_MESSAGE, SIGNED_URL_TIMEOUT_MS } from "@/lib/photo-timeout";
 import { mapSignedUrlRows } from "@/lib/photo-urls";
 import { createAdminClient } from "@/lib/supabase";
+import { withTimeout } from "@/lib/with-timeout";
 
 export {
   collectPhotoFiles,
@@ -15,9 +17,17 @@ export async function signedPhotoUrls(paths: string[]): Promise<Map<string, stri
   const unique = [...new Set(paths.filter(Boolean))];
   if (unique.length === 0) return new Map();
   const admin = createAdminClient();
-  const { data, error } = await admin.storage.from(PHOTO_BUCKET).createSignedUrls(unique, 60 * 60);
-  if (error) return mapSignedUrlRows(unique, []);
-  return mapSignedUrlRows(unique, data);
+  try {
+    const { data, error } = await withTimeout(
+      admin.storage.from(PHOTO_BUCKET).createSignedUrls(unique, 60 * 60),
+      SIGNED_URL_TIMEOUT_MS,
+      SIGNED_URL_TIMEOUT_MESSAGE,
+    );
+    if (error) return mapSignedUrlRows(unique, []);
+    return mapSignedUrlRows(unique, data);
+  } catch {
+    return mapSignedUrlRows(unique, []);
+  }
 }
 
 export async function signedPhotoUrl(storagePath: string): Promise<string | null> {

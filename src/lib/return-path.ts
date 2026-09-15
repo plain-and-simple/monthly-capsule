@@ -5,6 +5,14 @@ const JOIN_INVITE = new RegExp(`^/join/(${UUID})$`, "i");
 const GROUP_HOME = new RegExp(`^/g/(${UUID})$`, "i");
 const GROUP_SUBMIT = new RegExp(`^/g/(${UUID})/submit$`, "i");
 
+/** Auth form POST may return to `/` or an allowed next path — never off-site. */
+export function parseAuthFormReturn(value: string | null | undefined): string | null {
+  if (value == null) return null;
+  const raw = value.trim().split("?")[0].split("#")[0];
+  if (raw === "/") return "/";
+  return parseReturnPath(raw);
+}
+
 /** Auth may return only to join, manage, or create — never off-site. */
 export function parseReturnPath(value: string | null | undefined): string | null {
   if (value == null) return null;

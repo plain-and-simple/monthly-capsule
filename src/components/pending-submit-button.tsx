@@ -2,8 +2,9 @@
 
 import { useEffect, useState, type ButtonHTMLAttributes, type ReactNode } from "react";
 import { useFormStatus } from "react-dom";
+import { CLIENT_PENDING_GUARD_MS } from "@/lib/pending-ui";
 
-export function useInstantBusy(pending: boolean, stuckMs?: number) {
+export function useInstantBusy(pending: boolean, stuckMs = CLIENT_PENDING_GUARD_MS) {
   const [held, setHeld] = useState(false);
   const [stuck, setStuck] = useState(false);
 
@@ -19,12 +20,10 @@ export function useInstantBusy(pending: boolean, stuckMs?: number) {
   useEffect(() => {
     if (stuck) return;
     if (!held && !pending) return;
-    const wait = pending ? stuckMs : 2_500;
-    if (!wait) return;
     const timer = window.setTimeout(() => {
       setHeld(false);
-      if (pending) setStuck(true);
-    }, wait);
+      setStuck(true);
+    }, stuckMs);
     return () => window.clearTimeout(timer);
   }, [held, pending, stuckMs, stuck]);
 
@@ -59,15 +58,26 @@ export function PendingSubmitButton({
 }: PendingSubmitButtonProps) {
   const { pending, data } = useFormStatus();
   const [clicked, setClicked] = useState(false);
-  const busy = ignorePending ? false : pending || clicked || busyProp;
+  const [timedOut, setTimedOut] = useState(false);
+  const rawBusy = pending || clicked || busyProp;
+  const busy = ignorePending || timedOut ? false : rawBusy;
   const isSubmitter =
     clicked ||
     name == null ||
     Boolean(pending && data && data.get(name) === String(value ?? ""));
 
   useEffect(() => {
-    if (ignorePending || (!pending && !busyProp)) setClicked(false);
-  }, [pending, busyProp, ignorePending]);
+    if (!rawBusy) {
+      setTimedOut(false);
+      return;
+    }
+    const timer = window.setTimeout(() => setTimedOut(true), CLIENT_PENDING_GUARD_MS);
+    return () => window.clearTimeout(timer);
+  }, [rawBusy]);
+
+  useEffect(() => {
+    if (ignorePending || timedOut || (!pending && !busyProp)) setClicked(false);
+  }, [pending, busyProp, ignorePending, timedOut]);
 
   return (
     <button

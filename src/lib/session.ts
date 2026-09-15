@@ -97,13 +97,16 @@ export async function requireOwner(groupId: string) {
   return ctx;
 }
 
-export async function setAccountSession(payload: AccountSessionPayload): Promise<void> {
-  const token = await new SignJWT({ accountId: payload.accountId })
+export async function mintAccountToken(payload: AccountSessionPayload): Promise<string> {
+  return new SignJWT({ accountId: payload.accountId })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime("400d")
     .sign(cookieSecret());
+}
 
+export async function setAccountSession(payload: AccountSessionPayload): Promise<void> {
+  const token = await mintAccountToken(payload);
   const jar = await cookies();
   jar.set(ACCOUNT_COOKIE, token, sessionCookieOptions(process.env.NODE_ENV === "production"));
 }

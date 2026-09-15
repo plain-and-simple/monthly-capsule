@@ -7,16 +7,24 @@ import { LANDING_HAVE_LOGIN, LANDING_NEED_ACCOUNT, LANDING_SIGN_IN, LANDING_SIGN
 
 export function AuthPanel({
   next,
+  error,
+  returnTo = "/",
   defaultMode = "signup",
 }: {
   next?: string | null;
+  error?: string | null;
+  returnTo?: string;
   defaultMode?: "signup" | "signin";
 }) {
   const [mode, setMode] = useState<"signup" | "signin">(defaultMode);
 
   return (
     <div className="stack">
-      {mode === "signup" ? <SignUpForm next={next} /> : <ManageForm next={next} />}
+      {mode === "signup" ? (
+        <SignUpForm next={next} error={error} returnTo={returnTo} />
+      ) : (
+        <ManageForm next={next} error={error} returnTo={returnTo} />
+      )}
       {mode === "signup" ? (
         <p className="center small muted">
           {LANDING_HAVE_LOGIN}{" "}

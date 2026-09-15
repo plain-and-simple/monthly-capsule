@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { inviteJoinPath, parseMembershipNext, parseReturnPath } from "./return-path";
+import { inviteJoinPath, parseAuthFormReturn, parseMembershipNext, parseReturnPath } from "./return-path";
 
 const id = "550e8400-e29b-41d4-a716-446655440000";
 
@@ -10,6 +10,12 @@ describe("parseReturnPath", () => {
     expect(parseReturnPath("/join")).toBe("/join");
     expect(parseReturnPath("/manage")).toBe("/manage");
     expect(parseReturnPath("/create")).toBe("/create");
+  });
+
+  it("auth form return allows home plus the usual next paths", () => {
+    expect(parseAuthFormReturn("/")).toBe("/");
+    expect(parseAuthFormReturn(`/join/${id}`)).toBe(`/join/${id}`);
+    expect(parseAuthFormReturn("/g/" + id)).toBeNull();
   });
 
   it("rejects off-site or unrelated paths", () => {

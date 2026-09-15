@@ -1,25 +1,26 @@
 "use client";
 
-import { useActionState } from "react";
 import Link from "next/link";
-import { joinGroup, type JoinState } from "@/actions/join-group";
 import { PendingSubmitButton, useInstantBusy } from "@/components/pending-submit-button";
 import { JOIN_PIN_LABEL, PREFERRED_NAME_LABEL, groupDisplayName } from "@/lib/copy";
+import { JOIN_GROUP_PATH } from "@/lib/session-policy";
 
 export function JoinForm({
   uuid,
   signedInAs,
   groupName,
   memberCount,
+  error,
 }: {
   uuid?: string;
   signedInAs: string;
   groupName?: string | null;
   memberCount?: number;
+  error?: string | null;
 }) {
-  const [state, action, pending] = useActionState<JoinState, FormData>(joinGroup, null);
-  const { busy, markBusy } = useInstantBusy(pending);
+  const { busy, markBusy } = useInstantBusy(false);
   const title = groupName ? `Join ${groupDisplayName(groupName)}` : "Join";
+  const returnTo = uuid ? `/join/${uuid}` : "/join";
 
   return (
     <div className="wrap wrap--narrow">
@@ -35,7 +36,14 @@ export function JoinForm({
         </div>
 
         <div className="card card--pad-lg">
-          <form action={action} className="stack" onSubmit={markBusy} aria-busy={busy || undefined}>
+          <form
+            action={JOIN_GROUP_PATH}
+            method="post"
+            className="stack"
+            onSubmit={markBusy}
+            aria-busy={busy || undefined}
+          >
+            <input type="hidden" name="return" value={returnTo} />
             {uuid ? (
               <input type="hidden" name="uuid" value={uuid} />
             ) : (
@@ -78,7 +86,7 @@ export function JoinForm({
 
             <p className="small muted">Signed in as {signedInAs}. This group will appear in Manage.</p>
 
-            {state?.error ? <p className="err">{state.error}</p> : null}
+            {error ? <p className="err">{error}</p> : null}
             <PendingSubmitButton
               className="btn btn--primary btn--block btn--lg"
               busy={busy}

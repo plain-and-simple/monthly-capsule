@@ -5,17 +5,19 @@ import { AuthPanel } from "@/components/auth-panel";
 import { LANDING_CREATE_CTA, LANDING_LEDE, PRODUCT_NAME } from "@/lib/copy";
 import { parseReturnPath } from "@/lib/return-path";
 import { getAccount } from "@/lib/session";
+import { parseFlashError } from "@/lib/session-policy";
 
 export const dynamic = "force-dynamic";
 
 export default async function HomePage({
   searchParams,
 }: {
-  searchParams: Promise<{ next?: string }>;
+  searchParams: Promise<{ next?: string; error?: string }>;
 }) {
   const account = await getAccount();
   const params = await searchParams;
   const next = parseReturnPath(params.next ?? "");
+  const error = parseFlashError(params.error);
   if (account) {
     redirect(next ?? "/manage");
   }
@@ -37,7 +39,7 @@ export default async function HomePage({
             </div>
 
             <div className="card card--pad-lg">
-              <AuthPanel next={next} defaultMode="signup" />
+              <AuthPanel next={next} error={error} returnTo="/" defaultMode="signup" />
             </div>
 
             <div className="ornament">

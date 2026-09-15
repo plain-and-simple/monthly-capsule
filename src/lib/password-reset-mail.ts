@@ -1,8 +1,9 @@
 import "server-only";
 import { Resend } from "resend";
 import { passwordResetEmailHtml, passwordResetEmailSubject } from "@/lib/password-reset-email";
-import { resendSendAccepted } from "@/lib/email-policy";
+import { RESEND_SEND_TIMEOUT_MS, RESEND_TIMEOUT_MESSAGE, resendSendAccepted } from "@/lib/email-policy";
 import { resendApiKey, resendFromEmail } from "@/lib/env";
+import { withTimeout } from "@/lib/with-timeout";
 
 export async function sendPasswordResetEmail(input: {
   to: string;
@@ -19,15 +20,19 @@ export async function sendPasswordResetEmail(input: {
 
   const resend = new Resend(key);
   try {
-    const result = await resend.emails.send({
-      from: resendFromEmail(),
-      to: input.to,
-      subject: passwordResetEmailSubject(),
-      html: passwordResetEmailHtml({
-        preferredName: input.preferredName,
-        link: input.link,
+    const result = await withTimeout(
+      resend.emails.send({
+        from: resendFromEmail(),
+        to: input.to,
+        subject: passwordResetEmailSubject(),
+        html: passwordResetEmailHtml({
+          preferredName: input.preferredName,
+          link: input.link,
+        }),
       }),
-    });
+      RESEND_SEND_TIMEOUT_MS,
+      RESEND_TIMEOUT_MESSAGE,
+    );
     const interpreted = resendSendAccepted(result);
     if (!interpreted.ok) {
       console.error("password reset resend rejected", interpreted.message);

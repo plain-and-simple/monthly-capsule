@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
+import { CLIENT_PENDING_GUARD_MS } from "@/lib/pending-ui";
 
 function PendingLinkLabel({
   children,
@@ -37,6 +38,12 @@ export function PendingLink({
   useEffect(() => {
     setClicked(false);
   }, [pathname, href]);
+
+  useEffect(() => {
+    if (!clicked) return;
+    const timer = window.setTimeout(() => setClicked(false), CLIENT_PENDING_GUARD_MS);
+    return () => window.clearTimeout(timer);
+  }, [clicked]);
 
   return (
     <Link

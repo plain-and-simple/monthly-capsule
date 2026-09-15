@@ -1,17 +1,12 @@
-import { NextResponse } from "next/server";
-import { SESSION_COOKIE } from "@/lib/constants";
+import type { NextResponse } from "next/server";
 import { parseGroupId } from "@/lib/group-id";
-import { sessionCookieOptions } from "@/lib/hosting";
 import { mintSessionToken, requireAccount } from "@/lib/session";
-import { decideOpenGroupRequest, SEE_OTHER } from "@/lib/session-policy";
+import { decideOpenGroupRequest } from "@/lib/session-policy";
+import { seeOther, seeOtherWithCookies } from "@/lib/session-redirect";
 import { createAdminClient } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-
-function seeOther(request: Request, path: string): NextResponse {
-  return NextResponse.redirect(new URL(path, request.url), SEE_OTHER);
-}
 
 async function openGroup(request: Request, groupIdRaw: string): Promise<NextResponse> {
   const groupId = parseGroupId(groupIdRaw);
@@ -38,13 +33,7 @@ async function openGroup(request: Request, groupIdRaw: string): Promise<NextResp
     memberId: decision.memberId,
     groupId: decision.groupId,
   });
-  const response = seeOther(request, decision.path);
-  response.cookies.set(
-    SESSION_COOKIE,
-    token,
-    sessionCookieOptions(process.env.NODE_ENV === "production"),
-  );
-  return response;
+  return seeOtherWithCookies(request, decision.path, { session: token });
 }
 
 /** POST form from Your groups / Manage: set the group cookie on the response, then 303 GET /g/[uuid]. */

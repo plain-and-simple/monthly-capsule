@@ -1,27 +1,34 @@
 "use client";
 
-import { useActionState } from "react";
-import { saveLogin, type SaveLoginState } from "@/actions/save-login";
 import { PendingSubmitButton, useInstantBusy } from "@/components/pending-submit-button";
 import { SAVE_LOGIN_REQUIRED_HEADING, SAVE_LOGIN_REQUIRED_HINT } from "@/lib/copy";
+import { SAVE_LOGIN_PATH } from "@/lib/session-policy";
 
 export function SaveLoginForm({
   groupId,
   next,
+  error,
 }: {
   groupId: string;
   next?: string;
+  error?: string | null;
 }) {
-  const [state, action, pending] = useActionState<SaveLoginState, FormData>(saveLogin, null);
-  const { busy, markBusy } = useInstantBusy(pending);
+  const { busy, markBusy } = useInstantBusy(false);
 
   return (
-    <form action={action} className="card stack" onSubmit={markBusy} aria-busy={busy || undefined}>
+    <form
+      action={SAVE_LOGIN_PATH}
+      method="post"
+      className="card stack"
+      onSubmit={markBusy}
+      aria-busy={busy || undefined}
+    >
       <div className="stack stack--tight">
         <h2>{SAVE_LOGIN_REQUIRED_HEADING}</h2>
         <p className="muted small">{SAVE_LOGIN_REQUIRED_HINT}</p>
       </div>
       <input type="hidden" name="groupId" value={groupId} />
+      <input type="hidden" name="return" value={next ?? `/g/${groupId}`} />
       {next ? <input type="hidden" name="next" value={next} /> : null}
       <label className="field">
         <span className="field__label">Email</span>
@@ -38,7 +45,7 @@ export function SaveLoginForm({
           autoComplete="new-password"
         />
       </label>
-      {state?.error ? <p className="err">{state.error}</p> : null}
+      {error ? <p className="err">{error}</p> : null}
       <PendingSubmitButton className="btn btn--secondary" busy={busy} pendingLabel="Saving…">
         Save login
       </PendingSubmitButton>
