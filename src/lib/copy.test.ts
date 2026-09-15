@@ -41,6 +41,10 @@ import {
   GROUP_PRIMARY_VIEW,
   SUBMIT_AND_SEND,
   SUBMIT_DRAFT,
+  SUBMIT_SAVED_DRAFT,
+  SUBMIT_SUBMITTED,
+  TOAST_SUCCESS,
+  SIGNED_OUT_TOAST,
   UNTITLED_GROUP,
   createSuccessHero,
   groupDisplayName,
@@ -97,6 +101,10 @@ describe("create success hero smoke", () => {
     });
     expect(hero.copyLabel).toBe("Copy");
     expect(hero.hint).toBe("Show once — save it.");
+    expect(TOAST_SUCCESS).toBe("Success");
+    expect(SUBMIT_SAVED_DRAFT).toBe("Saved as draft");
+    expect(SUBMIT_SUBMITTED).toBe("Submitted");
+    expect(SIGNED_OUT_TOAST).toBe("Signed out");
   });
 
   it("uses a display name when the group name is blank", () => {

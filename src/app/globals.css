@@ -588,6 +588,64 @@ button.textlink:hover {
   font-size: 0.85rem;
 }
 
+.toast {
+  position: fixed;
+  z-index: 80;
+  left: 50%;
+  bottom: 1.5rem;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: flex-start;
+  gap: 0.85rem;
+  width: min(22.5rem, calc(100vw - 2rem));
+  padding: 0.9rem 1rem;
+  border-radius: var(--r);
+  background: var(--accent);
+  color: var(--card);
+  box-shadow: var(--shadow), 0 12px 32px -16px rgba(36, 71, 60, 0.55);
+}
+
+.toast__body {
+  min-width: 0;
+}
+
+.toast--danger {
+  background: var(--stamp);
+}
+
+.toast__title {
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.toast__message {
+  margin: 0.15rem 0 0;
+  font-size: 1rem;
+  font-weight: 550;
+  line-height: 1.35;
+  color: var(--card);
+}
+
+.toast__close {
+  margin-left: auto;
+  flex: none;
+  border: 0;
+  background: none;
+  color: inherit;
+  font-size: 1.2rem;
+  line-height: 1;
+  padding: 0.1rem 0.15rem;
+  cursor: pointer;
+  opacity: 0.8;
+}
+
+.toast__close:hover {
+  opacity: 1;
+}
+
 .copyrow {
   display: flex;
   gap: 0.5rem;

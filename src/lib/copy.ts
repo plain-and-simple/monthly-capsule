@@ -60,6 +60,11 @@ export const GROUP_NO_PREVIOUS_CAPSULES = "No previous capsules yet";
 export const GROUP_PRIMARY_EDIT = "Edit until the window closes";
 export const SUBMIT_DRAFT = "Save as draft";
 export const SUBMIT_AND_SEND = "Save and submit";
+export const SUBMIT_SAVED_DRAFT = "Saved as draft";
+export const SUBMIT_SUBMITTED = "Submitted";
+export const TOAST_SUCCESS = "Success";
+export const TOAST_DISMISS = "Dismiss";
+export const SIGNED_OUT_TOAST = "Signed out";
 
 export const CYCLE_SECTION = "Capsule cycle";
 export const CYCLE_OPEN_EARLY = "Open submit early";

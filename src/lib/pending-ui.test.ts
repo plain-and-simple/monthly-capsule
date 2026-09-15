@@ -18,6 +18,8 @@ describe("pending mutation UI", () => {
     expect(file.indexOf("markBusy()")).toBeLessThan(file.indexOf("new File"));
     expect(file).toContain('pendingLabel={photos.length > 0 ? "Uploading…" : "Submitting…"}');
     expect(file).toContain('pendingLabel="Saving…"');
+    expect(file).toContain("MutationToast");
+    expect(file).toContain("SUBMIT_SAVED_DRAFT");
   });
 
   it("shows busy on create, join, manage login, and leave/sign-out", () => {
@@ -44,6 +46,7 @@ describe("pending mutation UI", () => {
     expect(email).toContain("confirmResend");
     expect(email).toContain("ignorePending");
     expect(email).toContain("EMAIL_PENDING_GUARD_MS");
+    expect(email).toContain("MutationToast");
     expect(source("src/components/pending-submit-button.tsx")).toContain("ignorePending");
     expect(source("src/components/pending-submit-button.tsx")).toContain("CLIENT_PENDING_GUARD_MS");
     expect(source("src/components/pending-submit-button.tsx")).toContain("flushSync");

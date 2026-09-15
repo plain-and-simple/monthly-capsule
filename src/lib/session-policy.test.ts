@@ -12,6 +12,8 @@ import {
   OPEN_GROUP_PATH,
   OPEN_SOLO_GROUP_PATH,
   SAVE_LOGIN_PATH,
+  SIGNED_OUT_NOTICE,
+  SIGNED_OUT_PATH,
   SEE_OTHER,
   SIGNUP_PATH,
   cookieWriteAllowed,
@@ -22,6 +24,7 @@ import {
   decideOpenGroupUi,
   flashErrorPath,
   parseFlashError,
+  parseFlashNotice,
 } from "./session-policy";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -323,6 +326,9 @@ describe("flash error on 303", () => {
     expect(flashErrorPath("/", "Email or password is wrong.", { next: "/join" })).toBe(
       "/?next=%2Fjoin&error=Email+or+password+is+wrong.",
     );
+    expect(parseFlashNotice("signed-out")).toBe(SIGNED_OUT_NOTICE);
+    expect(parseFlashNotice("anything-else")).toBeNull();
+    expect(SIGNED_OUT_PATH).toBe("/?notice=signed-out");
   });
 });
 
@@ -348,6 +354,7 @@ describe("session cookie + redirect uses Route Handler 303", () => {
 
     const logout = readFileSync(resolve(here, "../app/api/session/logout/route.ts"), "utf8");
     expect(logout).toContain("seeOtherWithCookies");
+    expect(logout).toContain("SIGNED_OUT_PATH");
     expect(logout).not.toContain("respondSessionOpen");
   });
 

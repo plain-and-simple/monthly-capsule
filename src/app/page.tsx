@@ -1,29 +1,32 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AppHeader } from "@/components/app-header";
+import { FlashToast } from "@/components/app-toast";
 import { AuthPanel } from "@/components/auth-panel";
-import { LANDING_CREATE_CTA, LANDING_LEDE, PRODUCT_NAME } from "@/lib/copy";
+import { LANDING_CREATE_CTA, LANDING_LEDE, PRODUCT_NAME, SIGNED_OUT_TOAST } from "@/lib/copy";
 import { parseReturnPath } from "@/lib/return-path";
 import { getAccount } from "@/lib/session";
-import { parseFlashError } from "@/lib/session-policy";
+import { parseFlashError, parseFlashNotice } from "@/lib/session-policy";
 
 export const dynamic = "force-dynamic";
 
 export default async function HomePage({
   searchParams,
 }: {
-  searchParams: Promise<{ next?: string; error?: string }>;
+  searchParams: Promise<{ next?: string; error?: string; notice?: string }>;
 }) {
   const account = await getAccount();
   const params = await searchParams;
   const next = parseReturnPath(params.next ?? "");
   const error = parseFlashError(params.error);
+  const signedOut = parseFlashNotice(params.notice) ? SIGNED_OUT_TOAST : null;
   if (account) {
     redirect(next ?? "/manage");
   }
 
   return (
     <div className="page">
+      {signedOut ? <FlashToast message={signedOut} /> : null}
       <AppHeader />
       <main className="main">
         <div className="wrap">
