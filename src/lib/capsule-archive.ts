@@ -1,3 +1,13 @@
+import {
+  DEFAULT_CAPSULE_THEME,
+  layoutPersonSection,
+  parseCapsuleTheme,
+  plateLabel,
+  type CapsuleTheme,
+  type LetterBlock,
+} from "@/lib/capsule-theme";
+import { monthLabel } from "@/lib/schedule";
+
 export const CAPSULE_ARCHIVE_VERSION = 1 as const;
 
 export type CapsuleArchivePhoto = {
@@ -18,6 +28,7 @@ export type CapsuleArchive = {
   month_version: number;
   year_month: string;
   group_name: string;
+  theme: CapsuleTheme;
   html: string;
   letters: CapsuleArchiveLetter[];
   member_count: number;
@@ -67,17 +78,20 @@ export function parseCapsuleArchive(value: unknown): CapsuleArchive | null {
   const monthVersion = Number.isInteger(row.month_version) && Number(row.month_version) >= 1
     ? Number(row.month_version)
     : 1;
+  const theme = parseCapsuleTheme(row.theme);
 
   return {
     version: CAPSULE_ARCHIVE_VERSION,
     month_version: monthVersion,
     year_month: row.year_month,
     group_name: row.group_name,
+    theme,
     html: typeof row.html === "string" ? row.html : renderArchiveHtml({
       year_month: row.year_month,
       group_name: row.group_name,
       letters,
       month_version: monthVersion,
+      theme,
     }),
     letters,
     member_count: memberCount,
@@ -91,11 +105,13 @@ export function buildCapsuleArchive(input: {
   letters: CapsuleArchiveLetter[];
   memberCount: number;
   monthVersion?: number;
+  theme?: CapsuleTheme;
 }): CapsuleArchive {
   const monthVersion =
     Number.isInteger(input.monthVersion) && Number(input.monthVersion) >= 1
       ? Number(input.monthVersion)
       : 1;
+  const theme = parseCapsuleTheme(input.theme);
   const letters = input.letters.map((letter) => ({
     preferred_name: letter.preferred_name,
     body: letter.body,
@@ -111,6 +127,7 @@ export function buildCapsuleArchive(input: {
     group_name: input.groupName,
     letters,
     month_version: monthVersion,
+    theme,
   };
   return {
     version: CAPSULE_ARCHIVE_VERSION,
@@ -137,24 +154,86 @@ export function renderArchiveHtml(input: {
   group_name: string;
   letters: CapsuleArchiveLetter[];
   month_version?: number;
+  theme?: CapsuleTheme;
 }): string {
-  const sections = input.letters
-    .map((letter) => {
-      const photos = letter.photos
-        .map(
-          (photo) =>
-            `<img data-storage-path="${escapeAttr(photo.storage_path)}" width="${photo.width}" height="${photo.height}" alt="" />`,
-        )
-        .join("");
-      const body = escapeHtml(letter.body).replace(/\n/g, "<br />");
-      return `<section><h2>${escapeHtml(letter.preferred_name)}</h2><p>${body}</p>${photos}</section>`;
-    })
-    .join("");
+  const theme = parseCapsuleTheme(input.theme);
   const monthVersion =
     Number.isInteger(input.month_version) && Number(input.month_version) >= 1
       ? Number(input.month_version)
       : 1;
-  return `<article data-year-month="${escapeAttr(input.year_month)}" data-month-version="${monthVersion}"><h1>${escapeHtml(input.group_name)}</h1>${sections}</article>`;
+  const labeled = monthLabel(input.year_month);
+  const cover = renderCoverHtml({
+    theme,
+    groupName: input.group_name,
+    monthLabel: labeled,
+    names: input.letters.map((letter) => letter.preferred_name),
+  });
+  const sections = input.letters
+    .map((letter) => renderPersonSectionHtml(theme, letter))
+    .join("");
+  return `<article class="capsule capsule--${theme}" data-theme="${theme}" data-year-month="${escapeAttr(input.year_month)}" data-month-version="${monthVersion}">${cover}${sections}</article>`;
+}
+
+function renderCoverHtml(input: {
+  theme: CapsuleTheme;
+  groupName: string;
+  monthLabel: string;
+  names: string[];
+}): string {
+  const names = input.names
+    .map((name) => `<li>${escapeHtml(name)}</li>`)
+    .join("");
+  const contents =
+    input.names.length > 0
+      ? `<ul class="capsule__contents capsule__contents--${input.theme}">${names}</ul>`
+      : "";
+
+  if (input.theme === "warm") {
+    return `<header class="capsule__cover"><p class="capsule__ribbon">${escapeHtml(input.monthLabel)}</p><h1>${escapeHtml(input.groupName)}</h1><p class="capsule__cover-note">Letters and photographs, kept together.</p>${contents}</header>`;
+  }
+  if (input.theme === "minimal") {
+    return `<header class="capsule__cover"><p class="capsule__kicker">Capsule</p><h1>${escapeHtml(input.monthLabel)}</h1><p class="capsule__cover-note">${escapeHtml(input.groupName)}</p>${contents}</header>`;
+  }
+  if (input.theme === "heritage") {
+    return `<header class="capsule__cover"><div class="capsule__ornament" aria-hidden="true">❧</div><p class="capsule__kicker">A keepsake</p><h1>${escapeHtml(input.monthLabel)}</h1><p class="capsule__cover-note">${escapeHtml(input.groupName)}</p>${contents}<div class="capsule__ornament" aria-hidden="true">❧</div></header>`;
+  }
+  return `<header class="capsule__cover"><p class="eyebrow">${escapeHtml(input.groupName)}</p><h1>${escapeHtml(input.monthLabel)}</h1>${contents}</header>`;
+}
+
+function renderPersonSectionHtml(theme: CapsuleTheme, letter: CapsuleArchiveLetter): string {
+  const layout = theme === "classic"
+    ? "letter-then-photos"
+    : theme === "warm"
+      ? "photos-woven"
+      : theme === "minimal"
+        ? "text-then-strip"
+        : "letter-then-plates";
+  const inner = layoutPersonSection(theme, letter).map((block) => renderBlockHtml(block)).join("");
+  return `<section class="letter letter--${theme}" data-author="${escapeAttr(letter.preferred_name)}" data-layout="${layout}">${inner}</section>`;
+}
+
+function renderBlockHtml(block: LetterBlock): string {
+  if (block.kind === "heading") {
+    return `<h2>${escapeHtml(block.name)}</h2>`;
+  }
+  if (block.kind === "text") {
+    const body = escapeHtml(block.text).replace(/\n/g, "<br />");
+    return `<p class="letter__text">${body}</p>`;
+  }
+  if (block.kind === "gallery") {
+    const images = block.photos.map(renderPhotoImg).join("");
+    return `<div class="letter__photos letter__photos--${block.variant}">${images}</div>`;
+  }
+  const img = renderPhotoImg(block.photo);
+  if (block.variant === "plate") {
+    const caption = plateLabel(block.plateIndex ?? 0);
+    return `<figure class="letter__plate">${img}<figcaption>${caption}</figcaption></figure>`;
+  }
+  return `<figure class="letter__photo letter__photo--weave">${img}</figure>`;
+}
+
+function renderPhotoImg(photo: CapsuleArchivePhoto): string {
+  return `<img data-storage-path="${escapeAttr(photo.storage_path)}" width="${photo.width}" height="${photo.height}" alt="" />`;
 }
 
 function escapeHtml(value: string): string {

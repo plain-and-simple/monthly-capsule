@@ -4,6 +4,7 @@ import { useActionState } from "react";
 import { updateGroupName, updateSchedule, type SettingsState } from "@/actions/settings";
 import { DaySelect } from "@/components/day-select";
 import { PendingSubmitButton, useInstantBusy } from "@/components/pending-submit-button";
+import { ThemeForm } from "@/components/theme-form";
 import type { Group } from "@/lib/types";
 
 export function SettingsForm({ group }: { group: Group }) {
@@ -20,6 +21,10 @@ export function SettingsForm({ group }: { group: Group }) {
 
   return (
     <div className="stack stack--loose">
+      <ThemeForm groupId={group.id} theme={group.capsule_theme} />
+
+      <hr className="rule" />
+
       <section className="stack">
         <h2>Cycle</h2>
         <form

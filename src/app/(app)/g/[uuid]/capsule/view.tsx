@@ -1,10 +1,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { CapsuleDocument } from "@/components/capsule-document";
 import { EmailGroupForm } from "@/components/email-group-form";
 import { parseCapsuleArchive } from "@/lib/capsule-archive";
 import { ensureCapsuleArchive, findMonthEdition } from "@/lib/compile";
 import { groupDisplayName } from "@/lib/copy";
-import { initials } from "@/lib/group-status";
 import { canForceCycle } from "@/lib/manage";
 import { capsuleTitle, DEFAULT_MONTH_VERSION } from "@/lib/month-version";
 import { signedPhotoUrls } from "@/lib/photos";
@@ -84,54 +84,13 @@ export async function CapsuleView({
             />
           ) : null}
 
-          <article className="capsule">
-            <header className="capsule__masthead">
-              <p className="eyebrow">{name}</p>
-              <h1 className="capsule__title">{title}</h1>
-              <p className="muted small">
-                {letters.length} {letters.length === 1 ? "letter" : "letters"}
-                {letters.length > 0
-                  ? ` from ${letters.map((letter) => letter.preferred_name).join(", ")}`
-                  : ""}
-              </p>
-              {letters.length > 0 ? (
-                <ul className="capsule__contents">
-                  {letters.map((letter) => (
-                    <li key={letter.key}>{letter.preferred_name}</li>
-                  ))}
-                </ul>
-              ) : null}
-            </header>
-
-            {letters.length === 0 ? <p className="center muted">No letters this month.</p> : null}
-
-            {letters.map((letter) => (
-              <section className="letter" key={letter.key}>
-                <div className="letter__head">
-                  <span className="avatar">{initials(letter.preferred_name)}</span>
-                  <div>
-                    <div className="letter__name">{letter.preferred_name}</div>
-                  </div>
-                </div>
-                {letter.body ? <div className="letter__body">{letter.body}</div> : null}
-                {letter.photos.length > 0 ? (
-                  <div className="letter__photos">
-                    {letter.photos.map((photo) =>
-                      photo.url ? (
-                        <div className="photo" key={photo.storage_path}>
-                          <img src={photo.url} alt="" width={photo.width} height={photo.height} />
-                        </div>
-                      ) : null,
-                    )}
-                  </div>
-                ) : null}
-              </section>
-            ))}
-
-            <div className="capsule__colophon">
-              <p>{missedCountPhrase(archive.missed_count)}</p>
-            </div>
-          </article>
+          <CapsuleDocument
+            theme={archive.theme}
+            groupName={name}
+            title={title}
+            letters={letters}
+            missedPhrase={missedCountPhrase(archive.missed_count)}
+          />
         </div>
       </div>
     </main>

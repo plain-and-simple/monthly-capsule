@@ -1,6 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { CAPSULE_THEME_INVALID } from "@/lib/copy";
+import { parseThemeFormValue } from "@/lib/capsule-theme";
 import { validateSchedule } from "@/lib/schedule";
 import { requireOwner } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase";
@@ -63,5 +65,28 @@ export async function updateGroupName(
   revalidatePath(`/g/${groupId}`);
   revalidatePath(`/g/${groupId}/settings`);
   revalidatePath(`/manage`);
+  return { ok: true };
+}
+
+export async function updateCapsuleTheme(
+  _prev: SettingsState,
+  formData: FormData,
+): Promise<SettingsState> {
+  const groupId = String(formData.get("groupId") ?? "");
+  await requireOwner(groupId);
+
+  const theme = parseThemeFormValue(formData.get("capsule_theme"));
+  if (!theme) {
+    return { error: CAPSULE_THEME_INVALID };
+  }
+
+  const admin = createAdminClient();
+  const { error } = await admin.from("groups").update({ capsule_theme: theme }).eq("id", groupId);
+  if (error) {
+    return { error: "Could not save." };
+  }
+
+  revalidatePath(`/g/${groupId}`);
+  revalidatePath(`/g/${groupId}/settings`);
   return { ok: true };
 }

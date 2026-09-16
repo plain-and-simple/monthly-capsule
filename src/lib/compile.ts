@@ -6,6 +6,7 @@ import {
   type CapsuleArchive,
   type CapsuleArchiveLetter,
 } from "@/lib/capsule-archive";
+import { parseCapsuleTheme } from "@/lib/capsule-theme";
 import {
   DEFAULT_MONTH_VERSION,
   latestEdition,
@@ -223,6 +224,7 @@ export async function snapshotMonthArchive(
     letters,
     memberCount: memberCount ?? 0,
     monthVersion,
+    theme: parseCapsuleTheme(group.capsule_theme),
   });
 }
 
