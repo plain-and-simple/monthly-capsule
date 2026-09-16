@@ -11,7 +11,9 @@ import {
   lastDayOfMonth,
   nextYearMonth,
   openDayOptionLabel,
+  parseScheduleForm,
   previousYearMonth,
+  scheduleFormDays,
   validateSchedule,
   yearMonthString,
 } from "./schedule";
@@ -70,6 +72,59 @@ describe("validateSchedule", () => {
 
   it("rejects non-integers", () => {
     expect(validateSchedule(1.5, 8, 9)).toBeTruthy();
+  });
+});
+
+describe("scheduleFormDays", () => {
+  const group = { submit_start_day: 1, submit_end_day: 8, email_day: 9 };
+  const saved = { submit_start_day: 25, submit_end_day: 5, email_day: 9 };
+
+  it("keeps a successful save when the group snapshot is still the old days", () => {
+    expect(scheduleFormDays(group, { ok: true, ...saved }, null)).toEqual(saved);
+  });
+
+  it("keeps the in-progress draft instead of snapping back to group defaults", () => {
+    expect(scheduleFormDays(group, null, saved)).toEqual(saved);
+  });
+
+  it("keeps attempted wraparound days when validation fails", () => {
+    expect(
+      scheduleFormDays(group, { error: "Need Submit closes < Email capsule ≤ 28.", ...saved }, saved),
+    ).toEqual(saved);
+  });
+
+  it("falls back to the group when nothing has been saved or edited", () => {
+    expect(scheduleFormDays(group, null, null)).toEqual(group);
+  });
+
+  it("keeps a same-month change (2/8/9) instead of reverting to 1/8/9", () => {
+    const next = { submit_start_day: 2, submit_end_day: 8, email_day: 9 };
+    expect(scheduleFormDays(group, { ok: true, ...next }, null)).toEqual(next);
+  });
+});
+
+describe("parseScheduleForm", () => {
+  it("reads string day values from the cycle fields", () => {
+    const form = new FormData();
+    form.set("submit_start_day", "25");
+    form.set("submit_end_day", "5");
+    form.set("email_day", "9");
+    expect(parseScheduleForm(form)).toEqual({
+      submit_start_day: 25,
+      submit_end_day: 5,
+      email_day: 9,
+    });
+    expect(validateSchedule(25, 5, 9)).toBeNull();
+  });
+
+  it("does not treat option labels as values", () => {
+    const form = new FormData();
+    form.set("submit_start_day", "25 (previous month)");
+    form.set("submit_end_day", "5");
+    form.set("email_day", "9");
+    const days = parseScheduleForm(form);
+    expect(Number.isInteger(days.submit_start_day)).toBe(false);
+    expect(validateSchedule(days.submit_start_day, days.submit_end_day, days.email_day)).toBeTruthy();
   });
 });
 

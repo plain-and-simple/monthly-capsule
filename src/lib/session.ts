@@ -54,10 +54,10 @@ export async function clearSession(): Promise<void> {
   });
 }
 
-export const requireGroupMember = cache(async (groupId: string): Promise<{
+async function loadGroupMember(groupId: string): Promise<{
   member: Member;
   group: Group;
-}> => {
+}> {
   const session = await getSession();
   const lookup = Boolean(session && session.groupId === groupId);
 
@@ -91,14 +91,24 @@ export const requireGroupMember = cache(async (groupId: string): Promise<{
     member: member as Member,
     group: group as Group,
   };
-});
+}
 
-export async function requireOwner(groupId: string) {
-  const ctx = await requireGroupMember(groupId);
+export const requireGroupMember = cache(loadGroupMember);
+
+function assertOwner(ctx: { member: Member; group: Group }, groupId: string) {
   if (ctx.member.role !== "owner") {
     redirect(`/g/${groupId}`);
   }
   return ctx;
+}
+
+export async function requireOwner(groupId: string) {
+  return assertOwner(await requireGroupMember(groupId), groupId);
+}
+
+/** Mutations must not fill React cache() with a pre-update group snapshot. */
+export async function requireOwnerUncached(groupId: string) {
+  return assertOwner(await loadGroupMember(groupId), groupId);
 }
 
 export async function mintAccountToken(payload: AccountSessionPayload): Promise<string> {
