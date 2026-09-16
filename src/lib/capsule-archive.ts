@@ -233,7 +233,7 @@ function renderBlockHtml(block: LetterBlock): string {
 }
 
 function renderPhotoImg(photo: CapsuleArchivePhoto): string {
-  return `<img data-storage-path="${escapeAttr(photo.storage_path)}" width="${photo.width}" height="${photo.height}" alt="" />`;
+  return `<div class="photo"><img data-storage-path="${escapeAttr(photo.storage_path)}" width="${photo.width}" height="${photo.height}" alt="" /></div>`;
 }
 
 function escapeHtml(value: string): string {

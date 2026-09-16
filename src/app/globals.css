@@ -1019,6 +1019,13 @@ button.listitem:hover {
 
 .letter__photos .photo {
   aspect-ratio: 4 / 3;
+  overflow: hidden;
+}
+
+.letter__photos .photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .capsule__colophon {
@@ -1187,6 +1194,7 @@ button.listitem:hover {
   margin-top: 1.75rem;
   padding-top: 0.85rem;
   border-top: 1px solid var(--line);
+  overflow: hidden;
 }
 
 .letter__photos--strip .photo {
@@ -1195,9 +1203,11 @@ button.listitem:hover {
   flex: 1 1 0;
   min-width: 0;
   border-radius: 2px;
+  overflow: hidden;
 }
 
-.letter__photos--strip img {
+.letter__photos--strip img,
+.letter__photos--strip .photo img {
   width: 100%;
   height: 100%;
   object-fit: cover;

@@ -39,6 +39,7 @@ describe("capsule archive snapshot", () => {
     expect(snapshot.letters[0]?.photos[0]?.storage_path).toBe("g/m/p.jpg");
     expect(snapshot.html).toContain("Hello world");
     expect(snapshot.html).toContain('data-storage-path="g/m/p.jpg"');
+    expect(snapshot.html).toContain("class=\"photo\"");
     expect(snapshot.html).not.toContain("http");
     expect(snapshot.theme).toBe("classic");
     expect(snapshot.html).toContain('data-theme="classic"');
