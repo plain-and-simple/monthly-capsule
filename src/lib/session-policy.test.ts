@@ -302,12 +302,14 @@ describe("open-group hang regression", () => {
 
   it("requireGroupMember uses the gate so missing membership cannot loop through join", () => {
     const source = readFileSync(resolve(here, "./session.ts"), "utf8");
-    const start = source.indexOf("export const requireGroupMember");
+    const start = source.indexOf("async function loadGroupMember");
     expect(start).toBeGreaterThan(-1);
-    const next = source.indexOf("\nexport async function", start + 1);
+    const next = source.indexOf("\nexport const requireGroupMember", start + 1);
     const body = source.slice(start, next === -1 ? undefined : next);
     expect(body).toContain("decideGroupGate");
     expect(body).toContain('decision.action === "manage"');
+    expect(source).toContain("export const requireGroupMember = cache(loadGroupMember)");
+    expect(source).toContain("export async function requireOwnerUncached");
   });
 });
 

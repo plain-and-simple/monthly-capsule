@@ -150,9 +150,16 @@ describe("previous-month open picker", () => {
     expect(daySelect).toContain('variant === "open"');
     expect(daySelect).toContain("SUBMIT_OPEN_DAY_MAX");
     expect(daySelect).toContain("CURRENT_MONTH_DAY_MAX");
+    expect(daySelect).toContain("value={String(value)}");
+    expect(daySelect).toContain("value={String(day)}");
 
     expect(settings).toContain('name="submit_start_day"');
     expect(settings).toContain('variant="open"');
+    expect(settings).toContain("scheduleFormDays");
+    expect(settings).toContain("value={days.submit_start_day}");
+    expect(settings).toContain("value={days.submit_end_day}");
+    expect(settings).toContain("value={days.email_day}");
+    expect(settings).not.toContain("defaultValue={group.submit_start_day}");
     expect(settings).not.toMatch(/name="submit_end_day"[\s\S]{0,80}variant="open"/);
     expect(settings).not.toMatch(/name="email_day"[\s\S]{0,80}variant="open"/);
 
@@ -160,5 +167,16 @@ describe("previous-month open picker", () => {
     expect(create).toContain('variant="open"');
     expect(create).not.toMatch(/name="submit_end_day"[\s\S]{0,120}variant="open"/);
     expect(create).not.toMatch(/name="email_day"[\s\S]{0,120}variant="open"/);
+  });
+
+  it("saves the cycle from the action result, not a cached pre-update group row", () => {
+    const action = readFileSync(resolve(here, "../actions/settings.ts"), "utf8");
+    expect(action).toContain("requireOwnerUncached");
+    expect(action).toContain("parseScheduleForm");
+    expect(action).toContain(".select(\"submit_start_day, submit_end_day, email_day\")");
+    expect(action).toContain("maybeSingle()");
+    expect(action).not.toMatch(/await requireOwner\(groupId\)/);
+    expect(action).toContain("ok: true");
+    expect(action).toContain("submit_start_day: data.submit_start_day");
   });
 });
