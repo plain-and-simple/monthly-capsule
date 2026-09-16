@@ -87,24 +87,49 @@ describe("next open date label", () => {
     expect(nextOpenDateLabel(group, [], new Date("2026-09-10T17:00:00Z"))).toBe("Oct 1, 2026");
   });
 
-  it("stays in the current month when the start day is still ahead", () => {
+  it("stays in the current month when a 1–19 start day is still ahead", () => {
     expect(
-      nextOpenDateLabel({ ...group, submit_start_day: 20 }, [], new Date("2026-09-10T17:00:00Z")),
-    ).toBe("Sep 20, 2026");
+      nextOpenDateLabel(
+        { ...group, submit_start_day: 19, submit_end_day: 20, email_day: 21 },
+        [],
+        new Date("2026-09-10T17:00:00Z"),
+      ),
+    ).toBe("Sep 19, 2026");
+  });
+
+  it("opens in the previous month for days 20–31", () => {
+    expect(
+      nextOpenDateLabel({ ...group, submit_start_day: 25 }, [], new Date("2026-09-10T17:00:00Z")),
+    ).toBe("Sep 25, 2026");
+  });
+
+  it("clamps 31 to April 30 for the May cycle", () => {
+    expect(
+      nextOpenDateLabel({ ...group, submit_start_day: 31 }, [], new Date("2026-04-10T17:00:00Z")),
+    ).toBe("Apr 30, 2026");
+  });
+
+  it("clamps 31 to Feb 28 in a common year and Feb 29 in a leap year", () => {
+    expect(
+      nextOpenDateLabel({ ...group, submit_start_day: 31 }, [], new Date("2026-02-10T18:00:00Z")),
+    ).toBe("Feb 28, 2026");
+    expect(
+      nextOpenDateLabel({ ...group, submit_start_day: 31 }, [], new Date("2028-02-10T18:00:00Z")),
+    ).toBe("Feb 29, 2028");
   });
 
   it("rolls the year over in December", () => {
     expect(nextOpenDateLabel(group, [], new Date("2026-12-15T18:00:00Z"))).toBe("Jan 1, 2027");
   });
 
-  it("skips a closed current month even before the start day", () => {
+  it("skips a closed current month even before a 1–19 start day", () => {
     expect(
       nextOpenDateLabel(
-        { ...group, submit_start_day: 20 },
+        { ...group, submit_start_day: 19, submit_end_day: 20, email_day: 21 },
         ["2026-09"],
         new Date("2026-09-10T17:00:00Z"),
       ),
-    ).toBe("Oct 20, 2026");
+    ).toBe("Oct 19, 2026");
   });
 
   it("formats a short month, day, and year", () => {
@@ -117,6 +142,10 @@ describe("plain-language dates", () => {
   it("says Friday the 25th for a Chicago calendar day", () => {
     expect(windowClosesPhrase("2026-09", 25)).toBe("Friday the 25th");
     expect(nextOpenPhrase("2026-09", 10)).toBe("October 10");
+    expect(nextOpenPhrase("2026-09", 25)).toBe("September 25");
+    expect(nextOpenPhrase("2026-04", 31)).toBe("April 30");
+    expect(nextOpenPhrase("2026-02", 31)).toBe("February 28");
+    expect(nextOpenPhrase("2028-02", 31)).toBe("February 29");
   });
 
   it("builds initials from a preferred name", () => {

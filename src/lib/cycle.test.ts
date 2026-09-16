@@ -180,3 +180,38 @@ describe("F8 no force — calendar path unchanged", () => {
     expect(forceOpenStillActive("2026-08", schedule, duringWindow)).toBe(false);
   });
 });
+
+describe("previous-month open writes to month M", () => {
+  const wrap: CycleGroup = {
+    submit_start_day: 25,
+    submit_end_day: 5,
+    email_day: 9,
+    force_open_year_month: null,
+  };
+  const inPrevMonth = chicago("2026-09-26T17:00:00Z"); // Sep 26 → October cycle
+  const inCycleMonth = chicago("2026-10-03T17:00:00Z"); // Oct 3
+  const afterClose = chicago("2026-10-06T05:30:00Z"); // Oct 6
+
+  it("opens October while still in September when start is 25", () => {
+    expect(openSubmitYearMonth(wrap, [], inPrevMonth)).toBe("2026-10");
+    expect(isCycleSubmitOpen(wrap, [], inPrevMonth)).toBe(true);
+  });
+
+  it("stays on October through submit_end_day in October", () => {
+    expect(openSubmitYearMonth(wrap, [], inCycleMonth)).toBe("2026-10");
+    expect(openSubmitYearMonth(wrap, [], chicago("2026-10-05T17:00:00Z"))).toBe("2026-10");
+  });
+
+  it("closes after submit_end_day in month M", () => {
+    expect(openSubmitYearMonth(wrap, [], afterClose)).toBeNull();
+    expect(isCycleSubmitOpen(wrap, [], afterClose)).toBe(false);
+  });
+
+  it("does not reopen a force-closed next month during the wrap", () => {
+    expect(openSubmitYearMonth(wrap, ["2026-10"], inPrevMonth)).toBeNull();
+  });
+
+  it("opens January from late December when start is 25", () => {
+    expect(openSubmitYearMonth(wrap, [], chicago("2026-12-26T18:00:00Z"))).toBe("2027-01");
+  });
+});

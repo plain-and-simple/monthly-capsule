@@ -139,3 +139,26 @@ describe("account-before-join IA", () => {
     expect(source).toContain('href="/forgot"');
   });
 });
+
+describe("previous-month open picker", () => {
+  it("labels only the open picker days 20–31 as previous month", () => {
+    const daySelect = readFileSync(resolve(here, "../components/day-select.tsx"), "utf8");
+    const settings = readFileSync(resolve(here, "../components/settings-form.tsx"), "utf8");
+    const create = readFileSync(resolve(here, "../components/create-form.tsx"), "utf8");
+
+    expect(daySelect).toContain("openDayOptionLabel");
+    expect(daySelect).toContain('variant === "open"');
+    expect(daySelect).toContain("SUBMIT_OPEN_DAY_MAX");
+    expect(daySelect).toContain("CURRENT_MONTH_DAY_MAX");
+
+    expect(settings).toContain('name="submit_start_day"');
+    expect(settings).toContain('variant="open"');
+    expect(settings).not.toMatch(/name="submit_end_day"[\s\S]{0,80}variant="open"/);
+    expect(settings).not.toMatch(/name="email_day"[\s\S]{0,80}variant="open"/);
+
+    expect(create).toContain('name="submit_start_day"');
+    expect(create).toContain('variant="open"');
+    expect(create).not.toMatch(/name="submit_end_day"[\s\S]{0,120}variant="open"/);
+    expect(create).not.toMatch(/name="email_day"[\s\S]{0,120}variant="open"/);
+  });
+});

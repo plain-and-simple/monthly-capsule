@@ -67,8 +67,100 @@ export function currentYearMonth(now: Date = new Date()): string {
   return yearMonthString(chicagoDate(now));
 }
 
+/** Days 20–31 on the open picker are the previous calendar month. */
+export const PREVIOUS_MONTH_OPEN_MIN_DAY = 20;
+export const SUBMIT_OPEN_DAY_MAX = 31;
+/** Close and email_day stay in cycle month M; 28 avoids short-month holes. */
+export const CURRENT_MONTH_DAY_MAX = 28;
+export const PREVIOUS_MONTH_OPEN_LABEL = "(previous month)";
+
+export function isPreviousMonthOpenDay(day: number): boolean {
+  return day >= PREVIOUS_MONTH_OPEN_MIN_DAY;
+}
+
+export function openDayOptionLabel(day: number): string {
+  if (isPreviousMonthOpenDay(day)) {
+    return `${day} ${PREVIOUS_MONTH_OPEN_LABEL}`;
+  }
+  return String(day);
+}
+
+/** Last calendar day of a 1–12 month (UTC date math; month length is timezone-independent). */
+export function lastDayOfMonth(year: number, month: number): number {
+  return new Date(Date.UTC(year, month, 0)).getUTCDate();
+}
+
+export function clampDayOfMonth(year: number, month: number, day: number): number {
+  return Math.min(day, lastDayOfMonth(year, month));
+}
+
+export function compareChicagoDate(a: ChicagoDate, b: ChicagoDate): number {
+  return a.year - b.year || a.month - b.month || a.day - b.day;
+}
+
 /**
- * 1 ≤ start ≤ end ≤ 28 AND end < email_day ≤ 28
+ * Cycle month M (the capsule `YYYY-MM`):
+ * - Open = start of submit_start_day. Days 1–19 are in M; days 20–31 are in
+ *   M−1, clamped to that month's last day (Apr 30, Feb 28/29).
+ * - Close = end of submit_end_day in M, then compile.
+ * - email_day in M = Resend send.
+ */
+export function cycleOpenChicagoDate(cycleYearMonth: string, startDay: number): ChicagoDate {
+  const parsed = parseYearMonth(cycleYearMonth);
+  if (!parsed) {
+    return { year: 0, month: 1, day: startDay };
+  }
+  if (isPreviousMonthOpenDay(startDay)) {
+    const prev = parseYearMonth(previousYearMonth(parsed));
+    if (!prev) {
+      return { year: parsed.year, month: parsed.month, day: startDay };
+    }
+    return {
+      year: prev.year,
+      month: prev.month,
+      day: clampDayOfMonth(prev.year, prev.month, startDay),
+    };
+  }
+  return { year: parsed.year, month: parsed.month, day: startDay };
+}
+
+export function cycleCloseChicagoDate(cycleYearMonth: string, endDay: number): ChicagoDate {
+  const parsed = parseYearMonth(cycleYearMonth);
+  if (!parsed) {
+    return { year: 0, month: 1, day: endDay };
+  }
+  return { year: parsed.year, month: parsed.month, day: endDay };
+}
+
+/**
+ * Open datetime (start of open day) must be before close datetime (end of
+ * close day). Same calendar day is valid: midnight is before that day's end.
+ */
+export function cycleOpenIsBeforeClose(
+  cycleYearMonth: string,
+  startDay: number,
+  endDay: number,
+): boolean {
+  const open = cycleOpenChicagoDate(cycleYearMonth, startDay);
+  const close = cycleCloseChicagoDate(cycleYearMonth, endDay);
+  return compareChicagoDate(open, close) <= 0;
+}
+
+export function isCycleWindowOpen(
+  cycleYearMonth: string,
+  schedule: Pick<ScheduleDays, "submit_start_day" | "submit_end_day">,
+  now: Date = new Date(),
+): boolean {
+  const today = chicagoDate(now);
+  const open = cycleOpenChicagoDate(cycleYearMonth, schedule.submit_start_day);
+  const close = cycleCloseChicagoDate(cycleYearMonth, schedule.submit_end_day);
+  return compareChicagoDate(open, today) <= 0 && compareChicagoDate(today, close) <= 0;
+}
+
+/**
+ * Open: 1–31 (20–31 = previous month). Close and email: 1–28 of month M.
+ * Chronology compares open/close datetimes, not day-numbers alone, so
+ * open 25 (M−1) + close 5 (M) is valid. Same-month open after close is not.
  */
 export function validateSchedule(
   start: number,
@@ -78,15 +170,33 @@ export function validateSchedule(
   if (!Number.isInteger(start) || !Number.isInteger(end) || !Number.isInteger(email)) {
     return "Days must be whole numbers.";
   }
-  if (!(start >= 1 && start <= end && end <= 28 && end < email && email <= 28)) {
-    return "Need 1 ≤ Submit opens ≤ Submit closes ≤ 28 and Submit closes < Email capsule ≤ 28.";
+  if (start < 1 || start > SUBMIT_OPEN_DAY_MAX) {
+    return "Need 1 ≤ Submit opens ≤ 31. Days 20–31 open the previous month.";
+  }
+  if (end < 1 || end > CURRENT_MONTH_DAY_MAX || email < 1 || email > CURRENT_MONTH_DAY_MAX) {
+    return "Need 1 ≤ Submit closes ≤ 28 and 1 ≤ Email capsule ≤ 28.";
+  }
+  if (!(end < email)) {
+    return "Need Submit closes < Email capsule ≤ 28.";
+  }
+  // Leap + common year covers Feb 28/29 and 30-day previous months.
+  for (const year of [2026, 2028]) {
+    for (let month = 1; month <= 12; month += 1) {
+      const cycleYearMonth = `${year}-${String(month).padStart(2, "0")}`;
+      if (!cycleOpenIsBeforeClose(cycleYearMonth, start, end)) {
+        return "Submit opens must be before Submit closes (days 20–31 are the previous month).";
+      }
+    }
   }
   return null;
 }
 
 export function isSubmitOpen(schedule: ScheduleDays, now: Date = new Date()): boolean {
-  const { day } = chicagoDate(now);
-  return day >= schedule.submit_start_day && day <= schedule.submit_end_day;
+  const current = yearMonthString(chicagoDate(now));
+  return (
+    isCycleWindowOpen(current, schedule, now) ||
+    isCycleWindowOpen(incrementYearMonth(current), schedule, now)
+  );
 }
 
 /**

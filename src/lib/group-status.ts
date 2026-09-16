@@ -4,7 +4,10 @@ import { chicagoWeekdayTheDay, monthName, ordinal } from "@/lib/dates";
 import type { Role } from "@/lib/types";
 import {
   chicagoDate,
+  compareChicagoDate,
   compileTargetYearMonth,
+  cycleCloseChicagoDate,
+  cycleOpenChicagoDate,
   incrementYearMonth,
   monthLabel,
   parseYearMonth,
@@ -77,22 +80,29 @@ export function decorateManagedGroup(
 }
 
 /**
- * Year-month whose submit_start_day is the next writing open date.
- * The current month still counts while today is before submit_start_day
- * and that month has not already been closed.
+ * Next calendar date writing opens.
+ * Days 20–31 open in M−1 (clamped); 1–19 open in cycle month M.
+ * A force-closed month is skipped even if its open day is still ahead.
  */
-function nextOpenYearMonth(
+export function nextOpenChicagoDate(
   group: CycleGroup,
   now: Date,
   closedYearMonths: readonly string[],
-): string {
-  const date = chicagoDate(now);
-  const current = yearMonthString(date);
+) {
+  const today = chicagoDate(now);
   const closed = new Set(closedYearMonths);
-  if (date.day < group.submit_start_day && !closed.has(current)) {
-    return current;
+  let cycle = yearMonthString(today);
+  for (let i = 0; i < 3; i += 1) {
+    if (!closed.has(cycle)) {
+      const open = cycleOpenChicagoDate(cycle, group.submit_start_day);
+      const close = cycleCloseChicagoDate(cycle, group.submit_end_day);
+      if (compareChicagoDate(today, close) <= 0) {
+        return open;
+      }
+    }
+    cycle = incrementYearMonth(cycle);
   }
-  return incrementYearMonth(current);
+  return cycleOpenChicagoDate(cycle, group.submit_start_day);
 }
 
 function nextOpenShort(
@@ -100,7 +110,8 @@ function nextOpenShort(
   now: Date,
   closedYearMonths: readonly string[],
 ): string {
-  return shortMonthDay(nextOpenYearMonth(group, now, closedYearMonths), group.submit_start_day);
+  const open = nextOpenChicagoDate(group, now, closedYearMonths);
+  return shortMonthDay(yearMonthString(open), open.day);
 }
 
 /** e.g. "Oct 1, 2026" — the next date writing opens for this group. */
@@ -109,10 +120,8 @@ export function nextOpenDateLabel(
   closedYearMonths: readonly string[],
   now: Date = new Date(),
 ): string {
-  return shortMonthDayYear(
-    nextOpenYearMonth(group, now, closedYearMonths),
-    group.submit_start_day,
-  );
+  const open = nextOpenChicagoDate(group, now, closedYearMonths);
+  return shortMonthDayYear(yearMonthString(open), open.day);
 }
 
 export function shortMonthDay(yearMonth: string, day: number): string {
@@ -134,10 +143,10 @@ export function windowClosesPhrase(yearMonth: string, endDay: number): string {
 }
 
 export function nextOpenPhrase(fromYearMonth: string, startDay: number): string {
-  const next = incrementYearMonth(fromYearMonth);
-  const parsed = parseYearMonth(next);
-  if (!parsed) return `the ${ordinal(startDay)}`;
-  return `${monthName(parsed.month)} ${startDay}`;
+  const open = cycleOpenChicagoDate(incrementYearMonth(fromYearMonth), startDay);
+  const name = monthName(open.month);
+  if (!name) return `the ${ordinal(open.day)}`;
+  return `${name} ${open.day}`;
 }
 
 export function initials(name: string): string {
