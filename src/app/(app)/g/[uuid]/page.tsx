@@ -13,7 +13,14 @@ import {
 import { groupDisplayName } from "@/lib/copy";
 import { nextOpenDateLabel, windowClosesPhrase } from "@/lib/group-status";
 import { resolveSubmitWindow } from "@/lib/cycle-store";
-import { capsuleHref, capsuleTitle, normalizeMonthVersion } from "@/lib/month-version";
+import {
+  capsuleHref,
+  capsuleTitle,
+  closedCountForMonth,
+  earlierCapsuleRows,
+  earlierCapsuleTitle,
+  normalizeMonthVersion,
+} from "@/lib/month-version";
 import { monthLabel } from "@/lib/schedule";
 import { requireGroupMember } from "@/lib/session";
 import { parseFlashError } from "@/lib/session-policy";
@@ -54,7 +61,7 @@ export default async function GroupHomePage({
     version: normalizeMonthVersion(row.version),
   }));
   const latestCapsule = compiled[0];
-  const earlier = compiled.slice(1);
+  const earlier = earlierCapsuleRows(compiled, open);
 
   let myStatus: "none" | "draft" | "submitted" = "none";
   let written = 0;
@@ -205,7 +212,11 @@ export default async function GroupHomePage({
                     >
                       <span className="listitem__body">
                         <span className="listitem__title">
-                          {capsuleTitle(monthLabel(row.yearMonth), row.version)}
+                          {earlierCapsuleTitle(
+                            monthLabel(row.yearMonth),
+                            row.version,
+                            closedCountForMonth(compiled, row.yearMonth),
+                          )}
                         </span>
                       </span>
                       <span className="listitem__end">Read</span>
@@ -219,24 +230,6 @@ export default async function GroupHomePage({
               <p className="eyebrow">{GROUP_EARLIER_CAPSULES}</p>
               <p className="muted small">{GROUP_NO_PREVIOUS_CAPSULES}</p>
             </div>
-          ) : null}
-
-          {open && latestCapsule ? (
-            <>
-              <hr className="rule" />
-              <div className="stack">
-                <p className="small muted">
-                  Last month:{" "}
-                  <Link
-                    href={capsuleHref(uuid, latestCapsule.yearMonth, latestCapsule.version)}
-                    prefetch={false}
-                  >
-                    the {capsuleTitle(monthLabel(latestCapsule.yearMonth), latestCapsule.version)}{" "}
-                    capsule
-                  </Link>
-                </p>
-              </div>
-            </>
           ) : null}
 
           {member.account_id ? null : (

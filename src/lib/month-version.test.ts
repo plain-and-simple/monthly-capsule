@@ -4,6 +4,9 @@ import {
   capsuleHref,
   capsulePath,
   capsuleTitle,
+  closedCountForMonth,
+  earlierCapsuleRows,
+  earlierCapsuleTitle,
   parseCapsuleEditionParam,
   planForceOpen,
   type CycleMonthRow,
@@ -78,5 +81,44 @@ describe("versioned capsule URLs and labels", () => {
     expect(parseCapsuleEditionParam("v2")).toBe(2);
     expect(parseCapsuleEditionParam("3")).toBe(3);
     expect(parseCapsuleEditionParam("nope")).toBeNull();
+  });
+});
+
+describe("earlier capsules listing", () => {
+  const septV2 = { yearMonth: "2026-09", version: 2 };
+  const septV1 = { yearMonth: "2026-09", version: 1 };
+  const augV1 = { yearMonth: "2026-08", version: 1 };
+  const compiled = [septV2, septV1, augV1];
+
+  it("when open, lists every compiled edition including the latest (no Last month footer)", () => {
+    expect(earlierCapsuleRows(compiled, true)).toEqual(compiled);
+  });
+
+  it("when closed, skips the featured latest compile so the card is not duplicated", () => {
+    expect(earlierCapsuleRows(compiled, false)).toEqual([septV1, augV1]);
+  });
+
+  it("keeps newest-first order from the compiled list", () => {
+    expect(earlierCapsuleRows(compiled, true).map((row) => `${row.yearMonth}v${row.version}`)).toEqual([
+      "2026-09v2",
+      "2026-09v1",
+      "2026-08v1",
+    ]);
+  });
+
+  it("uses Month YYYY · vN only when that month has more than one closed version", () => {
+    expect(closedCountForMonth(compiled, "2026-09")).toBe(2);
+    expect(closedCountForMonth(compiled, "2026-08")).toBe(1);
+    expect(earlierCapsuleTitle("September 2026", 2, 2)).toBe("September 2026 · v2");
+    expect(earlierCapsuleTitle("September 2026", 1, 2)).toBe("September 2026 · v1");
+    expect(earlierCapsuleTitle("August 2026", 1, 1)).toBe("August 2026");
+  });
+
+  it("leaves a single closed month as Month YYYY even when that edition is v2", () => {
+    const onlyV2 = [{ yearMonth: "2026-09", version: 2 }];
+    expect(earlierCapsuleRows(onlyV2, true)).toEqual(onlyV2);
+    expect(earlierCapsuleTitle("September 2026", 2, closedCountForMonth(onlyV2, "2026-09"))).toBe(
+      "September 2026",
+    );
   });
 });

@@ -76,6 +76,17 @@ describe("privacy and chrome locks", () => {
     expect(source).not.toContain("leaveGroup");
   });
 
+  it("group home lists every closed compile under Earlier capsules and has no Last month footer", () => {
+    const source = readFileSync(resolve(here, "../app/(app)/g/[uuid]/page.tsx"), "utf8");
+    expect(source).toContain("earlierCapsuleRows");
+    expect(source).toContain("earlierCapsuleTitle");
+    expect(source).toContain("closedCountForMonth");
+    expect(source).toContain("GROUP_EARLIER_CAPSULES");
+    expect(source).toContain("capsuleTitle");
+    expect(source).not.toContain("Last month");
+    expect(source).not.toContain("compiled.slice(1)");
+  });
+
   it("Your groups goes to /manage and the month badge sits in the card", () => {
     const source = readFileSync(resolve(here, "../app/(app)/g/[uuid]/page.tsx"), "utf8");
     expect(source).toContain('href="/manage"');
