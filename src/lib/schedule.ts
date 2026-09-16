@@ -157,6 +157,54 @@ export function isCycleWindowOpen(
   return compareChicagoDate(open, today) <= 0 && compareChicagoDate(today, close) <= 0;
 }
 
+export function parseScheduleForm(formData: FormData): ScheduleDays {
+  return {
+    submit_start_day: Number(formData.get("submit_start_day")),
+    submit_end_day: Number(formData.get("submit_end_day")),
+    email_day: Number(formData.get("email_day")),
+  };
+}
+
+export type ScheduleFormState = Partial<ScheduleDays> & {
+  ok?: boolean;
+  error?: string;
+};
+
+export function isCompleteScheduleDays(
+  value: Partial<ScheduleDays> | null | undefined,
+): value is ScheduleDays {
+  return (
+    !!value &&
+    Number.isInteger(value.submit_start_day) &&
+    Number.isInteger(value.submit_end_day) &&
+    Number.isInteger(value.email_day)
+  );
+}
+
+/**
+ * Days shown on the owner cycle form. Draft first, then the action result so a
+ * successful save is not replaced by a stale cached group snapshot, then group.
+ */
+export function scheduleFormDays(
+  group: ScheduleDays,
+  state: ScheduleFormState | null,
+  draft: ScheduleDays | null,
+): ScheduleDays {
+  if (draft) return draft;
+  if (isCompleteScheduleDays(state)) {
+    return {
+      submit_start_day: state.submit_start_day,
+      submit_end_day: state.submit_end_day,
+      email_day: state.email_day,
+    };
+  }
+  return {
+    submit_start_day: group.submit_start_day,
+    submit_end_day: group.submit_end_day,
+    email_day: group.email_day,
+  };
+}
+
 /**
  * Open: 1–31 (20–31 = previous month). Close and email: 1–28 of month M.
  * Chronology compares open/close datetimes, not day-numbers alone, so

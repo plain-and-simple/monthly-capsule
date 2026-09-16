@@ -1,10 +1,11 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { updateGroupName, updateSchedule, type SettingsState } from "@/actions/settings";
 import { DaySelect } from "@/components/day-select";
 import { PendingSubmitButton, useInstantBusy } from "@/components/pending-submit-button";
 import { ThemeForm } from "@/components/theme-form";
+import { scheduleFormDays, type ScheduleDays } from "@/lib/schedule";
 import type { Group } from "@/lib/types";
 
 export function SettingsForm({ group }: { group: Group }) {
@@ -18,6 +19,12 @@ export function SettingsForm({ group }: { group: Group }) {
     null,
   );
   const { busy: nameBusy, markBusy: markNameBusy } = useInstantBusy(namePending);
+  const [draft, setDraft] = useState<ScheduleDays | null>(null);
+  const days = scheduleFormDays(group, scheduleState, draft);
+
+  function setDay(field: keyof ScheduleDays, value: string) {
+    setDraft({ ...days, [field]: Number(value) });
+  }
 
   return (
     <div className="stack stack--loose">
@@ -38,7 +45,8 @@ export function SettingsForm({ group }: { group: Group }) {
             <span className="small muted">Submit opens</span>
             <DaySelect
               name="submit_start_day"
-              defaultValue={group.submit_start_day}
+              value={days.submit_start_day}
+              onChange={(event) => setDay("submit_start_day", event.target.value)}
               label="Submit opens"
               variant="open"
             />
@@ -47,7 +55,8 @@ export function SettingsForm({ group }: { group: Group }) {
             <span className="small muted">Submit closes</span>
             <DaySelect
               name="submit_end_day"
-              defaultValue={group.submit_end_day}
+              value={days.submit_end_day}
+              onChange={(event) => setDay("submit_end_day", event.target.value)}
               label="Submit closes"
             />
           </div>
@@ -55,7 +64,8 @@ export function SettingsForm({ group }: { group: Group }) {
             <span className="small muted">Email capsule</span>
             <DaySelect
               name="email_day"
-              defaultValue={group.email_day}
+              value={days.email_day}
+              onChange={(event) => setDay("email_day", event.target.value)}
               label="Email capsule"
             />
           </div>

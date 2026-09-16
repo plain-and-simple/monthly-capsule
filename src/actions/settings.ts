@@ -1,47 +1,54 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { CAPSULE_THEME_INVALID } from "@/lib/copy";
 import { parseThemeFormValue } from "@/lib/capsule-theme";
-import { validateSchedule } from "@/lib/schedule";
-import { requireOwner } from "@/lib/session";
+import { CAPSULE_THEME_INVALID } from "@/lib/copy";
+import { parseScheduleForm, validateSchedule, type ScheduleDays } from "@/lib/schedule";
+import { requireOwnerUncached } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase";
 
-export type SettingsState = { error?: string; ok?: boolean } | null;
+export type SettingsState =
+  | ({ error?: string; ok?: boolean; capsule_theme?: string } & Partial<ScheduleDays>)
+  | null;
 
 export async function updateSchedule(
   _prev: SettingsState,
   formData: FormData,
 ): Promise<SettingsState> {
   const groupId = String(formData.get("groupId") ?? "");
-  const start = Number(formData.get("submit_start_day"));
-  const end = Number(formData.get("submit_end_day"));
-  const email = Number(formData.get("email_day"));
+  const days = parseScheduleForm(formData);
 
-  await requireOwner(groupId);
+  await requireOwnerUncached(groupId);
 
-  const invalid = validateSchedule(start, end, email);
+  const invalid = validateSchedule(days.submit_start_day, days.submit_end_day, days.email_day);
   if (invalid) {
-    return { error: invalid };
+    return { error: invalid, ...days };
   }
 
   const admin = createAdminClient();
-  const { error } = await admin
+  const { data, error } = await admin
     .from("groups")
     .update({
-      submit_start_day: start,
-      submit_end_day: end,
-      email_day: email,
+      submit_start_day: days.submit_start_day,
+      submit_end_day: days.submit_end_day,
+      email_day: days.email_day,
     })
-    .eq("id", groupId);
+    .eq("id", groupId)
+    .select("submit_start_day, submit_end_day, email_day")
+    .maybeSingle();
 
-  if (error) {
-    return { error: "Could not save." };
+  if (error || !data) {
+    return { error: "Could not save.", ...days };
   }
 
   revalidatePath(`/g/${groupId}`);
   revalidatePath(`/g/${groupId}/settings`);
-  return { ok: true };
+  return {
+    ok: true,
+    submit_start_day: data.submit_start_day,
+    submit_end_day: data.submit_end_day,
+    email_day: data.email_day,
+  };
 }
 
 export async function updateGroupName(
@@ -54,7 +61,7 @@ export async function updateGroupName(
     return { error: "Name is too long." };
   }
 
-  await requireOwner(groupId);
+  await requireOwnerUncached(groupId);
 
   const admin = createAdminClient();
   const { error } = await admin.from("groups").update({ name }).eq("id", groupId);
@@ -73,20 +80,29 @@ export async function updateCapsuleTheme(
   formData: FormData,
 ): Promise<SettingsState> {
   const groupId = String(formData.get("groupId") ?? "");
-  await requireOwner(groupId);
-
   const theme = parseThemeFormValue(formData.get("capsule_theme"));
   if (!theme) {
     return { error: CAPSULE_THEME_INVALID };
   }
 
+  await requireOwnerUncached(groupId);
+
   const admin = createAdminClient();
-  const { error } = await admin.from("groups").update({ capsule_theme: theme }).eq("id", groupId);
-  if (error) {
-    return { error: "Could not save." };
+  const { data, error } = await admin
+    .from("groups")
+    .update({ capsule_theme: theme })
+    .eq("id", groupId)
+    .select("capsule_theme")
+    .maybeSingle();
+
+  if (error || !data) {
+    return { error: "Could not save.", capsule_theme: theme };
   }
 
   revalidatePath(`/g/${groupId}`);
   revalidatePath(`/g/${groupId}/settings`);
-  return { ok: true };
+  return {
+    ok: true,
+    capsule_theme: parseThemeFormValue(data.capsule_theme) ?? theme,
+  };
 }

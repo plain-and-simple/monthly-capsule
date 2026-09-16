@@ -7,6 +7,7 @@ import {
   parseCapsuleTheme,
   parseThemeFormValue,
   plateLabel,
+  themeFormValue,
   THEME_PHOTO_LAYOUT,
   weaveLetterBlocks,
 } from "./capsule-theme";
@@ -50,6 +51,14 @@ describe("capsule theme selection", () => {
     expect(parseCapsuleTheme(null)).toBe("classic");
     expect(parseThemeFormValue("warm")).toBe("warm");
     expect(parseThemeFormValue("nope")).toBeNull();
+  });
+
+  it("theme picker prefers draft, then the action result, then the group row", () => {
+    expect(themeFormValue("classic", { capsule_theme: "heritage" }, "warm")).toBe("warm");
+    expect(themeFormValue("classic", { capsule_theme: "heritage" }, null)).toBe("heritage");
+    expect(themeFormValue("classic", { capsule_theme: "nope" }, null)).toBe("classic");
+    expect(themeFormValue("classic", null, null)).toBe("classic");
+    expect(themeFormValue("minimal", null, null)).toBe("minimal");
   });
 });
 

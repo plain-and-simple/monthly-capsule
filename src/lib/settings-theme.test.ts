@@ -38,10 +38,15 @@ describe("owner theme picker persistence", () => {
   it("saving a theme is owner-gated and writes groups.capsule_theme", () => {
     const action = source("../actions/settings.ts");
     expect(action).toContain("export async function updateCapsuleTheme");
-    expect(action).toContain("requireOwner(groupId)");
+    expect(action).toContain("requireOwnerUncached(groupId)");
+    expect(action).not.toMatch(/await requireOwner\(groupId\)/);
     expect(action).toContain("parseThemeFormValue");
     expect(action).toContain("capsule_theme: theme");
+    expect(action).toContain('.select("capsule_theme")');
     expect(action).toContain("CAPSULE_THEME_INVALID");
+    const form = source("../components/theme-form.tsx");
+    expect(form).toContain("themeFormValue");
+    expect(form).toContain("checked={option.id === selected}");
   });
 
   it("the next compile reads the group theme and archives it", () => {

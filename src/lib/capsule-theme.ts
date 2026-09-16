@@ -29,6 +29,18 @@ export function parseThemeFormValue(value: unknown): CapsuleTheme | null {
   return isCapsuleTheme(value) ? value : null;
 }
 
+/** Theme shown on the owner picker. Draft first, then the action result, then group. */
+export function themeFormValue(
+  groupTheme: unknown,
+  state: { capsule_theme?: string | null } | null,
+  draft: CapsuleTheme | null,
+): CapsuleTheme {
+  if (draft) return draft;
+  const fromState = parseThemeFormValue(state?.capsule_theme);
+  if (fromState) return fromState;
+  return parseCapsuleTheme(groupTheme);
+}
+
 export function capsuleThemeMeta(theme: CapsuleTheme): CapsuleThemeSwatch {
   return CAPSULE_THEME_CATALOG.find((row) => row.id === theme) ?? CAPSULE_THEME_CATALOG[0]!;
 }
