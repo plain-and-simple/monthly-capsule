@@ -5,6 +5,7 @@ import Link from "next/link";
 import { createGroup, type CreateState } from "@/actions/create-group";
 import { CopyButton } from "@/components/copy-button";
 import { CreateSteps } from "@/components/create-steps";
+import { DaySelect } from "@/components/day-select";
 import { PendingLink } from "@/components/pending-link";
 import { PendingSubmitButton, useInstantBusy } from "@/components/pending-submit-button";
 import {
@@ -18,28 +19,6 @@ import {
   DEFAULT_SUBMIT_END_DAY,
   DEFAULT_SUBMIT_START_DAY,
 } from "@/lib/constants";
-
-function DaySelect({
-  id,
-  name,
-  defaultValue,
-  label,
-}: {
-  id: string;
-  name: string;
-  defaultValue: number;
-  label: string;
-}) {
-  return (
-    <select id={id} name={name} className="select" aria-label={label} defaultValue={defaultValue}>
-      {Array.from({ length: 28 }, (_, i) => i + 1).map((day) => (
-        <option key={day} value={day}>
-          {day}
-        </option>
-      ))}
-    </select>
-  );
-}
 
 export function CreateForm({ signedInAs }: { signedInAs?: string | null }) {
   const [state, action, pending] = useActionState<CreateState, FormData>(createGroup, null);
@@ -272,6 +251,7 @@ export function CreateForm({ signedInAs }: { signedInAs?: string | null }) {
                     name="submit_start_day"
                     defaultValue={DEFAULT_SUBMIT_START_DAY}
                     label="Submit opens"
+                    variant="open"
                   />
                 </div>
                 <div className="field-inline">

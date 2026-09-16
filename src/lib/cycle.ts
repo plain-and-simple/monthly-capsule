@@ -1,6 +1,8 @@
 import {
   chicagoDate,
   compileTargetYearMonth,
+  incrementYearMonth,
+  isCycleWindowOpen,
   parseYearMonth,
   yearMonthString,
   type ScheduleDays,
@@ -78,6 +80,7 @@ export function nextClosedToOpenYearMonth(
  * Year-month members may submit to, or null when the window is shut.
  * Force-open wins for that Chicago month even if an earlier edition is compiled.
  * Calendar days never reopen a compiled/closed month (that takes force-open → v2).
+ * Days 20–31 open in M−1, so the window can target next month while still in M−1.
  */
 export function openSubmitYearMonth(
   group: CycleGroup,
@@ -93,12 +96,13 @@ export function openSubmitYearMonth(
     return forceYM;
   }
 
-  if (
-    date.day >= group.submit_start_day &&
-    date.day <= group.submit_end_day &&
-    !closed.has(current)
-  ) {
+  if (isCycleWindowOpen(current, group, now) && !closed.has(current)) {
     return current;
+  }
+
+  const next = incrementYearMonth(current);
+  if (isCycleWindowOpen(next, group, now) && !closed.has(next)) {
+    return next;
   }
 
   return null;

@@ -559,7 +559,7 @@ button.textlink:hover {
 .field-inline input,
 .field-inline select {
   width: auto;
-  min-width: 8rem;
+  min-width: 14rem;
 }
 
 .check {

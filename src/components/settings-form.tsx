@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 import { updateGroupName, updateSchedule, type SettingsState } from "@/actions/settings";
+import { DaySelect } from "@/components/day-select";
 import { PendingSubmitButton, useInstantBusy } from "@/components/pending-submit-button";
 import type { Group } from "@/lib/types";
 
@@ -30,41 +31,27 @@ export function SettingsForm({ group }: { group: Group }) {
           <input type="hidden" name="groupId" value={group.id} />
           <div className="field-inline">
             <span className="small muted">Submit opens</span>
-            <input
-              className="input"
+            <DaySelect
               name="submit_start_day"
-              type="number"
-              min={1}
-              max={28}
-              required
               defaultValue={group.submit_start_day}
-              aria-label="Submit opens"
+              label="Submit opens"
+              variant="open"
             />
           </div>
           <div className="field-inline">
             <span className="small muted">Submit closes</span>
-            <input
-              className="input"
+            <DaySelect
               name="submit_end_day"
-              type="number"
-              min={1}
-              max={28}
-              required
               defaultValue={group.submit_end_day}
-              aria-label="Submit closes"
+              label="Submit closes"
             />
           </div>
           <div className="field-inline">
             <span className="small muted">Email capsule</span>
-            <input
-              className="input"
+            <DaySelect
               name="email_day"
-              type="number"
-              min={1}
-              max={28}
-              required
               defaultValue={group.email_day}
-              aria-label="Email capsule"
+              label="Email capsule"
             />
           </div>
           <p className="formnote">Days of the month. America/Chicago.</p>
