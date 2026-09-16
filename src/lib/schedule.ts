@@ -165,6 +165,11 @@ export function parseScheduleForm(formData: FormData): ScheduleDays {
   };
 }
 
+export type ScheduleFormState = Partial<ScheduleDays> & {
+  ok?: boolean;
+  error?: string;
+};
+
 export function isCompleteScheduleDays(
   value: Partial<ScheduleDays> | null | undefined,
 ): value is ScheduleDays {
@@ -182,7 +187,7 @@ export function isCompleteScheduleDays(
  */
 export function scheduleFormDays(
   group: ScheduleDays,
-  state: Partial<ScheduleDays> | null,
+  state: ScheduleFormState | null,
   draft: ScheduleDays | null,
 ): ScheduleDays {
   if (draft) return draft;
