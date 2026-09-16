@@ -89,7 +89,11 @@ describe("next open date label", () => {
 
   it("stays in the current month when a 1–19 start day is still ahead", () => {
     expect(
-      nextOpenDateLabel({ ...group, submit_start_day: 19 }, [], new Date("2026-09-10T17:00:00Z")),
+      nextOpenDateLabel(
+        { ...group, submit_start_day: 19, submit_end_day: 20, email_day: 21 },
+        [],
+        new Date("2026-09-10T17:00:00Z"),
+      ),
     ).toBe("Sep 19, 2026");
   });
 
@@ -121,7 +125,7 @@ describe("next open date label", () => {
   it("skips a closed current month even before a 1–19 start day", () => {
     expect(
       nextOpenDateLabel(
-        { ...group, submit_start_day: 19 },
+        { ...group, submit_start_day: 19, submit_end_day: 20, email_day: 21 },
         ["2026-09"],
         new Date("2026-09-10T17:00:00Z"),
       ),
