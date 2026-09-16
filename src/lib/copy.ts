@@ -92,6 +92,12 @@ export const CYCLE_SEND_AGAIN_HINT = "Sends again from Capsule with the locked s
 export const CYCLE_NOT_NOW = "Not now";
 export const CYCLE_EMAIL_LATER = "Email group";
 
+export const CAPSULE_THEME_SECTION = "Capsule theme";
+export const CAPSULE_THEME_HINT =
+  "Used the next time a capsule is made. Past months stay as they were.";
+export const CAPSULE_THEME_SAVE = "Save theme";
+export const CAPSULE_THEME_INVALID = "Pick a theme.";
+
 export const UNTITLED_GROUP = "Untitled group";
 
 export const LANDING_CUT_PHRASES = ["No phone.", "Create Capsule Group"] as const;

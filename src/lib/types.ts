@@ -1,3 +1,5 @@
+import type { CapsuleTheme } from "@/lib/capsule-theme";
+
 export type Role = "owner" | "member";
 export type MonthStatus = "open" | "closed" | "compiled";
 export type SubmitStatus = "draft" | "submitted";
@@ -10,6 +12,7 @@ export type Group = {
   submit_end_day: number;
   email_day: number;
   force_open_year_month: string | null;
+  capsule_theme: CapsuleTheme;
   created_at: string;
 };
 

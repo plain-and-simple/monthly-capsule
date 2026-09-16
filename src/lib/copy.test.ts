@@ -11,6 +11,8 @@ import {
   CYCLE_SECTION,
   CYCLE_SEND,
   CYCLE_SEND_AGAIN,
+  CAPSULE_THEME_SAVE,
+  CAPSULE_THEME_SECTION,
   FORGOT_PASSWORD_ACK,
   FORGOT_PASSWORD_HEADING,
   FORGOT_PASSWORD_LEDE,
@@ -171,6 +173,8 @@ describe("join and manage labels", () => {
     expect(CYCLE_SEND_AGAIN).toBe("Send again");
     expect(CYCLE_NOT_NOW).toBe("Not now");
     expect(CYCLE_EMAIL_LATER).toBe("Email group");
+    expect(CAPSULE_THEME_SECTION).toBe("Capsule theme");
+    expect(CAPSULE_THEME_SAVE).toBe("Save theme");
   });
 
   it("never falls back to bare Capsule for a group name", () => {

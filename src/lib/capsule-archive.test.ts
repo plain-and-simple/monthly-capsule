@@ -39,7 +39,10 @@ describe("capsule archive snapshot", () => {
     expect(snapshot.letters[0]?.photos[0]?.storage_path).toBe("g/m/p.jpg");
     expect(snapshot.html).toContain("Hello world");
     expect(snapshot.html).toContain('data-storage-path="g/m/p.jpg"');
+    expect(snapshot.html).toContain("class=\"photo\"");
     expect(snapshot.html).not.toContain("http");
+    expect(snapshot.theme).toBe("classic");
+    expect(snapshot.html).toContain('data-theme="classic"');
     expect(snapshot.missed_count).toBe(2);
     expect(capsuleHasArchive(snapshot)).toBe(true);
     expect(parseCapsuleArchive(snapshot)?.letters[0]?.preferred_name).toBe("Chacha");
@@ -57,6 +60,7 @@ describe("capsule archive snapshot", () => {
     expect(v2.month_version).toBe(2);
     expect(v2.html).toContain('data-month-version="2"');
     expect(parseCapsuleArchive({ ...v2, month_version: undefined })?.month_version).toBe(1);
+    expect(parseCapsuleArchive({ ...v2, theme: undefined })?.theme).toBe("classic");
   });
 
   it("rejects garbage so a marker row is treated as missing", () => {
@@ -94,6 +98,8 @@ describe("compile and view wire the archive", () => {
     expect(page).toContain("parseCapsuleArchive");
     expect(page).toContain("ensureCapsuleArchive");
     expect(page).toContain("archive.letters");
+    expect(page).toContain("archive.theme");
+    expect(page).toContain("CapsuleDocument");
     expect(page).not.toContain("includedSubmissions");
   });
 });
