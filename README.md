@@ -107,7 +107,7 @@ See `.env.example`.
 3. **Create** `/create` — studio code → preferred name + email + password + optional group name → UUID + PIN shown once (copy). Account owns the group.
 4. **Join** `/join` — signed in: group ID + PIN + preferred name. Not signed in: create account / sign in, then return here.
 5. **Join link** `/join/[uuid]` — invite landing. Signed in: PIN + preferred name. Not signed in: create account / sign in, then return to this landing.
-6. **Group home** `/g/[uuid]` — name, open/closed, member count, Write your letter / Read the capsule, Earlier capsules, People, Invite, Settings (owner). Save login if this leftover seat has no account.
+6. **Group home** `/g/[uuid]` — name, open/closed, member count, Write your letter / Read the capsule, Earlier capsules, People, Invite, Settings (owner). Save login if this leftover seat has no account. **Earlier capsules** is one row per compiled edition, newest first; same calendar month uses `Month YYYY · vN` only when that month has more than one closed version. No “Last month” footer.
 7. **People** `/g/[uuid]/people` — preferred names. Any member. No emails.
 8. **Invite** `/g/[uuid]/invite` — copy join URL, optional typed PIN, and share text (URL + PIN if typed). Server never returns a PIN.
 9. **Submit** `/g/[uuid]/submit` — letter + ≤6 photos; Save as draft (hidden from capsule) or Save and submit (included); still editable until the window closes; “Closed.” when shut. No account → Save login first.

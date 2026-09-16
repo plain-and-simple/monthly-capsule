@@ -103,3 +103,42 @@ export function capsuleTitle(monthLabelText: string, version: number): string {
   const suffix = capsuleVersionSuffix(version);
   return suffix ? `${monthLabelText} · ${suffix}` : monthLabelText;
 }
+
+export type CapsuleEditionRef = {
+  yearMonth: string;
+  version: number;
+};
+
+/**
+ * Past list for group home. Newest first.
+ * Open window: every compiled edition (the featured card is the current open version).
+ * Closed window: every compiled edition except the featured latest compile.
+ */
+export function earlierCapsuleRows<T extends CapsuleEditionRef>(
+  compiledNewestFirst: readonly T[],
+  windowOpen: boolean,
+): T[] {
+  return windowOpen ? [...compiledNewestFirst] : compiledNewestFirst.slice(1);
+}
+
+export function closedCountForMonth(
+  compiled: readonly CapsuleEditionRef[],
+  yearMonth: string,
+): number {
+  return compiled.filter((row) => row.yearMonth === yearMonth).length;
+}
+
+/**
+ * Earlier-list label: `Month YYYY · vN` only when that calendar month has more
+ * than one closed compile. A single closed month stays `Month YYYY`.
+ */
+export function earlierCapsuleTitle(
+  monthLabelText: string,
+  version: number,
+  closedCount: number,
+): string {
+  if (closedCount > 1) {
+    return `${monthLabelText} · v${normalizeMonthVersion(version)}`;
+  }
+  return monthLabelText;
+}
