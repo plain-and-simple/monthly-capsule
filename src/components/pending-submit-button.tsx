@@ -55,16 +55,17 @@ export function PendingSubmitButton({
 }: PendingSubmitButtonProps) {
   const { pending, data } = useFormStatus();
   const [clicked, setClicked] = useState(false);
-  const inFlight = pending || busyProp;
-  const busy = ignorePending ? false : inFlight || clicked;
+  const visualBusy = pending || busyProp;
+  const actionPending = pending && !ignorePending;
+  const busy = ignorePending ? false : visualBusy || clicked;
   const isSubmitter =
     clicked ||
     name == null ||
     Boolean(pending && data && data.get(name) === String(value ?? ""));
 
   useEffect(() => {
-    if (!inFlight) setClicked(false);
-  }, [inFlight]);
+    if (!visualBusy) setClicked(false);
+  }, [visualBusy]);
 
   return (
     <button
@@ -73,7 +74,7 @@ export function PendingSubmitButton({
       className={className}
       name={name}
       value={value}
-      disabled={disabled || submitBusyDisablesControl(inFlight && !ignorePending)}
+      disabled={disabled || submitBusyDisablesControl(actionPending)}
       aria-busy={busy || undefined}
       aria-disabled={busy || disabled || undefined}
       onKeyDown={(event) => {

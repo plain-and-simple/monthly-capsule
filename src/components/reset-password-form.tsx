@@ -29,7 +29,7 @@ export function ResetPasswordForm({ token }: { token: string }) {
         <p className="muted small">{RESET_PASSWORD_LEDE}</p>
       </div>
       <input type="hidden" name="token" value={token} />
-      <PasswordInput autoComplete="new-password" disabled={busy} />
+      <PasswordInput autoComplete="new-password" />
       {state?.error ? <p className="err">{state.error}</p> : null}
       <PendingSubmitButton
         className="btn btn--primary btn--block btn--lg"

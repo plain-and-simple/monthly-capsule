@@ -19,7 +19,7 @@ function useIdleError(value: string, validate: (next: string) => string | null) 
 
   return {
     error,
-    onBlur: () => setError(validate(value)),
+    onBlur: (next: string) => setError(validate(next)),
     onValue: (next: string) => {
       setError(null);
       return next;
@@ -27,11 +27,11 @@ function useIdleError(value: string, validate: (next: string) => string | null) 
   };
 }
 
-export function EmailInput({
-  name = "email",
-  defaultValue,
-  ...props
-}: Omit<InputHTMLAttributes<HTMLInputElement>, "type" | "name"> & { name?: string }) {
+type AuthInputProps = Omit<InputHTMLAttributes<HTMLInputElement>, "type" | "name" | "value"> & {
+  name?: string;
+};
+
+export function EmailInput({ name = "email", defaultValue, ...props }: AuthInputProps) {
   const [value, setValue] = useState(String(defaultValue ?? ""));
   const { error, onBlur, onValue } = useIdleError(value, emailFieldError);
 
@@ -46,9 +46,13 @@ export function EmailInput({
         required={props.required ?? true}
         autoComplete={props.autoComplete ?? "email"}
         placeholder={props.placeholder ?? "you@example.com"}
-        value={value}
+        defaultValue={defaultValue}
         onChange={(event) => setValue(onValue(event.target.value))}
-        onBlur={onBlur}
+        onBlur={(event) => {
+          const next = event.target.value;
+          setValue(next);
+          onBlur(next);
+        }}
       />
       {error ? <span className="err">{error}</span> : null}
     </label>
@@ -60,7 +64,7 @@ export function PasswordInput({
   name = "password",
   defaultValue,
   ...props
-}: Omit<InputHTMLAttributes<HTMLInputElement>, "type" | "name"> & { name?: string }) {
+}: AuthInputProps) {
   const [value, setValue] = useState(String(defaultValue ?? ""));
   const { error, onBlur, onValue } = useIdleError(value, passwordFieldError);
 
@@ -75,9 +79,13 @@ export function PasswordInput({
         required={props.required ?? true}
         minLength={8}
         autoComplete={autoComplete}
-        value={value}
+        defaultValue={defaultValue}
         onChange={(event) => setValue(onValue(event.target.value))}
-        onBlur={onBlur}
+        onBlur={(event) => {
+          const next = event.target.value;
+          setValue(next);
+          onBlur(next);
+        }}
       />
       <span className="field__hint">{PASSWORD_HINT}</span>
       {error ? <span className="err">{error}</span> : null}

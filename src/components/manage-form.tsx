@@ -29,8 +29,8 @@ export function ManageForm({
       <input type="hidden" name="return" value={returnTo} />
       {next ? <input type="hidden" name="next" value={next} /> : null}
       <div>
-        <EmailInput disabled={busy} />
-        <PasswordInput autoComplete="current-password" disabled={busy} />
+        <EmailInput />
+        <PasswordInput autoComplete="current-password" />
       </div>
       <p className="small">
         <Link href="/forgot">{FORGOT_PASSWORD_LINK}</Link>

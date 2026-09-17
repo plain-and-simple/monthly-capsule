@@ -164,6 +164,27 @@ describe("account-before-join IA", () => {
     expect(source).toContain("FORGOT_PASSWORD_LINK");
     expect(source).toContain('href="/forgot"');
   });
+
+  it("keeps named auth fields enabled so native POST FormData still has email and password", () => {
+    for (const file of ["manage-form.tsx", "sign-up-form.tsx", "save-login-form.tsx"]) {
+      const source = readFileSync(resolve(here, `../components/${file}`), "utf8");
+      expect(source).toContain('method="post"');
+      expect(source).not.toContain("disabled={busy}");
+    }
+    expect(readFileSync(resolve(here, "../components/forgot-password-form.tsx"), "utf8")).not.toContain(
+      "disabled={busy}",
+    );
+    expect(readFileSync(resolve(here, "../components/reset-password-form.tsx"), "utf8")).not.toContain(
+      "disabled={busy}",
+    );
+    const submit = readFileSync(resolve(here, "../components/submit-form.tsx"), "utf8");
+    expect(submit).toContain("readOnly={busy}");
+    expect(submit).not.toMatch(/name="body"[\s\S]{0,120}disabled=\{busy\}/);
+
+    const fields = readFileSync(resolve(here, "../components/auth-fields.tsx"), "utf8");
+    expect(fields).not.toMatch(/value=\{value\}/);
+    expect(fields).toContain("defaultValue={defaultValue}");
+  });
 });
 
 describe("previous-month open picker", () => {

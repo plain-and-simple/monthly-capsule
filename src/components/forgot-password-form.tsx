@@ -41,7 +41,7 @@ export function ForgotPasswordForm() {
         <h2>{FORGOT_PASSWORD_HEADING}</h2>
         <p className="muted small">{FORGOT_PASSWORD_LEDE}</p>
       </div>
-      <EmailInput disabled={busy} />
+      <EmailInput />
       {state && "error" in state ? <p className="err">{state.error}</p> : null}
       <PendingSubmitButton
         className="btn btn--primary btn--block btn--lg"

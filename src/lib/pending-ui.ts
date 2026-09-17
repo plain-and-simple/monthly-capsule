@@ -19,9 +19,11 @@ export function pendingGuardRemainingMs(
 }
 
 /**
- * Disable the submit control once the request is in flight.
- * Do not disable on the initiating click — that cancels the native POST.
+ * Disable the submit control only after React reports the request in flight
+ * (`useFormStatus().pending`). Do not disable on the initiating click or on
+ * `markBusy` — that cancels a native POST, and disabled named fields are omitted
+ * from FormData so login looks like a wrong password.
  */
-export function submitBusyDisablesControl(inFlight: boolean): boolean {
-  return inFlight;
+export function submitBusyDisablesControl(actionPending: boolean): boolean {
+  return actionPending;
 }

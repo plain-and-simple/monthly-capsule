@@ -31,8 +31,8 @@ export function SaveLoginForm({
       <input type="hidden" name="groupId" value={groupId} />
       <input type="hidden" name="return" value={next ?? `/g/${groupId}`} />
       {next ? <input type="hidden" name="next" value={next} /> : null}
-      <EmailInput disabled={busy} />
-      <PasswordInput autoComplete="current-password" disabled={busy} />
+      <EmailInput />
+      <PasswordInput autoComplete="current-password" />
       {error ? <p className="err">{error}</p> : null}
       <PendingSubmitButton className="btn btn--secondary" busy={busy} pendingLabel="Saving…">
         Save login

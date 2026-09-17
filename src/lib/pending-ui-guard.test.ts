@@ -30,8 +30,10 @@ describe("client pending guard", () => {
 
   it("clears clicked busy when the action is no longer in flight", () => {
     const source = readFileSync(resolve(here, "../components/pending-submit-button.tsx"), "utf8");
-    expect(source).toContain("submitBusyDisablesControl(inFlight && !ignorePending)");
-    expect(source).toContain("if (!inFlight) setClicked(false)");
+    expect(source).toContain("submitBusyDisablesControl(actionPending)");
+    expect(source).toContain("if (!visualBusy) setClicked(false)");
     expect(source).not.toMatch(/disabled=\{busy\}/);
+    expect(source).not.toMatch(/inFlight = pending \|\| busyProp/);
+    expect(source).toContain("const actionPending = pending && !ignorePending");
   });
 });

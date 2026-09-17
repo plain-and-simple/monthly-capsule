@@ -36,11 +36,10 @@ export function SignUpForm({
             required
             maxLength={40}
             autoComplete="nickname"
-            disabled={busy}
           />
         </label>
-        <EmailInput disabled={busy} />
-        <PasswordInput autoComplete="new-password" disabled={busy} />
+        <EmailInput />
+        <PasswordInput autoComplete="new-password" />
       </div>
       {error ? <p className="err">{error}</p> : null}
       <PendingSubmitButton

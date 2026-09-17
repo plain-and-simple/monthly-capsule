@@ -175,7 +175,7 @@ export function SubmitForm({
           name="body"
           defaultValue={initialBody}
           maxLength={20000}
-          disabled={busy}
+          readOnly={busy}
           placeholder="What has this month been like?"
         />
         <span className="field__hint">No length rule. Three lines is a letter too.</span>
