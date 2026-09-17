@@ -1,5 +1,6 @@
 import { expect, type Page } from "@playwright/test";
 import {
+  CONTRIBUTORS_PREFIX,
   GROUP_PRIMARY_EDIT,
   GROUP_PRIMARY_SUBMIT,
   LANDING_SIGN_IN,
@@ -57,7 +58,13 @@ export async function openCapsuleCover(page: Page): Promise<"letters" | "empty" 
   const primary = page.getByRole("link", { name: /Read the capsule/i });
   if ((await primary.count()) === 0) return "none";
   await primary.first().click();
-  if ((await page.getByText("No letters this month.").count()) > 0) return "empty";
+  await expect(page).toHaveURL(/\/capsule\//);
+  const empty = page.getByText("No letters this month.");
+  const contributors = page.getByText(new RegExp(`^${CONTRIBUTORS_PREFIX}`));
+  const notReady = page.getByRole("heading", { name: "This capsule is not ready yet" });
+  await expect(empty.or(contributors).or(notReady)).toBeVisible();
+  if ((await notReady.count()) > 0) return "none";
+  if ((await empty.count()) > 0) return "empty";
   return "letters";
 }
 
