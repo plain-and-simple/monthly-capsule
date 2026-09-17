@@ -1,4 +1,5 @@
 import { ALLOWED_PHOTO_TYPES, MAX_PHOTO_BYTES, MAX_PHOTOS } from "@/lib/constants";
+import { PHOTOS_MAX } from "@/lib/copy";
 
 /** File or Blob with bytes. Canvas / iOS FormData often yields Blob, not File. */
 export type PhotoUpload = {
@@ -18,8 +19,32 @@ export function isPhotoUpload(value: unknown): value is PhotoUpload {
   );
 }
 
+export function photoBatchFit(
+  currentCount: number,
+  incomingCount: number,
+  max = MAX_PHOTOS,
+): { keep: number; dropped: number } {
+  const room = Math.max(0, max - currentCount);
+  const keep = Math.min(Math.max(0, incomingCount), room);
+  return { keep, dropped: Math.max(0, incomingCount - keep) };
+}
+
+export function takePhotosUpToMax<T>(
+  current: readonly T[],
+  incoming: readonly T[],
+  max = MAX_PHOTOS,
+): { next: T[]; kept: T[]; dropped: number } {
+  const { keep, dropped } = photoBatchFit(current.length, incoming.length, max);
+  const kept = incoming.slice(0, keep);
+  return {
+    next: [...current, ...kept],
+    kept,
+    dropped,
+  };
+}
+
 export function appendPhotos<T>(current: readonly T[], incoming: readonly T[], max = MAX_PHOTOS): T[] {
-  return [...current, ...incoming].slice(0, max);
+  return takePhotosUpToMax(current, incoming, max).next;
 }
 
 export function collectPhotoFiles(formData: FormData): PhotoUpload[] {
@@ -53,7 +78,7 @@ export function validatePhotoFile(file: PhotoUpload): string | null {
 
 export function validatePhotoList(files: PhotoUpload[]): string | null {
   if (files.length > MAX_PHOTOS) {
-    return `Max ${MAX_PHOTOS} photos.`;
+    return PHOTOS_MAX;
   }
   for (const file of files) {
     const error = validatePhotoFile(file);

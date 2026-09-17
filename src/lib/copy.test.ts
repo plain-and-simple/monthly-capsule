@@ -41,6 +41,7 @@ import {
   SAVE_LOGIN_REQUIRED_HINT,
   SAVE_LOGIN_SUBMIT,
   SUBMIT_EMPTY,
+  PHOTOS_MAX,
   MANAGE_CREATE_LABEL,
   MANAGE_EMPTY_HEADING,
   MANAGE_EMPTY_HINT,
@@ -154,6 +155,7 @@ describe("join and manage labels", () => {
     expect(SAVE_LOGIN_SUBMIT).toBe("Save account");
     expect(INVALID_INVITE_HEADING).toBe("This invite is not valid");
     expect(SUBMIT_EMPTY).toBe("Write a letter or add a photo before you submit.");
+    expect(PHOTOS_MAX).toBe("You can add 6 photos. Extra photos were not added.");
     expect(CREATE_SAVED_CONFIRM).toBe("I copied the link and PIN");
   });
 

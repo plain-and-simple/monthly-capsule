@@ -33,6 +33,7 @@ export const CREATE_NO_CODE_HINT = "Don't have a code?";
 export const CREATE_SCHEDULE_HINT =
   "Days of the month. America/Chicago. Days 20–31 open in the previous month.";
 export const SUBMIT_EMPTY = "Write a letter or add a photo before you submit.";
+export const PHOTOS_MAX = "You can add 6 photos. Extra photos were not added.";
 export const CAPSULE_NOT_READY_HEADING = "This capsule is not ready yet";
 export const CAPSULE_NOT_READY_HINT =
   "It may still be compiling, or this month has not been made. Go back to the group and try again in a moment.";
