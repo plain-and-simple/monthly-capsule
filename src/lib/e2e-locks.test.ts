@@ -10,7 +10,7 @@ const repoRoot = resolve(here, "../..");
 function listFiles(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
     const path = join(dir, entry.name);
-    return entry.isDirectory() ? listFiles(path) : [path];
+    return entry.isDirectory() ? (entry.name === ".auth" ? [] : listFiles(path)) : [path];
   });
 }
 
@@ -77,5 +77,18 @@ describe("e2e suite locks", () => {
     expect(readme).toContain("E2E_ALLOW_PRODUCTION");
     expect(readme).toContain("npm run test:e2e");
     expect(envExample).not.toMatch(/^E2E_PASSWORD=.+/m);
+  });
+
+  it("reuses one signed-in storage state instead of posting login on every auth test", () => {
+    const auth = readFileSync(resolve(repoRoot, "e2e/ready-auth.spec.ts"), "utf8");
+    const setup = readFileSync(resolve(repoRoot, "e2e/auth.setup.ts"), "utf8");
+    const config = readFileSync(resolve(repoRoot, "playwright.config.ts"), "utf8");
+    expect(auth).toContain("storageState");
+    expect(auth).not.toContain("signIn(");
+    expect(auth).toContain("openCapsuleCover");
+    expect(setup).toContain("signIn(");
+    expect(setup).toContain("storageState");
+    expect(config).toContain("auth\\.setup\\.ts");
+    expect(config).toContain('name: "setup"');
   });
 });

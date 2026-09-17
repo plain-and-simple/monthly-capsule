@@ -12,12 +12,13 @@ import {
   MANAGE_TAG_SUBMIT,
   MANAGE_TAG_SUBMITTED,
 } from "../src/lib/copy";
+import { E2E_STORAGE_STATE_PATH } from "./helpers/auth-file";
 import {
   e2eCredentials,
   goYourGroupsThenOpenGroup,
+  openCapsuleCover,
   openSubmitIfClosed,
   saveDraftIfWindowOpen,
-  signIn,
   submitLetterWithTwoPhotos,
 } from "./helpers/ready";
 
@@ -25,6 +26,7 @@ const creds = e2eCredentials();
 
 test.describe("Ready authenticated paths", () => {
   test.describe.configure({ mode: "serial" });
+  test.use({ storageState: E2E_STORAGE_STATE_PATH });
   test.skip(
     !creds,
     "Set E2E_EMAIL and E2E_PASSWORD (and E2E_BASE_URL in CI) to run sign-in / groups / submit.",
@@ -32,7 +34,7 @@ test.describe("Ready authenticated paths", () => {
 
   test("sign-in lands on Your groups and opens a group", async ({ page }) => {
     if (!creds) return;
-    await signIn(page, creds.email, creds.password);
+    await page.goto("/manage");
     await expect(page.getByRole("heading", { name: MANAGE_EMPTY_TITLE })).toBeVisible();
     await expect(page.getByText("Pick one")).toHaveCount(0);
     await expect(page.getByText(/capsule is ready to read/i)).toHaveCount(0);
@@ -54,7 +56,6 @@ test.describe("Ready authenticated paths", () => {
     page,
   }) => {
     if (!creds) return;
-    await signIn(page, creds.email, creds.password);
     await goYourGroupsThenOpenGroup(page);
     const groupUrl = page.url();
     const groupPath = new URL(groupUrl).pathname;
@@ -74,18 +75,16 @@ test.describe("Ready authenticated paths", () => {
 
   test("capsule cover lists contributors without fluff", async ({ page }) => {
     if (!creds) return;
-    await signIn(page, creds.email, creds.password);
     await goYourGroupsThenOpenGroup(page);
-    const read = page.getByRole("link", { name: /Read the capsule/i });
-    test.skip((await read.count()) === 0, "No compiled capsule to read yet.");
-    await read.first().click();
+    const cover = await openCapsuleCover(page);
+    test.skip(cover === "none", "No compiled capsule to read yet.");
+    test.skip(cover === "empty", "Latest compiled capsule has no letters.");
     await expect(page.getByText(new RegExp(`^${CONTRIBUTORS_PREFIX}`))).toBeVisible();
     await expect(page.getByText("Letters and photographs, kept together.")).toHaveCount(0);
   });
 
   test("submit / draft flow when the window is open", async ({ page }) => {
     if (!creds) return;
-    await signIn(page, creds.email, creds.password);
     await goYourGroupsThenOpenGroup(page);
     const result = await saveDraftIfWindowOpen(page);
     expect(["drafted", "closed"]).toContain(result);
@@ -93,7 +92,6 @@ test.describe("Ready authenticated paths", () => {
 
   test("join existing Capsule PIN fields when signed in", async ({ page }) => {
     if (!creds) return;
-    await signIn(page, creds.email, creds.password);
     await page.goto("/join");
     await expect(page.getByLabel(JOIN_PIN_LABEL)).toBeVisible();
     await expect(page.getByLabel("Join link or group ID")).toBeVisible();
@@ -105,7 +103,6 @@ test.describe("Ready authenticated paths", () => {
       "Set E2E_GROUP_ID and E2E_GROUP_PIN to actually join a group.",
     );
     if (!creds?.groupPin || !creds.groupId) return;
-    await signIn(page, creds.email, creds.password);
     await page.goto("/join");
     await page.getByLabel("Join link or group ID").fill(creds.groupId);
     await page.getByLabel(JOIN_PIN_LABEL).fill(creds.groupPin);
@@ -122,7 +119,6 @@ test.describe("Ready authenticated paths", () => {
   test("CI group write path: open, append photos, close, capsule, theme save", async ({ page }) => {
     test.setTimeout(120_000);
     if (!creds) return;
-    await signIn(page, creds.email, creds.password);
     await goYourGroupsThenOpenGroup(page);
     await openSubmitIfClosed(page);
     await submitLetterWithTwoPhotos(page);
@@ -140,9 +136,8 @@ test.describe("Ready authenticated paths", () => {
     }
     await page.reload();
 
-    const read = page.getByRole("link", { name: /Read the capsule/i }).first();
-    await expect(read).toBeVisible();
-    await read.click();
+    const cover = await openCapsuleCover(page);
+    expect(cover).toBe("letters");
     await expect(page.getByText(new RegExp(`^${CONTRIBUTORS_PREFIX}`))).toBeVisible();
     await expect(page.getByText("Letters and photographs, kept together.")).toHaveCount(0);
 

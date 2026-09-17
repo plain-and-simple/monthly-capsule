@@ -6,6 +6,7 @@ import {
   LOGIN_WRONG,
   PREFERRED_NAME_REQUIRED,
   accountIsBanned,
+  shouldRecordLoginAttempt,
   manageDestination,
   managePath,
   parseCreateAccount,
@@ -57,15 +58,20 @@ export async function planManageLogin(formData: FormData): Promise<SessionOpenRe
   if (await loginAttemptsBlocked(parsed.email, ip)) {
     return { ok: false, error: LOGIN_RATE_LIMITED, path: back };
   }
-  await recordLoginAttempt(parsed.email, ip);
 
   const existing = await findAccountByEmail(parsed.email);
   if (accountIsBanned(existing)) {
+    if (shouldRecordLoginAttempt("banned")) {
+      await recordLoginAttempt(parsed.email, ip);
+    }
     return { ok: false, error: ACCOUNT_BANNED, path: back };
   }
 
   const account = await authenticateAccount(parsed.email, parsed.password);
   if (!account) {
+    if (shouldRecordLoginAttempt("wrong")) {
+      await recordLoginAttempt(parsed.email, ip);
+    }
     return { ok: false, error: LOGIN_WRONG, path: back };
   }
 

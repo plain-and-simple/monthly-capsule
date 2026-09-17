@@ -8,6 +8,7 @@ import {
   JOIN_ACCOUNT_REQUIRED,
   LOGIN_WRONG,
   MIN_PASSWORD_LENGTH,
+  shouldRecordLoginAttempt,
   PASSWORD_TOO_SHORT,
   PREFERRED_NAME_REQUIRED,
   SUBMIT_ACCOUNT_REQUIRED,
@@ -53,6 +54,12 @@ describe("GWT A — Manage is email + password, no SMS", () => {
     expect(parseManageLogin({ email: "ada@example.com", password: "" })).toEqual({
       error: LOGIN_WRONG,
     });
+  });
+
+  it("records failed and banned logins, not successful ones", () => {
+    expect(shouldRecordLoginAttempt("ok")).toBe(false);
+    expect(shouldRecordLoginAttempt("wrong")).toBe(true);
+    expect(shouldRecordLoginAttempt("banned")).toBe(true);
   });
 
   it("0 groups → list; 1 → list; many → list", () => {

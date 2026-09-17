@@ -12,8 +12,11 @@ import {
 import { CYCLE_OPENED } from "../../src/lib/cycle";
 import { canRunAuthenticatedE2E } from "../../src/lib/e2e-target";
 import { STUDIO_CODE_ERROR } from "../../src/lib/studio-code";
+import { E2E_STORAGE_STATE_PATH } from "./auth-file";
 
 export const BAD_STUDIO_CODE = "not-a-real-studio-code";
+
+export { E2E_STORAGE_STATE_PATH };
 
 export function e2eCredentials(): {
   email: string;
@@ -48,6 +51,14 @@ export async function signIn(page: Page, email: string, password: string) {
     throw new Error(`Sign-in failed: ${await error.first().innerText()}`);
   }
   await expect(page).toHaveURL(/\/manage$/);
+}
+
+export async function openCapsuleCover(page: Page): Promise<"letters" | "empty" | "none"> {
+  const primary = page.getByRole("link", { name: /Read the capsule/i });
+  if ((await primary.count()) === 0) return "none";
+  await primary.first().click();
+  if ((await page.getByText("No letters this month.").count()) > 0) return "empty";
+  return "letters";
 }
 
 export async function openFirstGroupFromManage(page: Page) {

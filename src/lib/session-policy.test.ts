@@ -371,6 +371,9 @@ describe("session cookie + redirect uses Route Handler 303", () => {
     expect(source).not.toContain('from "next/navigation"');
     expect(source).toContain("planManageLogin");
     expect(source).toContain("planJoinGroup");
+    expect(source).toContain('shouldRecordLoginAttempt("wrong")');
+    expect(source).toContain('shouldRecordLoginAttempt("banned")');
+    expect(source).not.toContain('shouldRecordLoginAttempt("ok")');
   });
 
   it("helper sets cookies on the 303 response, not cookies().set", () => {

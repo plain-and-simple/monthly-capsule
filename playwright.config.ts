@@ -41,7 +41,15 @@ export default defineConfig({
     screenshot: "only-on-failure",
     video: "retain-on-failure",
   },
-  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
+  projects: [
+    { name: "setup", testMatch: /auth\.setup\.ts/ },
+    {
+      name: "chromium",
+      testIgnore: /auth\.setup\.ts/,
+      use: { ...devices["Desktop Chrome"] },
+      dependencies: ["setup"],
+    },
+  ],
   webServer: startLocal
     ? {
         command: process.env.CI ? "npm run start" : "npm run dev",

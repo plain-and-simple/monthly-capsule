@@ -2,6 +2,12 @@ export const MIN_PASSWORD_LENGTH = 8;
 
 export const LOGIN_WRONG = "Email or password is wrong.";
 export const LOGIN_RATE_LIMITED = "Too many tries. Wait a bit.";
+
+/** Successful sign-ins must not burn the brute-force budget. */
+export function shouldRecordLoginAttempt(outcome: "ok" | "wrong" | "banned"): boolean {
+  return outcome !== "ok";
+}
+
 export const PASSWORD_TOO_SHORT = "Password needs at least 8 characters.";
 export const PREFERRED_NAME_REQUIRED = "Preferred name required.";
 export const EMAIL_REQUIRED = "Email required.";
