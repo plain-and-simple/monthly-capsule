@@ -1,50 +1,35 @@
 "use client";
 
 import { useEffect, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from "react";
-import { flushSync, useFormStatus } from "react-dom";
-import { CLIENT_PENDING_GUARD_MS, pendingGuardRemainingMs } from "@/lib/pending-ui";
+import { useFormStatus } from "react-dom";
+import { CLIENT_PENDING_GUARD_MS, submitBusyDisablesControl } from "@/lib/pending-ui";
 
-export function useInstantBusy(pending: boolean, stuckMs = CLIENT_PENDING_GUARD_MS) {
+export function useInstantBusy(pending: boolean, hungMs = CLIENT_PENDING_GUARD_MS) {
   const [held, setHeld] = useState(false);
-  const [stuck, setStuck] = useState(false);
-  const startedAtRef = useRef<number | null>(null);
+  const sawPending = useRef(false);
 
   useEffect(() => {
     if (pending) {
+      sawPending.current = true;
       setHeld(true);
-      setStuck(false);
-    } else {
+      return;
+    }
+    if (sawPending.current) {
+      sawPending.current = false;
       setHeld(false);
     }
   }, [pending]);
 
   useEffect(() => {
-    if (stuck) return;
-    const active = held || pending;
-    if (!active) {
-      startedAtRef.current = null;
-      return;
-    }
-    if (startedAtRef.current == null) {
-      startedAtRef.current = Date.now();
-    }
-    const remaining = pendingGuardRemainingMs(startedAtRef.current, Date.now(), stuckMs);
-    const timer = window.setTimeout(() => {
-      flushSync(() => {
-        setHeld(false);
-        setStuck(true);
-      });
-    }, remaining);
+    if (!held || pending) return;
+    const timer = window.setTimeout(() => setHeld(false), hungMs);
     return () => window.clearTimeout(timer);
-  }, [held, pending, stuckMs, stuck]);
+  }, [held, pending, hungMs]);
 
   return {
-    busy: stuck ? false : held || pending,
-    stuck,
-    markBusy: () => {
-      setStuck(false);
-      setHeld(true);
-    },
+    busy: held || pending,
+    stuck: false,
+    markBusy: () => setHeld(true),
   };
 }
 
@@ -63,40 +48,23 @@ export function PendingSubmitButton({
   className,
   disabled,
   onClick,
+  onKeyDown,
   name,
   value,
   ...props
 }: PendingSubmitButtonProps) {
   const { pending, data } = useFormStatus();
   const [clicked, setClicked] = useState(false);
-  const [timedOut, setTimedOut] = useState(false);
-  const startedAtRef = useRef<number | null>(null);
-  const rawBusy = pending || clicked || busyProp;
-  const busy = ignorePending || timedOut ? false : rawBusy;
+  const inFlight = pending || busyProp;
+  const busy = ignorePending ? false : inFlight || clicked;
   const isSubmitter =
     clicked ||
     name == null ||
     Boolean(pending && data && data.get(name) === String(value ?? ""));
 
   useEffect(() => {
-    if (!rawBusy) {
-      startedAtRef.current = null;
-      setTimedOut(false);
-      return;
-    }
-    if (startedAtRef.current == null) {
-      startedAtRef.current = Date.now();
-    }
-    const remaining = pendingGuardRemainingMs(startedAtRef.current, Date.now());
-    const timer = window.setTimeout(() => {
-      flushSync(() => setTimedOut(true));
-    }, remaining);
-    return () => window.clearTimeout(timer);
-  }, [rawBusy]);
-
-  useEffect(() => {
-    if (ignorePending || timedOut) setClicked(false);
-  }, [ignorePending, timedOut]);
+    if (!inFlight) setClicked(false);
+  }, [inFlight]);
 
   return (
     <button
@@ -105,9 +73,16 @@ export function PendingSubmitButton({
       className={className}
       name={name}
       value={value}
-      disabled={disabled}
+      disabled={disabled || submitBusyDisablesControl(inFlight && !ignorePending)}
       aria-busy={busy || undefined}
       aria-disabled={busy || disabled || undefined}
+      onKeyDown={(event) => {
+        onKeyDown?.(event);
+        if (event.defaultPrevented) return;
+        if (busy && (event.key === "Enter" || event.key === " ")) {
+          event.preventDefault();
+        }
+      }}
       onClick={(event) => {
         onClick?.(event);
         if (event.defaultPrevented) return;

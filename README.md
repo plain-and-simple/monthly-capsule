@@ -15,7 +15,7 @@ Friends write a letter (and up to six photos) each month. After the window close
 
 - **Brand chrome** is the PS lockup (letters + letter-tile + step bar — the mark already includes `PS`). Favicon / apple-touch are the letter-tile icon only. Page title (and the landing footer) still use **Plain and Simple Monthly Capsule**. Resend has no send-API sender avatar (skip). From display stays **Capsule**.
 - **Account** is one field `preferred_name`, plus email and a hashed password (min 8). Memberships link an account to groups. **No phone. No SMS.**
-- **Manage** is email + password, rate-limited (5 / 15 minutes / IP + email). After login: 0 groups → empty + join hint; 1 → group home; many → pick list. **Forgot password?** emails a one-hour, single-use link via Resend. Same response whether the email has an account. The reset page sets a new password and signs in the same way Manage does.
+- **Manage** is email + password, rate-limited (5 / 15 minutes / IP + email). After login: always the Your groups list (0 groups → empty + join hint). **Forgot password?** emails a one-hour, single-use link via Resend. Same response whether the email has an account. The reset page sets a new password and signs in the same way Manage does.
 - Web join with a group UUID + PIN. PIN is generated at create, shown **once**, stored as a bcrypt hash only, never recovered.
 - Join asks for preferred name **after** a saved account (email + password). UUID + PIN still identify the group. **No PIN-only seat that can submit.**
 - Fresh site: **Create an account** (or Sign in), then **Join existing Capsule** (group ID + PIN). Manage empty state leads with Join existing Capsule.
@@ -100,19 +100,19 @@ See `.env.example`.
 
 ## Screens
 
-1. **Home** `/` — **Create an account** (preferred name + email + password) or **Sign in**. Then **Create a capsule group** (studio code). No three equal CTAs. No phone. Invite links are a separate path.
-2. **Manage** `/manage` — account groups. Empty: **Join existing Capsule** plus create. With groups: pick list (including one group) with owner/member, plus Join existing Capsule. After login with exactly one group and no `next`, go to group home. Your groups always returns to this list.
+1. **Home** `/` — **Sign in** and **Create an account** side by side. Create a group is not shown until you are signed in. Invite links are a separate path.
+2. **Manage** `/manage` — account groups. Empty: **Join existing Capsule** plus create. With groups: pick list (including one group) with owner/member and an action tag, plus Join existing Capsule. After login, always this list. Your groups always returns here.
 2a. **Forgot password** `/forgot` — email only. Always the same “if we have that account, we sent a link” copy. Rate-limited 5 / 15 minutes / IP + email.
-2b. **Reset password** `/reset/[token]` — set a new password (min 8). Invalid, used, or expired links ask you to request a new one. Success signs in like Manage.
+2b. **Reset password** `/reset/[token]` — set a new password (min 8). Invalid, used, or expired links ask you to request a new one. Success signs in the same way Manage does.
 3. **Create** `/create` — studio code → preferred name + email + password + optional group name → UUID + PIN shown once (copy). Account owns the group.
 4. **Join** `/join` — signed in: group ID + PIN + preferred name. Not signed in: create account / sign in, then return here.
 5. **Join link** `/join/[uuid]` — invite landing. Signed in: PIN + preferred name. Not signed in: create account / sign in, then return to this landing.
-6. **Group home** `/g/[uuid]` — name, open/closed, member count, Write your letter / Read the capsule, Earlier capsules, People, Invite, Settings (owner). Save login if this leftover seat has no account. **Earlier capsules** is one row per compiled edition, newest first; same calendar month uses `Month YYYY · vN` only when that month has more than one closed version. No “Last month” footer.
-7. **People** `/g/[uuid]/people` — preferred names. Any member. No emails.
-8. **Invite** `/g/[uuid]/invite` — copy join URL, optional typed PIN, and share text (URL + PIN if typed). Server never returns a PIN.
-9. **Submit** `/g/[uuid]/submit` — letter + ≤6 photos; Save as draft (hidden from capsule) or Save and submit (included); still editable until the window closes; “Closed.” when shut. No account → Save login first.
-10. **Capsule** `/g/[uuid]/capsule/[YYYY-MM]` — first edition (v1). Later same-month compiles: `/g/[uuid]/capsule/[YYYY-MM]/v2`. Read-only archive; session required. Any member.
-11. **Owner settings** `/g/[uuid]/settings` — **Capsule theme** (swatch + name: Classic, Warm, Minimal, Heritage), the three day-of-month fields, Capsule cycle (open early / close & make / email), and Regenerate PIN.
+6. **Group home** `/g/[uuid]` — name, open/closed, Write your letter / Read the capsule, next-capsule row (owner open early / close), people with owner remove, Earlier capsules, Invite, Settings (owner). Save login if this leftover seat has no account. **Earlier capsules** is one row per compiled edition, newest first; same calendar month uses `Month YYYY · vN` only when that month has more than one closed version. No “Last month” footer.
+7. **People** `/g/[uuid]/people` — redirects to group home.
+8. **Invite** `/g/[uuid]/invite` — copy join URL and share text. Owner can make a new PIN (shown once). Server never returns the current PIN.
+9. **Submit** `/g/[uuid]/submit` — letter + ≤6 photos; Save as draft (hidden from capsule) or Save and submit (included); still editable until the window closes; closed state links to the latest capsule. No account → Save login first.
+10. **Capsule** `/g/[uuid]/capsule/[YYYY-MM]` — first edition (v1). Later same-month compiles: `/g/[uuid]/capsule/[YYYY-MM]/v2`. Read-only archive; session required. Any member. Cover lists contributors.
+11. **Owner settings** `/g/[uuid]/settings` — **Capsule theme**, schedule day fields, group name, and Regenerate PIN. Open early / close live on group home.
 
 ## End-to-end tests (Playwright)
 
@@ -170,14 +170,14 @@ Fill the exports in your shell. Never commit real credentials. HTML report: `npx
 
 After env + **all** migrations (init, accounts, force-cycle, submission_status, capsule_archive, **month_versions**). Prefer `npm run test:e2e` for the smoke; the steps below are still the manual Ready path:
 
-1. **Create (GWT B).** Open `/`. Upper-right Create Capsule Group. Studio code (local default `plainandsimple` if `CREATE_GROUP_CODE` is unset). Preferred name, email, password (8+). Copy the join link and PIN. Continue to the group home. You are the owner.
-2. **Manage (GWT A).** Private window. `/` → **Sign in** with that email + password (or Create an account first). No SMS. One group → group home. Your groups (and the brand mark) open `/manage` even with one group, so you can create another. Sign out from `/manage`. **Forgot password?** from the login card → `/forgot` → same ack whether the email exists. Open the emailed `/reset/…` link, set a new password (8+), land signed in.
+1. **Create (GWT B).** Sign in, then `/create` (studio code; local default `plainandsimple` if `CREATE_GROUP_CODE` is unset). Preferred name, email, password (8+). Copy the join link and PIN. Continue to the group, then Your groups. You are the owner.
+2. **Manage (GWT A).** Private window. `/` → **Sign in** with that email + password (or Create an account first). No SMS. Any number of groups → Your groups. Sign out from `/manage`. **Forgot password?** from the login card → `/forgot` → same ack whether the email exists. Open the emailed `/reset/…` link, set a new password (8+), land signed in.
 3. **Join existing (GWT C).** Sign up (or Sign in) first. **Join existing Capsule**: group ID + PIN + preferred name. Manage lists the group. There is no skip-save PIN-only seat that can submit.
 4. **Invite link (GWT D).** Private window. Open the join link while signed out: invite landing asks to create an account or sign in, then returns to the same `/join/{uuid}` for PIN + preferred name. A leftover seat with no `account_id` must Save login before draft or submit.
-5. **People (GWT E).** People shows preferred names only — no emails.
-6. **Invite / PIN / schedule.** Invite: copy link, type PIN, copy share text. Settings (owner): the three day fields; invalid combos rejected. Regenerate PIN asks to confirm; new PIN once; old PIN fails; sessions stay valid.
-7. If Chicago’s day is inside the window, submit a letter + photos. After the window, Submit shows Closed.
-8. **Force cycle (owner).** Settings → Capsule cycle. If this Chicago month is not in an open window: Open submit early → that month (or v2+ if it was already compiled). If already open: “Already open.” Close & make capsule → confirm → Read that edition. Email the group? Send (Resend; sent N / skipped / error) or Not now (in-app only; cron email_day does not send). Email group later from View or Settings until sent. A member must not see these actions. Re-open after compile starts an empty new version of the **same** month.
+5. **People (GWT E).** Group home lists preferred names only — no emails. Owner can remove a member from that list.
+6. **Invite / PIN / schedule.** Invite: copy link and share text (no PIN type-in). Owner can make a new PIN, shown once. Settings (owner): Capsule theme, schedule day fields, group name; invalid combos rejected. Regenerate PIN asks to confirm; new PIN once; old PIN fails; sessions stay valid.
+7. If Chicago’s day is inside the window, submit a letter + photos. After the window, Submit says writing is closed and links back (and to the capsule when one exists).
+8. **Force cycle (owner).** Group home → Next capsule. If this Chicago month is not in an open window: Open submit early → that month (or v2+ if it was already compiled). If already open: “Already open.” Close & make capsule → confirm → Read that edition. Email the group? Send (Resend; sent N / skipped / error) or Not now (in-app only; cron email_day does not send). Email group later from View until sent. A member must not see these actions. Re-open after compile starts an empty new version of the **same** month.
 9. Cron (optional, needs the same env):
 
 ```bash

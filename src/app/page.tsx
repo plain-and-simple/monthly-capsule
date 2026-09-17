@@ -1,9 +1,8 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AppHeader } from "@/components/app-header";
 import { FlashToast } from "@/components/app-toast";
 import { AuthPanel } from "@/components/auth-panel";
-import { LANDING_CREATE_CTA, LANDING_LEDE, PRODUCT_NAME, SIGNED_OUT_TOAST } from "@/lib/copy";
+import { LANDING_HEADLINE, LANDING_LEDE, LANDING_MONTH_GOES, PRODUCT_NAME, SIGNED_OUT_TOAST } from "@/lib/copy";
 import { parseReturnPath } from "@/lib/return-path";
 import { getAccount } from "@/lib/session";
 import { parseFlashError, parseFlashNotice } from "@/lib/session-policy";
@@ -29,32 +28,14 @@ export default async function HomePage({
       {signedOut ? <FlashToast message={signedOut} /> : null}
       <AppHeader />
       <main className="main">
-        <div className="wrap">
+        <div className="wrap wrap--wide">
           <div className="stack stack--loose">
             <div className="stack">
-              <p className="eyebrow">Once a month</p>
-              <h1 className="display serif">
-                Friends write once a month.
-                <br />
-                You get one capsule.
-              </h1>
+              <h1 className="display serif">{LANDING_HEADLINE}</h1>
               <p className="lede">{LANDING_LEDE}</p>
             </div>
 
-            <div className="card card--pad-lg">
-              <AuthPanel next={next} error={error} returnTo="/" defaultMode="signup" />
-            </div>
-
-            <div className="ornament">
-              <span className="small muted">or</span>
-            </div>
-
-            <div className="stack stack--tight">
-              <Link className="btn btn--secondary btn--block" href="/create">
-                {LANDING_CREATE_CTA}
-              </Link>
-              <p className="btn-note">Needs a studio code. Ask whoever sent you here.</p>
-            </div>
+            <AuthPanel next={next} error={error} returnTo="/" />
 
             <div className="panel">
               <p className="small muted">
@@ -65,17 +46,7 @@ export default async function HomePage({
 
             <div className="stack stack--tight">
               <p className="eyebrow">How a month goes</p>
-              <ol className="list small" style={{ borderTop: 0 }}>
-                <li style={{ borderBottom: 0, padding: "0.35rem 0" }}>
-                  The window opens. Everyone writes.
-                </li>
-                <li style={{ borderBottom: 0, padding: "0.35rem 0" }}>
-                  Write a letter, add a few photos, submit — or save a draft first.
-                </li>
-                <li style={{ borderBottom: 0, padding: "0.35rem 0" }}>
-                  The window closes and one capsule goes out.
-                </li>
-              </ol>
+              <p className="small">{LANDING_MONTH_GOES}</p>
             </div>
           </div>
         </div>

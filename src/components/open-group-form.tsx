@@ -9,13 +9,11 @@ import { OPEN_GROUP_PATH, type OpenGroupUiDecision } from "@/lib/session-policy"
 function OpenGroupRow({
   name,
   roleLabel,
-  meta,
   status,
   busy,
 }: {
   name: string;
   roleLabel: string;
-  meta: string;
   status: string;
   busy: boolean;
 }) {
@@ -27,17 +25,9 @@ function OpenGroupRow({
           <span className="listitem__title">{name}</span>
           <span className="badge">{roleLabel}</span>
         </span>
-        <span className="listitem__meta">{meta}</span>
       </span>
       <span className="listitem__end">
-        {busy ? (
-          "Opening…"
-        ) : (
-          <span className={status === "Open" ? "badge badge--open" : "badge"}>
-            {status === "Open" ? <span className="dot" /> : null}
-            {status}
-          </span>
-        )}
+        {busy ? "Opening…" : <span className="badge">{status}</span>}
       </span>
     </>
   );
@@ -47,13 +37,11 @@ function OpenGroupLink({
   href,
   name,
   roleLabel,
-  meta,
   status,
 }: {
   href: string;
   name: string;
   roleLabel: string;
-  meta: string;
   status: string;
 }) {
   const [clicked, setClicked] = useState(false);
@@ -83,13 +71,7 @@ function OpenGroupLink({
         setClicked(true);
       }}
     >
-      <OpenGroupRow
-        name={name}
-        roleLabel={roleLabel}
-        meta={meta}
-        status={status}
-        busy={clicked}
-      />
+      <OpenGroupRow name={name} roleLabel={roleLabel} status={status} busy={clicked} />
     </Link>
   );
 }
@@ -99,14 +81,12 @@ export function OpenGroupForm({
   open,
   name,
   roleLabel,
-  meta,
   status,
 }: {
   groupId: string;
   open: OpenGroupUiDecision;
   name: string;
   roleLabel: string;
-  meta: string;
   status: string;
 }) {
   const [clicked, setClicked] = useState(false);
@@ -119,13 +99,7 @@ export function OpenGroupForm({
 
   if (open.action === "link") {
     return (
-      <OpenGroupLink
-        href={open.path}
-        name={name}
-        roleLabel={roleLabel}
-        meta={meta}
-        status={status}
-      />
+      <OpenGroupLink href={open.path} name={name} roleLabel={roleLabel} status={status} />
     );
   }
 
@@ -143,13 +117,7 @@ export function OpenGroupForm({
     >
       <input type="hidden" name="groupId" value={groupId} />
       <button className="listitem" type="submit" aria-busy={clicked || undefined}>
-        <OpenGroupRow
-          name={name}
-          roleLabel={roleLabel}
-          meta={meta}
-          status={status}
-          busy={clicked}
-        />
+        <OpenGroupRow name={name} roleLabel={roleLabel} status={status} busy={clicked} />
       </button>
     </form>
   );

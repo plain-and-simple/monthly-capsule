@@ -8,8 +8,9 @@ import {
   MANAGE_EMPTY_TITLE,
   groupDisplayName,
 } from "@/lib/copy";
-import { decorateManagedGroup, membershipRoleLabel } from "@/lib/group-status";
+import { manageGroupActionTag, membershipRoleLabel } from "@/lib/group-status";
 import { listAccountGroups } from "@/lib/memberships";
+import { openSubmitYearMonth } from "@/lib/cycle";
 import { getSession, requireAccount } from "@/lib/session";
 import { decideOpenGroupUi } from "@/lib/session-policy";
 import { createAdminClient } from "@/lib/supabase";
@@ -28,11 +29,15 @@ export default async function ManagePage() {
   const groupIds = groups.map(({ group }) => group.id);
   const { data: monthRows } =
     groupIds.length > 0
-      ? await admin.from("months").select("group_id, year_month, status").in("group_id", groupIds)
+      ? await admin
+          .from("months")
+          .select("id, group_id, year_month, status")
+          .in("group_id", groupIds)
       : { data: [] };
 
   const closedByGroup = new Map<string, string[]>();
   const compiledByGroup = new Map<string, string[]>();
+  const openMonthByGroup = new Map<string, string>();
   for (const row of monthRows ?? []) {
     const groupId = row.group_id as string;
     const yearMonth = row.year_month as string;
@@ -42,6 +47,24 @@ export default async function ManagePage() {
     }
     if (status === "compiled") {
       compiledByGroup.set(groupId, [...(compiledByGroup.get(groupId) ?? []), yearMonth]);
+    }
+    if (status === "open") {
+      openMonthByGroup.set(groupId, row.id as string);
+    }
+  }
+
+  const memberIds = groups.map(({ member }) => member.id);
+  const openMonthIds = [...openMonthByGroup.values()];
+  const statusByMember = new Map<string, "none" | "draft" | "submitted">();
+  if (memberIds.length > 0 && openMonthIds.length > 0) {
+    const { data: submissions } = await admin
+      .from("submissions")
+      .select("member_id, month_id, status")
+      .in("member_id", memberIds)
+      .in("month_id", openMonthIds);
+    for (const row of submissions ?? []) {
+      const status = row.status === "submitted" ? "submitted" : "draft";
+      statusByMember.set(`${row.member_id}:${row.month_id}`, status);
     }
   }
 
@@ -53,11 +76,6 @@ export default async function ManagePage() {
           <div className="stack stack--loose">
             <div className="stack stack--tight">
               <h1>{MANAGE_EMPTY_TITLE}</h1>
-              {groups.length > 0 ? (
-                <p className="muted small">
-                  {groups.length} {groups.length === 1 ? "group" : "groups"}. Pick one.
-                </p>
-              ) : null}
             </div>
 
             {groups.length === 0 ? (
@@ -83,7 +101,10 @@ export default async function ManagePage() {
                 <div className="panel">
                   <p className="small">
                     <b>Waiting on an invite?</b>{" "}
-                    <span className="muted">{MANAGE_EMPTY_HINT} There is no way to search for a group from here — that is on purpose.</span>
+                    <span className="muted">
+                      {MANAGE_EMPTY_HINT} There is no way to search for a group from here — that is
+                      on purpose.
+                    </span>
                   </p>
                 </div>
               </>
@@ -91,10 +112,13 @@ export default async function ManagePage() {
               <>
                 <ul className="list">
                   {groups.map(({ group, member }) => {
-                    const decorated = decorateManagedGroup(group as Group, {
-                      closedYearMonths: closedByGroup.get(group.id) ?? [],
-                      compiledYearMonths: compiledByGroup.get(group.id) ?? [],
-                    });
+                    const closed = closedByGroup.get(group.id) ?? [];
+                    const compiled = compiledByGroup.get(group.id) ?? [];
+                    const submitOpen =
+                      openSubmitYearMonth(group as Group, closed, new Date()) !== null;
+                    const openMonthId = openMonthByGroup.get(group.id);
+                    const myStatus =
+                      (openMonthId && statusByMember.get(`${member.id}:${openMonthId}`)) || "none";
                     const name = groupDisplayName(group.name);
                     return (
                       <li key={group.id}>
@@ -107,8 +131,11 @@ export default async function ManagePage() {
                           })}
                           name={name}
                           roleLabel={membershipRoleLabel(member.role)}
-                          meta={decorated.meta}
-                          status={decorated.status}
+                          status={manageGroupActionTag({
+                            submitOpen,
+                            hasCompiledCapsule: compiled.length > 0,
+                            myStatus,
+                          })}
                         />
                       </li>
                     );

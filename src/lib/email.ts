@@ -317,17 +317,8 @@ async function sendCapsuleEmail(
   const resend = new Resend(key);
   let accepted = 0;
   let error: string | null = null;
-  const sendDeadline = Date.now() + RESEND_SEND_TIMEOUT_MS;
   for (const to of resolved.emails) {
-    const remaining = sendDeadline - Date.now();
-    if (remaining <= 0) {
-      error = RESEND_TIMEOUT_MESSAGE;
-      console.error("capsule email resend rejected", { capsuleId: capsule.id, to, error });
-      break;
-    }
     try {
-      // Inbox avatar is not set here: Resend's send API has no sender-avatar
-      // field (BIMI / Gravatar / provider profile only). From display is Capsule.
       const result = await withTimeout(
         resend.emails.send({
           from: from.from,
@@ -336,7 +327,7 @@ async function sendCapsuleEmail(
           html,
           text,
         }),
-        remaining,
+        RESEND_SEND_TIMEOUT_MS,
         RESEND_TIMEOUT_MESSAGE,
       );
       const interpreted = resendSendAccepted(result);

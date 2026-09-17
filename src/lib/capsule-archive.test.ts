@@ -38,6 +38,8 @@ describe("capsule archive snapshot", () => {
     expect(snapshot.letters).toHaveLength(1);
     expect(snapshot.letters[0]?.photos[0]?.storage_path).toBe("g/m/p.jpg");
     expect(snapshot.html).toContain("Hello world");
+    expect(snapshot.html).toContain("Contributors: Chacha");
+    expect(snapshot.html).not.toContain("Letters and photographs, kept together.");
     expect(snapshot.html).toContain('data-storage-path="g/m/p.jpg"');
     expect(snapshot.html).toContain("class=\"photo\"");
     expect(snapshot.html).not.toContain("http");

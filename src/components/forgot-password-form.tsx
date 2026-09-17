@@ -6,6 +6,7 @@ import {
   requestPasswordReset,
   type RequestPasswordResetState,
 } from "@/actions/request-password-reset";
+import { EmailInput } from "@/components/auth-fields";
 import { PendingSubmitButton, useInstantBusy } from "@/components/pending-submit-button";
 import {
   FORGOT_PASSWORD_HEADING,
@@ -40,17 +41,7 @@ export function ForgotPasswordForm() {
         <h2>{FORGOT_PASSWORD_HEADING}</h2>
         <p className="muted small">{FORGOT_PASSWORD_LEDE}</p>
       </div>
-      <label className="field">
-        <span className="field__label">Email</span>
-        <input
-          className="input"
-          name="email"
-          type="email"
-          required
-          autoComplete="email"
-          placeholder="you@example.com"
-        />
-      </label>
+      <EmailInput disabled={busy} />
       {state && "error" in state ? <p className="err">{state.error}</p> : null}
       <PendingSubmitButton
         className="btn btn--primary btn--block btn--lg"

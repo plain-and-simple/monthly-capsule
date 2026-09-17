@@ -1,59 +1,94 @@
 "use client";
 
-import { useActionState, useRef, useState } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 import { submitLetter, type SubmitState } from "@/actions/submit";
 import { MutationToast } from "@/components/app-toast";
+import { PendingLink } from "@/components/pending-link";
 import { PendingSubmitButton, useInstantBusy } from "@/components/pending-submit-button";
 import { MAX_PHOTOS } from "@/lib/constants";
-import { SUBMIT_AND_SEND, SUBMIT_DRAFT, SUBMIT_SAVED_DRAFT, SUBMIT_SUBMITTED } from "@/lib/copy";
+import {
+  GROUP_PRIMARY_VIEW,
+  SUBMIT_AND_SEND,
+  SUBMIT_CLOSED_HEADING,
+  SUBMIT_DRAFT,
+  SUBMIT_SAVED_DRAFT,
+  SUBMIT_SUBMITTED,
+} from "@/lib/copy";
+import { appendPhotos } from "@/lib/photo-files";
 import { PHOTO_COMPRESS_FAILED, compressPhotoFile } from "@/lib/photo-compress";
 import type { SubmitStatus } from "@/lib/submit";
 
-type PreparedPhoto = {
-  blob: Blob;
-  name: string;
-  width: number;
-  height: number;
+type StagedPhoto = {
+  id: string;
   preview: string;
+  savedPath?: string;
+  blob?: Blob;
+  name?: string;
+  width?: number;
+  height?: number;
 };
 
 export function SubmitForm({
   groupId,
   closed,
   initialBody,
-  existingPhotoCount,
+  existingPhotos,
   initialStatus,
   title,
   closesPhrase,
+  latestCapsuleHref,
 }: {
   groupId: string;
   closed: boolean;
   initialBody: string;
-  existingPhotoCount: number;
+  existingPhotos: Array<{ url: string; storagePath: string; width: number; height: number }>;
   initialStatus: SubmitStatus | null;
   title: string;
   closesPhrase: string;
+  latestCapsuleHref?: string | null;
 }) {
-  const [photos, setPhotos] = useState<PreparedPhoto[]>([]);
+  const [photos, setPhotos] = useState<StagedPhoto[]>(() =>
+    existingPhotos.map((photo) => ({
+      id: photo.storagePath,
+      preview: photo.url,
+      savedPath: photo.storagePath,
+      width: photo.width,
+      height: photo.height,
+    })),
+  );
   const [photoError, setPhotoError] = useState<string | null>(null);
   const [state, action, pending] = useActionState<SubmitState, FormData>(submitLetter, null);
   const { busy, markBusy } = useInstantBusy(pending);
   const fileRef = useRef<HTMLInputElement>(null);
+  const initialSaved = existingPhotos.map((photo) => photo.storagePath).join("|");
+
+  useEffect(() => {
+    return () => {
+      photos.forEach((photo) => {
+        if (photo.preview.startsWith("blob:")) URL.revokeObjectURL(photo.preview);
+      });
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- unmount only
+  }, []);
 
   async function onFiles(list: FileList | null) {
-    const files = Array.from(list ?? []).slice(0, MAX_PHOTOS);
+    const files = Array.from(list ?? []);
     setPhotoError(null);
     try {
       const next = await Promise.all(
         files.map(async (file) => {
           const photo = await compressPhotoFile(file);
-          return { ...photo, preview: URL.createObjectURL(photo.blob) };
+          return {
+            id: `${photo.name}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+            preview: URL.createObjectURL(photo.blob),
+            blob: photo.blob,
+            name: photo.name,
+            width: photo.width,
+            height: photo.height,
+          } satisfies StagedPhoto;
         }),
       );
-      setPhotos((current) => {
-        current.forEach((photo) => URL.revokeObjectURL(photo.preview));
-        return next;
-      });
+      setPhotos((current) => appendPhotos(current, next, MAX_PHOTOS));
     } catch (error) {
       setPhotoError(error instanceof Error ? error.message : PHOTO_COMPRESS_FAILED);
     }
@@ -67,9 +102,9 @@ export function SubmitForm({
       : state?.ok && status === "submitted"
         ? SUBMIT_SUBMITTED
         : status === "draft"
-          ? "Draft saved"
+          ? SUBMIT_SAVED_DRAFT
           : status === "submitted"
-            ? "Submitted — still editable"
+            ? SUBMIT_SUBMITTED
             : null;
   const toastMessage =
     state?.ok && status === "draft"
@@ -77,12 +112,22 @@ export function SubmitForm({
       : state?.ok && status === "submitted"
         ? SUBMIT_SUBMITTED
         : null;
+  const keptPaths = photos.map((photo) => photo.savedPath).filter(Boolean) as string[];
+  const photosTouched = keptPaths.join("|") !== initialSaved || photos.some((photo) => photo.blob);
 
   if (closed) {
     return (
       <div className="stack">
-        <h1>Your letter</h1>
-        <p>Closed.</p>
+        <h1>{SUBMIT_CLOSED_HEADING}</h1>
+        <p className="muted">This window is closed. You can read the capsule when it is ready.</p>
+        <PendingLink className="backlink" href={`/g/${groupId}`} pendingLabel="Opening…">
+          ← Back to the group
+        </PendingLink>
+        {latestCapsuleHref ? (
+          <PendingLink className="btn btn--primary" href={latestCapsuleHref} pendingLabel="Opening…">
+            {GROUP_PRIMARY_VIEW}
+          </PendingLink>
+        ) : null}
       </div>
     );
   }
@@ -95,7 +140,10 @@ export function SubmitForm({
       action={async (formData) => {
         markBusy();
         formData.set("groupId", groupId);
+        if (photosTouched) formData.set("photos_touched", "1");
+        keptPaths.forEach((path) => formData.append("keep_path", path));
         photos.forEach((photo) => {
+          if (!photo.blob || !photo.name) return;
           const file = new File([photo.blob], photo.name, {
             type: photo.blob.type || "image/jpeg",
           });
@@ -137,8 +185,13 @@ export function SubmitForm({
         <span className="field__label">Photos</span>
         <div className="photos" style={{ marginTop: "0.5rem" }}>
           {photos.map((photo) => (
-            <div className="photo" key={photo.preview}>
-              <img src={photo.preview} alt="" />
+            <div className="photo" key={photo.id}>
+              <img
+                src={photo.preview}
+                alt=""
+                width={photo.width}
+                height={photo.height}
+              />
               <button
                 className="photo__remove"
                 type="button"
@@ -146,8 +199,8 @@ export function SubmitForm({
                 disabled={busy}
                 onClick={() => {
                   setPhotos((current) => {
-                    const next = current.filter((item) => item.preview !== photo.preview);
-                    URL.revokeObjectURL(photo.preview);
+                    const next = current.filter((item) => item.id !== photo.id);
+                    if (photo.preview.startsWith("blob:")) URL.revokeObjectURL(photo.preview);
                     return next;
                   });
                 }}
@@ -161,6 +214,7 @@ export function SubmitForm({
               className="photo photo--add"
               type="button"
               disabled={busy}
+              aria-label="Add photos"
               onClick={() => fileRef.current?.click()}
             >
               Add
@@ -176,10 +230,7 @@ export function SubmitForm({
           disabled={busy}
           onChange={(event) => void onFiles(event.target.files)}
         />
-        <p className="field__hint">
-          Up to {MAX_PHOTOS}. New photos replace the last set
-          {existingPhotoCount > 0 ? ` (${existingPhotoCount} saved)` : ""}.
-        </p>
+        <p className="field__hint">Up to {MAX_PHOTOS}. Add more or remove any you do not want.</p>
       </div>
 
       {photoError ? <p className="err">{photoError}</p> : null}
@@ -191,7 +242,7 @@ export function SubmitForm({
           name="intent"
           value="submit"
           busy={busy}
-          pendingLabel={photos.length > 0 ? "Uploading…" : "Submitting…"}
+          pendingLabel={photos.some((photo) => photo.blob) ? "Uploading…" : "Submitting…"}
         >
           {SUBMIT_AND_SEND}
         </PendingSubmitButton>
@@ -206,7 +257,7 @@ export function SubmitForm({
         </PendingSubmitButton>
         <p className="btn-note" role="status">
           {busy
-            ? photos.length > 0
+            ? photos.some((photo) => photo.blob)
               ? "Working… uploading photos."
               : "Working…"
             : "Save as draft to keep it hidden. After you submit, you can still edit until the window closes."}

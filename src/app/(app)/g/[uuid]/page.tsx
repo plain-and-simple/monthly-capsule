@@ -1,18 +1,23 @@
 import Link from "next/link";
+import { CycleForm } from "@/components/cycle-form";
 import { GroupChrome } from "@/components/group-chrome";
+import { KickMemberForm } from "@/components/kick-member-form";
 import { PendingLink } from "@/components/pending-link";
 import { SaveLoginForm } from "@/components/save-login-form";
+import { latestUnsentCapsule } from "@/lib/compile";
 import {
   GROUP_EARLIER_CAPSULES,
   GROUP_FIRST_CAPSULE_HEADING,
   GROUP_NO_PREVIOUS_CAPSULES,
+  GROUP_PEOPLE_HEADING,
   GROUP_PRIMARY_EDIT,
   GROUP_PRIMARY_SUBMIT,
   GROUP_PRIMARY_VIEW,
 } from "@/lib/copy";
 import { groupDisplayName } from "@/lib/copy";
-import { nextOpenDateLabel, windowClosesPhrase } from "@/lib/group-status";
+import { initials, nextOpenDateLabel, windowClosesPhrase } from "@/lib/group-status";
 import { resolveSubmitWindow } from "@/lib/cycle-store";
+import { ROSTER_SELECT, canForceCycle, canKickMember, toRoster } from "@/lib/manage";
 import {
   capsuleHref,
   capsuleTitle,
@@ -26,7 +31,7 @@ import { requireGroupMember } from "@/lib/session";
 import { parseFlashError } from "@/lib/session-policy";
 import { writtenCount, writtenCountPhrase } from "@/lib/submit";
 import { createAdminClient } from "@/lib/supabase";
-import type { Submission } from "@/lib/types";
+import type { Role, Submission } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -40,11 +45,14 @@ export default async function GroupHomePage({
   const { uuid } = await params;
   const error = parseFlashError((await searchParams).error);
   const { group, member } = await requireGroupMember(uuid);
-  const { open, yearMonth, version, closed } = await resolveSubmitWindow(group);
+  const [{ open, yearMonth, version, closed }, unsent] = await Promise.all([
+    resolveSubmitWindow(group),
+    canForceCycle(member.role) ? latestUnsentCapsule(uuid) : Promise.resolve(null),
+  ]);
   const admin = createAdminClient();
   const name = groupDisplayName(group.name);
 
-  const [{ count }, { data: compiledMonths }] = await Promise.all([
+  const [{ count }, { data: compiledMonths }, { data: rosterRows }] = await Promise.all([
     admin.from("members").select("id", { count: "exact", head: true }).eq("group_id", uuid).is("removed_at", null),
     admin
       .from("months")
@@ -53,6 +61,12 @@ export default async function GroupHomePage({
       .eq("status", "compiled")
       .order("year_month", { ascending: false })
       .order("version", { ascending: false }),
+    admin
+      .from("members")
+      .select(ROSTER_SELECT)
+      .eq("group_id", uuid)
+      .is("removed_at", null)
+      .order("joined_at", { ascending: true }),
   ]);
 
   const total = count ?? 0;
@@ -62,6 +76,10 @@ export default async function GroupHomePage({
   }));
   const latestCapsule = compiled[0];
   const earlier = earlierCapsuleRows(compiled, open);
+  const people = toRoster(
+    (rosterRows ?? []) as Array<{ id: string; preferred_name: string; role: Role }>,
+  );
+  const actorIsOwner = canForceCycle(member.role);
 
   let myStatus: "none" | "draft" | "submitted" = "none";
   let written = 0;
@@ -95,6 +113,9 @@ export default async function GroupHomePage({
       : name;
   const closes = featuredMonth ? windowClosesPhrase(featuredMonth, group.submit_end_day) : "";
   const nextOpenDate = nextOpenDateLabel(group, closed);
+  const nextLabel = open && yearMonth
+    ? capsuleTitle(monthLabel(yearMonth), version ?? 1)
+    : nextOpenDate;
 
   return (
     <main className="main">
@@ -142,14 +163,12 @@ export default async function GroupHomePage({
                       The {capsuleTitle(monthLabel(latestCapsule.yearMonth), latestCapsule.version)}{" "}
                       capsule is ready
                     </h2>
-                    <p className="muted small">Writing opens again on {nextOpenDate}.</p>
                   </>
                 ) : (
                   <>
                     <h2 className="serif" style={{ fontSize: "1.5rem" }}>
                       {GROUP_FIRST_CAPSULE_HEADING}
                     </h2>
-                    <p className="muted small">Writing opens on {nextOpenDate}.</p>
                     <p className="muted tiny">{GROUP_NO_PREVIOUS_CAPSULES}</p>
                   </>
                 )}
@@ -182,22 +201,54 @@ export default async function GroupHomePage({
                   >
                     {GROUP_PRIMARY_VIEW}
                   </PendingLink>
-                  <p className="btn-note">Writing opens again on {nextOpenDate}.</p>
                 </>
               ) : null}
             </div>
           </div>
 
-          {open ? (
-            <div className="panel">
-              <div className="stack stack--tight">
-                <p className="small">
-                  <b>{writtenCountPhrase(written, total)}</b>
-                </p>
-                <p className="muted tiny">Nobody is named. It is just a count.</p>
-              </div>
-            </div>
-          ) : null}
+          <CycleForm
+            groupId={group.id}
+            submitOpen={open}
+            unsent={unsent}
+            thisMonthLabel={nextLabel}
+            writtenPhrase={open ? writtenCountPhrase(written, total) : undefined}
+            nextOpenDate={nextOpenDate}
+            canForce={actorIsOwner}
+          />
+
+          <div className="stack stack--tight">
+            <p className="eyebrow">{GROUP_PEOPLE_HEADING}</p>
+            <ul className="list">
+              {people.map((person) => {
+                const bits = [
+                  person.id === member.id ? "You" : null,
+                  person.role === "owner" ? "started the group" : null,
+                ].filter(Boolean);
+                const showKick =
+                  actorIsOwner &&
+                  canKickMember({
+                    actorRole: member.role,
+                    actorMemberId: member.id,
+                    targetRole: person.role,
+                    targetMemberId: person.id,
+                  });
+                return (
+                  <li key={person.id}>
+                    <div className="listitem listitem--actions">
+                      <span className="avatar">{initials(person.preferred_name)}</span>
+                      <span className="listitem__body">
+                        <span className="listitem__title">{person.preferred_name}</span>
+                        {bits.length > 0 ? (
+                          <span className="listitem__meta">{bits.join(" · ")}</span>
+                        ) : null}
+                      </span>
+                      {showKick ? <KickMemberForm groupId={uuid} memberId={person.id} /> : null}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
 
           {earlier.length > 0 ? (
             <div className="stack stack--tight">

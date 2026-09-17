@@ -2,33 +2,35 @@ import { expect, test } from "@playwright/test";
 import {
   JOIN_AUTH_HINT,
   JOIN_EXISTING_CTA,
-  LANDING_CREATE_CTA,
+  LANDING_HEADLINE,
+  LANDING_MONTH_GOES,
   LANDING_SIGN_IN,
   LANDING_SIGN_UP,
   PREFERRED_NAME_LABEL,
   PRODUCT_NAME,
 } from "../src/lib/copy";
-import { BAD_STUDIO_CODE, STUDIO_CODE_ERROR, openSignIn } from "./helpers/ready";
+import { BAD_STUDIO_CODE, STUDIO_CODE_ERROR } from "./helpers/ready";
 
 test.describe("Ready smoke (no secrets)", () => {
   test("landing / create-account UI loads @smoke", async ({ page }) => {
     await page.goto("/");
     await expect(page).toHaveTitle(new RegExp(PRODUCT_NAME));
-    await expect(
-      page.getByRole("heading", { name: /Friends write once a month/i }),
-    ).toBeVisible();
+    await expect(page.getByRole("heading", { name: LANDING_HEADLINE })).toBeVisible();
+    await expect(page.getByRole("heading", { name: LANDING_SIGN_IN })).toBeVisible();
     await expect(page.getByRole("heading", { name: LANDING_SIGN_UP })).toBeVisible();
     await expect(page.getByLabel(PREFERRED_NAME_LABEL)).toBeVisible();
-    await expect(page.getByLabel("Email")).toBeVisible();
-    await expect(page.getByLabel("Password")).toBeVisible();
+    await expect(page.getByLabel("Email").first()).toBeVisible();
+    await expect(page.getByLabel("Password").first()).toBeVisible();
     await expect(page.getByRole("button", { name: LANDING_SIGN_UP })).toBeVisible();
-    await expect(page.getByRole("link", { name: LANDING_CREATE_CTA })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Create a capsule group" })).toHaveCount(0);
+    await expect(page.getByText(LANDING_MONTH_GOES)).toBeVisible();
   });
 
   test("sign-in UI is reachable from landing @smoke", async ({ page }) => {
-    await openSignIn(page);
-    await expect(page.getByLabel("Email")).toBeVisible();
-    await expect(page.getByLabel("Password")).toBeVisible();
+    await page.goto("/");
+    await expect(page.getByRole("heading", { name: LANDING_SIGN_IN })).toBeVisible();
+    await expect(page.getByLabel("Email").first()).toBeVisible();
+    await expect(page.getByLabel("Password").first()).toBeVisible();
     await expect(page.getByRole("button", { name: LANDING_SIGN_IN, exact: true })).toBeVisible();
     await expect(page.getByRole("link", { name: "Forgot password?" })).toBeVisible();
   });

@@ -6,6 +6,7 @@ import {
   type LetterBlock,
 } from "@/lib/capsule-theme";
 import type { CapsuleArchivePhoto } from "@/lib/capsule-archive";
+import { contributorsLine } from "@/lib/copy";
 import { initials } from "@/lib/group-status";
 
 export type CapsuleViewPhoto = CapsuleArchivePhoto & { url: string | null };
@@ -63,11 +64,7 @@ function CapsuleCover({
 }) {
   const contents =
     names.length > 0 ? (
-      <ul className={`capsule__contents capsule__contents--${theme}`}>
-        {names.map((name) => (
-          <li key={name}>{name}</li>
-        ))}
-      </ul>
+      <p className="capsule__cover-note">{contributorsLine(names)}</p>
     ) : null;
 
   if (theme === "warm") {
@@ -75,7 +72,6 @@ function CapsuleCover({
       <header className="capsule__cover">
         <p className="capsule__ribbon">{title}</p>
         <h1 className="capsule__title">{groupName}</h1>
-        <p className="capsule__cover-note">Letters and photographs, kept together.</p>
         {contents}
       </header>
     );
@@ -111,11 +107,6 @@ function CapsuleCover({
     <header className="capsule__cover">
       <p className="eyebrow">{groupName}</p>
       <h1 className="capsule__title">{title}</h1>
-      {names.length > 0 ? (
-        <p className="muted small">
-          {names.length} {names.length === 1 ? "letter" : "letters"} from {names.join(", ")}
-        </p>
-      ) : null}
       {contents}
     </header>
   );

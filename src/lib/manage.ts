@@ -48,7 +48,7 @@ export function canKickMember(input: {
 }
 
 export function groupChromeLinks(role: Role): GroupChromeLink[] {
-  const links: GroupChromeLink[] = ["people", "invite"];
+  const links: GroupChromeLink[] = ["invite"];
   if (canAccessSettings(role)) {
     links.push("settings");
   }
@@ -70,13 +70,11 @@ export function inviteShareText(shareUrl: string, typedPin: string): string {
   return `${shareUrl}\nPIN ${pin}`;
 }
 
-export function inviteMessage(shareUrl: string, typedPin: string, groupName: string): string {
-  const pin = typedPin.replace(/\D/g, "");
+export function inviteMessage(shareUrl: string, _typedPin: string, groupName: string): string {
   return [
     `Join ${groupName} on Plain and Simple Monthly Capsule.`,
     "",
     `Link: ${shareUrl}`,
-    `Group PIN: ${pin || "——————"}`,
   ].join("\n");
 }
 

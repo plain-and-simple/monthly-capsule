@@ -83,7 +83,7 @@ export function resendSendAccepted(
 }
 
 export function shouldMarkCapsuleEmailed(input: { attempted: number; accepted: number }): boolean {
-  return input.attempted > 0 && input.accepted === input.attempted;
+  return input.attempted > 0 && input.accepted > 0;
 }
 
 export function extractResendFromEmail(value: string): string | null {
@@ -166,7 +166,7 @@ export function formatSkippedNoEmail(input: {
   return `Skipped ${input.skippedNoEmail} with no email.`;
 }
 
-/** Owner Send is success only when Resend accepted every attempted address. */
+/** Owner Send is success once at least one recipient was accepted. */
 export function ownerEmailFailed(result: { markedSent: boolean }): boolean {
   return !result.markedSent;
 }

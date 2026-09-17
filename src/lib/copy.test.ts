@@ -21,11 +21,18 @@ import {
   LANDING_CREATE_LABEL,
   LANDING_CUT_PHRASES,
   LANDING_HAVE_LOGIN,
+  LANDING_HEADLINE,
   LANDING_MANAGE_HEADING,
+  LANDING_MONTH_GOES,
   LANDING_NEED_ACCOUNT,
   LANDING_PROMISE,
   LANDING_SIGN_IN,
   LANDING_SIGN_UP,
+  CONTRIBUTORS_PREFIX,
+  MANAGE_TAG_NOT_OPEN,
+  MANAGE_TAG_READ,
+  MANAGE_TAG_SUBMIT,
+  MANAGE_TAG_SUBMITTED,
   JOIN_AUTH_HINT,
   JOIN_EXISTING_CTA,
   MANAGE_CREATE_LABEL,
@@ -48,6 +55,7 @@ import {
   TOAST_SUCCESS,
   SIGNED_OUT_TOAST,
   UNTITLED_GROUP,
+  contributorsLine,
   createSuccessHero,
   groupDisplayName,
   landingChrome,
@@ -65,7 +73,11 @@ describe("landing copy smoke", () => {
     });
     expect(chrome.productName).toBe("Plain and Simple Monthly Capsule");
     expect(chrome.chromeMark).toBe("PS");
-    expect(chrome.promise).toBe("Friends write once a month. You get one capsule.");
+    expect(chrome.promise).toBe("Friends write. You get one capsule.");
+    expect(LANDING_HEADLINE).toBe("Friends write. You get one capsule.");
+    expect(LANDING_MONTH_GOES).toBe(
+      "The window opens. Everyone writes, add a few photos, and submits. The window closes and the capsule goes out.",
+    );
     expect(chrome.createLabel).toBe("Create");
     expect(chrome.manageHeading).toBe("Manage your capsule");
     expect(chrome.signIn).toBe("Sign in");
@@ -175,6 +187,15 @@ describe("join and manage labels", () => {
     expect(CYCLE_EMAIL_LATER).toBe("Email group");
     expect(CAPSULE_THEME_SECTION).toBe("Capsule theme");
     expect(CAPSULE_THEME_SAVE).toBe("Save theme");
+  });
+
+  it("labels manage-row actions and capsule contributors", () => {
+    expect(MANAGE_TAG_SUBMIT).toBe("Submit capsule");
+    expect(MANAGE_TAG_SUBMITTED).toBe("Capsule already submitted");
+    expect(MANAGE_TAG_READ).toBe("Read latest capsule");
+    expect(MANAGE_TAG_NOT_OPEN).toBe("Next capsule not open");
+    expect(contributorsLine(["Ada", "Sam", "Sam"])).toBe(`${CONTRIBUTORS_PREFIX} Ada, Sam, Sam`);
+    expect(contributorsLine([])).toBe("");
   });
 
   it("never falls back to bare Capsule for a group name", () => {

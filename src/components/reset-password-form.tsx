@@ -7,8 +7,8 @@ import {
   type CompletePasswordResetState,
 } from "@/actions/complete-password-reset";
 import { PendingSubmitButton, useInstantBusy } from "@/components/pending-submit-button";
+import { PasswordInput } from "@/components/auth-fields";
 import {
-  ACCOUNT_PASSWORD_LABEL,
   FORGOT_PASSWORD_LINK,
   RESET_PASSWORD_HEADING,
   RESET_PASSWORD_LEDE,
@@ -29,17 +29,7 @@ export function ResetPasswordForm({ token }: { token: string }) {
         <p className="muted small">{RESET_PASSWORD_LEDE}</p>
       </div>
       <input type="hidden" name="token" value={token} />
-      <label className="field">
-        <span className="field__label">{ACCOUNT_PASSWORD_LABEL}</span>
-        <input
-          className="input"
-          name="password"
-          type="password"
-          required
-          minLength={8}
-          autoComplete="new-password"
-        />
-      </label>
+      <PasswordInput autoComplete="new-password" disabled={busy} />
       {state?.error ? <p className="err">{state.error}</p> : null}
       <PendingSubmitButton
         className="btn btn--primary btn--block btn--lg"

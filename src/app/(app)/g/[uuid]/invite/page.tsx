@@ -2,14 +2,14 @@ import Link from "next/link";
 import { InvitePanel } from "@/components/invite-panel";
 import { groupDisplayName } from "@/lib/copy";
 import { appUrl } from "@/lib/env";
-import { invitePayload } from "@/lib/manage";
+import { canRegeneratePin, invitePayload } from "@/lib/manage";
 import { requireGroupMember } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
 export default async function InvitePage({ params }: { params: Promise<{ uuid: string }> }) {
   const { uuid } = await params;
-  const { group } = await requireGroupMember(uuid);
+  const { group, member } = await requireGroupMember(uuid);
   const { shareUrl } = invitePayload(appUrl(), uuid);
   const name = groupDisplayName(group.name);
 
@@ -20,7 +20,12 @@ export default async function InvitePage({ params }: { params: Promise<{ uuid: s
           <Link href={`/g/${uuid}`} className="backlink">
             ← {name}
           </Link>
-          <InvitePanel shareUrl={shareUrl} groupName={name} />
+          <InvitePanel
+            shareUrl={shareUrl}
+            groupName={name}
+            groupId={group.id}
+            isOwner={canRegeneratePin(member.role)}
+          />
         </div>
       </div>
     </main>

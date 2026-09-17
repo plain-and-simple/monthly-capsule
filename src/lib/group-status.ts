@@ -1,4 +1,11 @@
-import { ROLE_MEMBER_LABEL, ROLE_OWNER_LABEL } from "@/lib/copy";
+import {
+  MANAGE_TAG_NOT_OPEN,
+  MANAGE_TAG_READ,
+  MANAGE_TAG_SUBMIT,
+  MANAGE_TAG_SUBMITTED,
+  ROLE_MEMBER_LABEL,
+  ROLE_OWNER_LABEL,
+} from "@/lib/copy";
 import { openSubmitYearMonth, type CycleGroup } from "@/lib/cycle";
 import { chicagoWeekdayTheDay, monthName, ordinal } from "@/lib/dates";
 import type { Role } from "@/lib/types";
@@ -18,14 +25,31 @@ export const GROUP_STATUS_OPEN = "Open";
 export const GROUP_STATUS_READY = "Capsule ready";
 export const GROUP_STATUS_RESTING = "Resting";
 
-export function membershipRoleLabel(role: Role): string {
-  return role === "owner" ? ROLE_OWNER_LABEL : ROLE_MEMBER_LABEL;
-}
-
 export type ManageGroupStatus =
   | typeof GROUP_STATUS_OPEN
   | typeof GROUP_STATUS_READY
   | typeof GROUP_STATUS_RESTING;
+
+export type ManageActionTag =
+  | typeof MANAGE_TAG_SUBMIT
+  | typeof MANAGE_TAG_SUBMITTED
+  | typeof MANAGE_TAG_READ
+  | typeof MANAGE_TAG_NOT_OPEN;
+
+export function manageGroupActionTag(input: {
+  submitOpen: boolean;
+  hasCompiledCapsule: boolean;
+  myStatus: "none" | "draft" | "submitted";
+}): ManageActionTag {
+  if (input.submitOpen) {
+    return input.myStatus === "submitted" ? MANAGE_TAG_SUBMITTED : MANAGE_TAG_SUBMIT;
+  }
+  return input.hasCompiledCapsule ? MANAGE_TAG_READ : MANAGE_TAG_NOT_OPEN;
+}
+
+export function membershipRoleLabel(role: Role): string {
+  return role === "owner" ? ROLE_OWNER_LABEL : ROLE_MEMBER_LABEL;
+}
 
 export function manageGroupStatus(input: {
   submitOpen: boolean;

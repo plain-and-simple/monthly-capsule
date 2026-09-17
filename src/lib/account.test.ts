@@ -55,11 +55,11 @@ describe("GWT A — Manage is email + password, no SMS", () => {
     });
   });
 
-  it("0 groups → empty; 1 → group home; many → pick list", () => {
+  it("0 groups → list; 1 → list; many → list", () => {
     expect(manageDestination([])).toEqual({ kind: "empty" });
     expect(managePath({ kind: "empty" })).toBe("/manage");
     expect(manageDestination(["g1"])).toEqual({ kind: "one", groupId: "g1" });
-    expect(managePath({ kind: "one", groupId: "g1" })).toBe("/g/g1");
+    expect(managePath({ kind: "one", groupId: "g1" })).toBe("/manage");
     expect(manageDestination(["g1", "g2"])).toEqual({ kind: "many" });
     expect(managePath({ kind: "many" })).toBe("/manage");
   });

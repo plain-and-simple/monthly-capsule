@@ -33,7 +33,7 @@ export function SettingsForm({ group }: { group: Group }) {
       <hr className="rule" />
 
       <section className="stack">
-        <h2>Cycle</h2>
+        <h2>Schedule</h2>
         <form
           action={scheduleAction}
           className="stack"

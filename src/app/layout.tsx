@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Cormorant_Garamond, Fraunces, Geist, Newsreader } from "next/font/google";
+import { Geist, Newsreader } from "next/font/google";
 import "./globals.css";
 
 const geist = Geist({
@@ -10,17 +10,6 @@ const geist = Geist({
 const newsreader = Newsreader({
   subsets: ["latin"],
   variable: "--font-newsreader",
-});
-
-const fraunces = Fraunces({
-  subsets: ["latin"],
-  variable: "--font-fraunces",
-});
-
-const cormorant = Cormorant_Garamond({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-  variable: "--font-cormorant",
 });
 
 export const metadata: Metadata = {
@@ -34,7 +23,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body className={`${geist.variable} ${newsreader.variable} ${fraunces.variable} ${cormorant.variable} font-sans antialiased`}>
+      <body className={`${geist.variable} ${newsreader.variable} font-sans antialiased`}>
         {children}
       </body>
     </html>

@@ -5,6 +5,8 @@ import { membershipHasAccount } from "@/lib/account";
 import { groupDisplayName } from "@/lib/copy";
 import { windowClosesPhrase } from "@/lib/group-status";
 import { resolveSubmitWindow } from "@/lib/cycle-store";
+import { capsuleHref, normalizeMonthVersion } from "@/lib/month-version";
+import { signedPhotoUrls } from "@/lib/photos";
 import { monthLabel } from "@/lib/schedule";
 import { requireGroupMember } from "@/lib/session";
 import { parseFlashError } from "@/lib/session-policy";
@@ -42,7 +44,7 @@ export default async function SubmitPage({
       : { data: null };
 
   let initialBody = "";
-  let existingPhotoCount = 0;
+  let existingPhotos: Array<{ url: string; storagePath: string; width: number; height: number }> = [];
   let initialStatus: SubmitStatus | null = null;
 
   if (month) {
@@ -55,13 +57,40 @@ export default async function SubmitPage({
     if (submission) {
       initialBody = submission.body ?? "";
       initialStatus = ((submission.status as SubmitStatus | null) ?? "submitted") as SubmitStatus;
-      const { count } = await admin
+      const { data: photoRows } = await admin
         .from("photos")
-        .select("id", { count: "exact", head: true })
-        .eq("submission_id", submission.id);
-      existingPhotoCount = count ?? 0;
+        .select("storage_path, width, height, sort_order")
+        .eq("submission_id", submission.id)
+        .order("sort_order", { ascending: true });
+      const urls = await signedPhotoUrls((photoRows ?? []).map((row) => row.storage_path as string));
+      existingPhotos = (photoRows ?? [])
+        .map((row) => {
+          const url = urls.get(row.storage_path as string);
+          if (!url) return null;
+          return {
+            url,
+            storagePath: row.storage_path as string,
+            width: row.width as number,
+            height: row.height as number,
+          };
+        })
+        .filter((row): row is NonNullable<typeof row> => row !== null);
     }
   }
+
+  const { data: latestCompiled } = await admin
+    .from("months")
+    .select("year_month, version")
+    .eq("group_id", uuid)
+    .eq("status", "compiled")
+    .order("year_month", { ascending: false })
+    .order("version", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const latestCapsuleHref = latestCompiled
+    ? capsuleHref(uuid, latestCompiled.year_month as string, normalizeMonthVersion(latestCompiled.version))
+    : null;
 
   const title = yearMonth ? `Your ${monthLabel(yearMonth).replace(/ \d{4}$/, "")} letter` : "Your letter";
   const closes = yearMonth ? windowClosesPhrase(yearMonth, group.submit_end_day) : "the window closes";
@@ -80,10 +109,11 @@ export default async function SubmitPage({
               groupId={uuid}
               closed={!open}
               initialBody={initialBody}
-              existingPhotoCount={existingPhotoCount}
+              existingPhotos={existingPhotos}
               initialStatus={initialStatus}
               title={title}
               closesPhrase={closes}
+              latestCapsuleHref={latestCapsuleHref}
             />
           )}
         </div>

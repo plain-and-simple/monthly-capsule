@@ -61,10 +61,7 @@ export function manageDestination(groupIds: string[]): ManageDestination {
   return { kind: "many" };
 }
 
-export function managePath(destination: ManageDestination): string {
-  if (destination.kind === "one") {
-    return `/g/${destination.groupId}`;
-  }
+export function managePath(_destination: ManageDestination): string {
   return "/manage";
 }
 

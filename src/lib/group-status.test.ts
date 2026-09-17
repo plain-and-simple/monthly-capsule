@@ -5,6 +5,7 @@ import {
   GROUP_STATUS_RESTING,
   decorateManagedGroup,
   initials,
+  manageGroupActionTag,
   manageGroupStatus,
   membershipRoleLabel,
   nextOpenDateLabel,
@@ -22,6 +23,24 @@ const group = {
 };
 
 describe("manage group status", () => {
+  it("labels manage-row action tags from window + submission", () => {
+    expect(
+      manageGroupActionTag({ submitOpen: true, hasCompiledCapsule: false, myStatus: "none" }),
+    ).toBe("Submit capsule");
+    expect(
+      manageGroupActionTag({ submitOpen: true, hasCompiledCapsule: true, myStatus: "draft" }),
+    ).toBe("Submit capsule");
+    expect(
+      manageGroupActionTag({ submitOpen: true, hasCompiledCapsule: true, myStatus: "submitted" }),
+    ).toBe("Capsule already submitted");
+    expect(
+      manageGroupActionTag({ submitOpen: false, hasCompiledCapsule: true, myStatus: "none" }),
+    ).toBe("Read latest capsule");
+    expect(
+      manageGroupActionTag({ submitOpen: false, hasCompiledCapsule: false, myStatus: "none" }),
+    ).toBe("Next capsule not open");
+  });
+
   it("labels Open / Capsule ready / Resting", () => {
     expect(
       manageGroupStatus({

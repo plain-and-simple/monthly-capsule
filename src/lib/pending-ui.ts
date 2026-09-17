@@ -1,4 +1,4 @@
-/** Client hard timeout: primary buttons must leave pending by this mark. */
+/** Hung native POST / navigation fallback. Server actions clear busy when pending drops. */
 export const CLIENT_PENDING_GUARD_MS = 12_000;
 
 export function pendingTimedOut(
@@ -19,9 +19,9 @@ export function pendingGuardRemainingMs(
 }
 
 /**
- * HTML `disabled` on the submit control cancels the in-flight POST / action
- * (React 19). Pending UI must use aria-busy only.
+ * Disable the submit control once the request is in flight.
+ * Do not disable on the initiating click — that cancels the native POST.
  */
-export function submitBusyDisablesControl(): boolean {
-  return false;
+export function submitBusyDisablesControl(inFlight: boolean): boolean {
+  return inFlight;
 }

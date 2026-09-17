@@ -1,19 +1,28 @@
 "use client";
 
-import { useState } from "react";
 import { CopyButton } from "@/components/copy-button";
-import { INVITE_HELPER, JOIN_PIN_LABEL } from "@/lib/copy";
+import { RegenPinForm } from "@/components/regen-pin-form";
+import { INVITE_HELPER } from "@/lib/copy";
 import { inviteMessage } from "@/lib/manage";
 
-export function InvitePanel({ shareUrl, groupName }: { shareUrl: string; groupName: string }) {
-  const [pin, setPin] = useState("");
-  const message = inviteMessage(shareUrl, pin, groupName);
+export function InvitePanel({
+  shareUrl,
+  groupName,
+  groupId,
+  isOwner,
+}: {
+  shareUrl: string;
+  groupName: string;
+  groupId: string;
+  isOwner: boolean;
+}) {
+  const message = inviteMessage(shareUrl, "", groupName);
 
   return (
     <div className="stack stack--loose">
       <div className="stack stack--tight">
         <h1>Invite someone to {groupName}</h1>
-        <p className="muted small">They need both the link and the PIN.</p>
+        <p className="muted small">They need both the link and the Group PIN.</p>
       </div>
 
       <div className="card">
@@ -26,28 +35,12 @@ export function InvitePanel({ shareUrl, groupName }: { shareUrl: string; groupNa
             </div>
           </div>
 
-          <label className="field">
-            <span className="field__label">{JOIN_PIN_LABEL}</span>
-            <input
-              className="input input--pin"
-              inputMode="numeric"
-              autoComplete="off"
-              maxLength={6}
-              value={pin}
-              placeholder="XXXXXX"
-              spellCheck={false}
-              onChange={(event) => setPin(event.target.value.replace(/\D/g, "").slice(0, 6))}
-            />
-            <span className="field__hint">
-              Type the PIN you already know. We never show it back to you — not even here.
-            </span>
-          </label>
-
           <div className="stack stack--tight">
             <span className="field__label">Message to send</span>
             <textarea
               className="textarea"
               readOnly
+              aria-label="Message to send"
               value={message}
               style={{ minHeight: "7rem", fontFamily: "var(--font-sans)", fontSize: "0.92rem" }}
             />
@@ -56,13 +49,16 @@ export function InvitePanel({ shareUrl, groupName }: { shareUrl: string; groupNa
         </div>
       </div>
 
-      <p className="tiny muted">{INVITE_HELPER}</p>
-      <div className="panel">
-        <p className="small muted">
-          Forgotten the PIN? Anyone in the group knows it. Only the owner can make a new one, in
-          Settings.
-        </p>
-      </div>
+      {isOwner ? (
+        <div className="card">
+          <RegenPinForm groupId={groupId} />
+          <p className="tiny muted" style={{ marginTop: "0.75rem" }}>
+            Anyone you already invited needs the new PIN.
+          </p>
+        </div>
+      ) : (
+        <p className="tiny muted">{INVITE_HELPER}</p>
+      )}
     </div>
   );
 }

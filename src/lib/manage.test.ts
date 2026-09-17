@@ -12,6 +12,7 @@ import {
   canMintRegenPin,
   canRegeneratePin,
   groupChromeLinks,
+  inviteMessage,
   invitePayload,
   inviteShareText,
   kickConfirmAccepted,
@@ -30,8 +31,8 @@ const groupId = "550e8400-e29b-41d4-a716-446655440000";
 const otherGroup = "11111111-1111-4111-8111-111111111111";
 
 describe("manage UI scenarios 1–20", () => {
-  it("1. member chrome includes People and Invite", () => {
-    expect(groupChromeLinks("member")).toEqual(["people", "invite"]);
+  it("1. member chrome includes Invite", () => {
+    expect(groupChromeLinks("member")).toEqual(["invite"]);
   });
 
   it("2. member chrome hides Settings", () => {
@@ -39,8 +40,9 @@ describe("manage UI scenarios 1–20", () => {
     expect(canAccessSettings("member")).toBe(false);
   });
 
-  it("3. owner chrome includes People, Invite, and Settings", () => {
-    expect(groupChromeLinks("owner")).toEqual(["people", "invite", "settings"]);
+  it("3. owner chrome includes Invite and Settings, not People", () => {
+    expect(groupChromeLinks("owner")).toEqual(["invite", "settings"]);
+    expect(groupChromeLinks("owner")).not.toContain("people");
   });
 
   it("4. any member can open People", () => {
@@ -127,6 +129,14 @@ describe("manage UI scenarios 1–20", () => {
       shareUrl: `https://capsule.plainandsimple.app/join/${groupId}`,
     });
     expect(Object.keys(payload)).toEqual(["shareUrl"]);
+    expect(inviteMessage(payload.shareUrl, "123456", "Sunday letters")).toBe(
+      [
+        "Join Sunday letters on Plain and Simple Monthly Capsule.",
+        "",
+        `Link: ${payload.shareUrl}`,
+      ].join("\n"),
+    );
+    expect(inviteMessage(payload.shareUrl, "123456", "Sunday letters")).not.toContain("123456");
   });
 
   it("14. invite payload never includes a PIN", () => {

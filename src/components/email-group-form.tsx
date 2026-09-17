@@ -8,9 +8,7 @@ import { CYCLE_EMAIL_LATER, CYCLE_SEND_AGAIN, CYCLE_SEND_AGAIN_HINT } from "@/li
 import {
   CONFIRM_RESEND_VALUE,
   CYCLE_ALREADY_SENT,
-  CYCLE_EMAIL_TIMEOUT,
 } from "@/lib/cycle";
-import { EMAIL_PENDING_GUARD_MS } from "@/lib/email-policy";
 
 export function EmailGroupForm({
   groupId,
@@ -60,11 +58,11 @@ export function OwnerEmailSubmit({
   label: string;
   buttonClass: string;
 }) {
-  const { busy, markBusy, stuck } = useInstantBusy(pending, EMAIL_PENDING_GUARD_MS);
+  const { busy, markBusy } = useInstantBusy(pending);
   const [confirming, setConfirming] = useState(false);
   const needsConfirm = alreadySent || state?.error === CYCLE_ALREADY_SENT;
   const showConfirmGate = needsConfirm && !confirming && !state?.ok;
-  const error = state?.error || (stuck ? CYCLE_EMAIL_TIMEOUT : undefined);
+  const error = state?.error;
 
   if (showConfirmGate) {
     return (
@@ -95,7 +93,6 @@ export function OwnerEmailSubmit({
       <PendingSubmitButton
         className={buttonClass}
         busy={busy}
-        ignorePending={stuck}
         pendingLabel="Sending…"
       >
         {needsConfirm ? CYCLE_SEND_AGAIN : label}

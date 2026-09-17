@@ -18,6 +18,10 @@ export function isPhotoUpload(value: unknown): value is PhotoUpload {
   );
 }
 
+export function appendPhotos<T>(current: readonly T[], incoming: readonly T[], max = MAX_PHOTOS): T[] {
+  return [...current, ...incoming].slice(0, max);
+}
+
 export function collectPhotoFiles(formData: FormData): PhotoUpload[] {
   const files: PhotoUpload[] = [];
   for (const value of formData.getAll("photos")) {

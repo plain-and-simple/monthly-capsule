@@ -7,6 +7,7 @@ import {
   PEOPLE_REMOVE,
   PEOPLE_REMOVE_CONFIRM,
   PEOPLE_REMOVE_CONFIRM_ACTION,
+  PEOPLE_REMOVED,
 } from "@/lib/copy";
 import { KICK_CONFIRM_VALUE } from "@/lib/manage";
 
@@ -26,15 +27,20 @@ export function KickMemberForm({
   }, [state]);
 
   if (state?.ok) {
-    return null;
+    return <span className="tiny muted">{PEOPLE_REMOVED}</span>;
   }
 
   if (!confirming) {
     return (
       <span className="listitem__end">
-        {state && !state.ok ? <p className="err">{state.error}</p> : null}
-        <button className="btn btn--quiet" type="button" onClick={() => setConfirming(true)}>
-          {PEOPLE_REMOVE}
+        {state && !state.ok ? <span className="err">{state.error}</span> : null}
+        <button
+          className="btn btn--quiet"
+          type="button"
+          aria-label={PEOPLE_REMOVE}
+          onClick={() => setConfirming(true)}
+        >
+          ×
         </button>
       </span>
     );

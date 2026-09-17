@@ -13,6 +13,7 @@ describe("submit model A UI", () => {
     expect(source).toContain('value="draft"');
     expect(source).toContain('value="submit"');
     expect(source).toContain("compressPhotoFile");
+    expect(source).toContain("appendPhotos");
     expect(source).not.toContain("0.85");
   });
 
@@ -42,6 +43,16 @@ describe("brand chrome locks", () => {
     const layout = readFileSync(resolve(here, "../app/layout.tsx"), "utf8");
     expect(layout).toContain('default: "Plain and Simple Monthly Capsule"');
     expect(layout).toContain('template: "%s · Plain and Simple Monthly Capsule"');
+    expect(layout).toContain("Geist");
+    expect(layout).toContain("Newsreader");
+    expect(layout).not.toContain("Fraunces");
+    expect(layout).not.toContain("Cormorant");
+    const capsuleLayout = readFileSync(
+      resolve(here, "../app/(app)/g/[uuid]/capsule/layout.tsx"),
+      "utf8",
+    );
+    expect(capsuleLayout).toContain("Fraunces");
+    expect(capsuleLayout).toContain("Cormorant_Garamond");
   });
 
   it("favicon and apple-touch are icon-only assets", () => {
@@ -62,12 +73,13 @@ describe("brand chrome locks", () => {
 });
 
 describe("privacy and chrome locks", () => {
-  it("People does not name who has not written", () => {
+  it("People lives on group home; old /people redirects", () => {
     const source = readFileSync(resolve(here, "../app/(app)/g/[uuid]/people/page.tsx"), "utf8");
+    expect(source).toContain('redirect(`/g/${uuid}`)');
     expect(source).not.toContain("Not yet");
-    expect(source).not.toContain("Written");
-    expect(source).toContain("KickMemberForm");
-    expect(source).toContain("canKickMember");
+    const home = readFileSync(resolve(here, "../app/(app)/g/[uuid]/page.tsx"), "utf8");
+    expect(home).toContain("KickMemberForm");
+    expect(home).toContain("canKickMember");
   });
 
   it("group home signs out instead of an ambiguous Leave", () => {
@@ -108,6 +120,8 @@ describe("privacy and chrome locks", () => {
     expect(source).toContain("JOIN_EXISTING_CTA");
     expect(source).toContain('href="/join"');
     expect(source).toContain("decideOpenGroupUi");
+    expect(source).toContain("manageGroupActionTag");
+    expect(source).not.toContain("Pick one");
     expect(source).not.toContain("@/actions/open-group");
   });
 });
@@ -131,6 +145,7 @@ describe("account-before-join IA", () => {
     const home = readFileSync(resolve(here, "../app/page.tsx"), "utf8");
     expect(home).toContain("AuthPanel");
     expect(home).toContain("parseReturnPath");
+    expect(home).not.toContain("LANDING_CREATE_CTA");
   });
 
   it("blocks submit without a saved account and lists skipped recipients", () => {

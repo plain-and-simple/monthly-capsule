@@ -83,11 +83,15 @@ describe("owner kick", () => {
 
   it("People shows Remove only for the owner, with confirm", () => {
     const people = source("../app/(app)/g/[uuid]/people/page.tsx");
-    expect(people).toContain("KickMemberForm");
-    expect(people).toContain("canKickMember");
-    expect(people).toContain("actorIsOwner");
-    expect(people).toContain('.is("removed_at", null)');
-    expect(people).not.toContain("email");
+    expect(people).toContain('redirect(`/g/${uuid}`)');
+    expect(people).not.toContain("KickMemberForm");
+
+    const home = source("../app/(app)/g/[uuid]/page.tsx");
+    expect(home).toContain("KickMemberForm");
+    expect(home).toContain("canKickMember");
+    expect(home).toContain("actorIsOwner");
+    expect(home).toContain('.is("removed_at", null)');
+    expect(home).not.toContain("leaveGroup");
 
     const form = source("../components/kick-member-form.tsx");
     expect(form).toContain("PEOPLE_REMOVE");

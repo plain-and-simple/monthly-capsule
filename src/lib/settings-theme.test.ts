@@ -15,6 +15,7 @@ describe("owner theme picker persistence", () => {
     const page = source("../app/(app)/g/[uuid]/settings/page.tsx");
     expect(page).toContain("requireOwner");
     expect(page).toContain("SettingsForm");
+    expect(page).not.toContain("CycleForm");
     const chrome = source("./manage.ts");
     expect(chrome).toContain("canAccessSettings");
     expect(source("../components/group-chrome.tsx")).toContain("canAccessSettings(role)");
@@ -53,6 +54,7 @@ describe("owner theme picker persistence", () => {
     const compile = source("./compile.ts");
     expect(compile).toContain("parseCapsuleTheme(group.capsule_theme)");
     expect(compile).toContain("theme:");
+    expect(compile).toMatch(/\.in\(\s*"submission_id"/);
     const view = source("../app/(app)/g/[uuid]/capsule/view.tsx");
     expect(view).toContain("archive.theme");
     expect(view).toContain("CapsuleDocument");

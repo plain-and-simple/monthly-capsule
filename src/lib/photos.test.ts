@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { MAX_PHOTO_BYTES } from "./constants";
-import { collectPhotoFiles, isPhotoUpload, photoContentType, validatePhotoList } from "./photo-files";
+import { collectPhotoFiles, appendPhotos, isPhotoUpload, photoContentType, validatePhotoList } from "./photo-files";
 
 describe("submit photo uploads", () => {
   it("treats a Blob with size as a photo even when it is not a File", () => {
@@ -39,5 +39,10 @@ describe("submit photo uploads", () => {
   it("respects the max photo count", () => {
     const files = Array.from({ length: 7 }, () => new Blob([new Uint8Array([1])], { type: "image/jpeg" }));
     expect(validatePhotoList(files)).toBe("Max 6 photos.");
+  });
+
+  it("appends photos up to the max instead of replacing", () => {
+    expect(appendPhotos([1, 2], [3, 4], 6)).toEqual([1, 2, 3, 4]);
+    expect(appendPhotos([1, 2, 3, 4, 5], [6, 7], 6)).toEqual([1, 2, 3, 4, 5, 6]);
   });
 });

@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { EmailInput, PasswordInput } from "@/components/auth-fields";
 import { PendingSubmitButton, useInstantBusy } from "@/components/pending-submit-button";
-import { ACCOUNT_PASSWORD_LABEL, FORGOT_PASSWORD_LINK, LANDING_SIGN_IN } from "@/lib/copy";
+import { FORGOT_PASSWORD_LINK, LANDING_SIGN_IN } from "@/lib/copy";
 import { LOGIN_PATH } from "@/lib/session-policy";
 
 export function ManageForm({
@@ -28,21 +29,8 @@ export function ManageForm({
       <input type="hidden" name="return" value={returnTo} />
       {next ? <input type="hidden" name="next" value={next} /> : null}
       <div>
-        <label className="field">
-          <span className="field__label">Email</span>
-          <input className="input" name="email" type="email" required autoComplete="email" placeholder="you@example.com" />
-        </label>
-        <label className="field">
-          <span className="field__label">{ACCOUNT_PASSWORD_LABEL}</span>
-          <input
-            className="input"
-            name="password"
-            type="password"
-            required
-            minLength={8}
-            autoComplete="current-password"
-          />
-        </label>
+        <EmailInput disabled={busy} />
+        <PasswordInput autoComplete="current-password" disabled={busy} />
       </div>
       <p className="small">
         <Link href="/forgot">{FORGOT_PASSWORD_LINK}</Link>

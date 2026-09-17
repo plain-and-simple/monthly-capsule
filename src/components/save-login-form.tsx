@@ -1,5 +1,6 @@
 "use client";
 
+import { EmailInput, PasswordInput } from "@/components/auth-fields";
 import { PendingSubmitButton, useInstantBusy } from "@/components/pending-submit-button";
 import { SAVE_LOGIN_REQUIRED_HEADING, SAVE_LOGIN_REQUIRED_HINT } from "@/lib/copy";
 import { SAVE_LOGIN_PATH } from "@/lib/session-policy";
@@ -30,21 +31,8 @@ export function SaveLoginForm({
       <input type="hidden" name="groupId" value={groupId} />
       <input type="hidden" name="return" value={next ?? `/g/${groupId}`} />
       {next ? <input type="hidden" name="next" value={next} /> : null}
-      <label className="field">
-        <span className="field__label">Email</span>
-        <input className="input" name="email" type="email" required autoComplete="email" />
-      </label>
-      <label className="field">
-        <span className="field__label">Password</span>
-        <input
-          className="input"
-          name="password"
-          type="password"
-          required
-          minLength={8}
-          autoComplete="new-password"
-        />
-      </label>
+      <EmailInput disabled={busy} />
+      <PasswordInput autoComplete="current-password" disabled={busy} />
       {error ? <p className="err">{error}</p> : null}
       <PendingSubmitButton className="btn btn--secondary" busy={busy} pendingLabel="Saving…">
         Save login

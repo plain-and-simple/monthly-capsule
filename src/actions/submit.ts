@@ -52,6 +52,15 @@ export async function submitLetter(
       return { error: "Submit is closed." };
     }
 
+    const keepPaths = formData
+      .getAll("keep_path")
+      .map((value) => String(value))
+      .filter(Boolean);
+    const photosTouched = String(formData.get("photos_touched") ?? "") === "1";
+    if (keepPaths.length + files.length > MAX_PHOTOS) {
+      return { error: `Max ${MAX_PHOTOS} photos.` };
+    }
+
     const photoError = validatePhotoList(files);
     if (photoError) {
       return { error: photoError };
@@ -95,9 +104,9 @@ export async function submitLetter(
       submissionId = created.id;
     }
 
-    if (files.length > 0) {
+    if (files.length > 0 || photosTouched) {
       const compressed = [];
-      for (const file of files.slice(0, MAX_PHOTOS)) {
+      for (const file of files.slice(0, MAX_PHOTOS - keepPaths.length)) {
         try {
           compressed.push(await compressPhotoForStorage(Buffer.from(await file.arrayBuffer())));
         } catch (error) {
@@ -112,10 +121,17 @@ export async function submitLetter(
         .select("id, storage_path")
         .eq("submission_id", submissionId);
 
-      const oldPaths = (oldPhotos ?? []).map((photo) => photo.storage_path as string);
-      await deleteStoredPhotos(oldPaths);
-      if (oldPhotos && oldPhotos.length > 0) {
-        await admin.from("photos").delete().eq("submission_id", submissionId);
+      const kept = (oldPhotos ?? []).filter((photo) => keepPaths.includes(photo.storage_path as string));
+      const dropped = (oldPhotos ?? []).filter((photo) => !keepPaths.includes(photo.storage_path as string));
+      await deleteStoredPhotos(dropped.map((photo) => photo.storage_path as string));
+      if (dropped.length > 0) {
+        await admin
+          .from("photos")
+          .delete()
+          .in(
+            "id",
+            dropped.map((photo) => photo.id as string),
+          );
       }
 
       const rows: {
@@ -130,7 +146,8 @@ export async function submitLetter(
       for (let i = 0; i < compressed.length; i += 1) {
         const photo = compressed[i]!;
         const ext = storedPhotoExtension(photo.contentType);
-        const storagePath = `${groupId}/${month.id}/${submissionId}/${i}.${ext}`;
+        const sortOrder = kept.length + i;
+        const storagePath = `${groupId}/${month.id}/${submissionId}/${sortOrder}.${ext}`;
 
         const { error: uploadError } = await admin.storage.from(PHOTO_BUCKET).upload(storagePath, photo.buffer, {
           contentType: photo.contentType,
@@ -146,13 +163,15 @@ export async function submitLetter(
           width: photo.width,
           height: photo.height,
           bytes: photo.bytes,
-          sort_order: i,
+          sort_order: sortOrder,
         });
       }
 
-      const { error: photoInsertError } = await admin.from("photos").insert(rows);
-      if (photoInsertError) {
-        return { error: "Could not save photos." };
+      if (rows.length > 0) {
+        const { error: photoInsertError } = await admin.from("photos").insert(rows);
+        if (photoInsertError) {
+          return { error: "Could not save photos." };
+        }
       }
     }
 

@@ -1,5 +1,5 @@
 import "server-only";
-import { closedYearMonths, listGroupMonthRows, toCycleMonthRows } from "@/lib/compile";
+import { closedYearMonthsFromRows, listGroupMonthRows, toCycleMonthRows } from "@/lib/compile";
 import { openSubmitYearMonth } from "@/lib/cycle";
 import { DEFAULT_MONTH_VERSION, openEdition, planForceOpen } from "@/lib/month-version";
 import type { Group } from "@/lib/types";
@@ -7,7 +7,7 @@ import type { Group } from "@/lib/types";
 export async function resolveSubmitWindow(group: Group, now: Date = new Date()) {
   const months = await listGroupMonthRows(group.id);
   const rows = toCycleMonthRows(months);
-  const closed = await closedYearMonths(group.id);
+  const closed = closedYearMonthsFromRows(months);
   const yearMonth = openSubmitYearMonth(group, closed, now);
   if (!yearMonth) {
     return { open: false, yearMonth: null, version: null as number | null, closed, rows };

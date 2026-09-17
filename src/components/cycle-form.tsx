@@ -17,8 +17,8 @@ import {
   CYCLE_EMAIL_LATER,
   CYCLE_NOT_NOW,
   CYCLE_OPEN_EARLY,
-  CYCLE_SECTION,
   CYCLE_SEND,
+  GROUP_NEXT_CAPSULE,
 } from "@/lib/copy";
 import { CYCLE_EMAIL_PROMPT, CYCLE_OPENED } from "@/lib/cycle";
 import { FORCE_CLOSE_CONFIRM_VALUE } from "@/lib/manage";
@@ -31,12 +31,16 @@ export function CycleForm({
   unsent,
   thisMonthLabel,
   writtenPhrase,
+  nextOpenDate,
+  canForce = true,
 }: {
   groupId: string;
   submitOpen: boolean;
   unsent: { yearMonth: string; version: number } | null;
   thisMonthLabel?: string;
   writtenPhrase?: string;
+  nextOpenDate?: string;
+  canForce?: boolean;
 }) {
   const [openState, openAction, openPending] = useActionState<ForceOpenState, FormData>(
     forceOpenSubmit,
@@ -65,10 +69,10 @@ export function CycleForm({
   const showEmailPrompt = Boolean(askYearMonth && !askedAndDone);
   const later = showEmailPrompt ? null : unsent;
 
-  if (showEmailPrompt && askYearMonth) {
-    return (
-      <div className="scrim">
-        <div className="dialog">
+  return (
+    <div className="stack stack--loose">
+      {canForce && showEmailPrompt && askYearMonth ? (
+        <div className="card">
           <div className="stack">
             <div className="stack stack--tight">
               <p className="eyebrow">Made just now</p>
@@ -102,16 +106,12 @@ export function CycleForm({
                 {CYCLE_NOT_NOW}
               </PendingSubmitButton>
             </form>
-            <p className="btn-note">If not now, Settings will keep offering it until you do.</p>
+            <p className="btn-note">If not now, this page will keep offering it until you do.</p>
           </div>
         </div>
-      </div>
-    );
-  }
+      ) : null}
 
-  return (
-    <div className="stack stack--loose">
-      {later ? (
+      {canForce && later ? (
         <div className="card">
           <div className="stack">
             <div className="stack stack--tight">
@@ -139,59 +139,57 @@ export function CycleForm({
       ) : null}
 
       <section className="stack">
-        <h2>This month</h2>
+        <h2>{GROUP_NEXT_CAPSULE}</h2>
         <div className="panel">
           <div className="stack">
             <p className="small">
               {thisMonthLabel ? <span>{thisMonthLabel} is </span> : null}
               <b>{submitOpen ? "open" : "closed"}</b>
               {writtenPhrase ? `. ${writtenPhrase}.` : "."}
+              {!submitOpen && nextOpenDate ? ` Writing opens ${nextOpenDate}.` : ""}
             </p>
             <div className="row">
-              {confirming && !closeState?.ok ? (
-                <form
-                  action={closeAction}
-                  className="stack"
-                  onSubmit={markCloseBusy}
-                  aria-busy={closeBusy || undefined}
-                >
-                  <p className="muted small">Closes submit and makes the capsule.</p>
-                  <input type="hidden" name="groupId" value={groupId} />
-                  <input type="hidden" name="confirm" value={FORCE_CLOSE_CONFIRM_VALUE} />
-                  {closeState?.error ? <p className="err">{closeState.error}</p> : null}
-                  <div className="row">
-                    <button
-                      className="btn btn--secondary"
-                      type="button"
-                      disabled={closeBusy}
-                      onClick={() => setConfirming(false)}
-                    >
-                      Cancel
-                    </button>
-                    <PendingSubmitButton
-                      className="btn btn--danger"
-                      busy={closeBusy}
-                      pendingLabel="Working…"
-                    >
-                      {CYCLE_CLOSE_COMPILE}
-                    </PendingSubmitButton>
-                  </div>
-                  {closeBusy ? (
-                    <p className="btn-note" role="status">
-                      Working… making the capsule.
-                    </p>
-                  ) : null}
-                </form>
-              ) : (
-                <button className="btn btn--secondary" type="button" onClick={() => setConfirming(true)}>
-                  {CYCLE_CLOSE_COMPILE}
-                </button>
-              )}
-              {submitOpen ? (
-                <span className="btn btn--quiet" aria-disabled="true">
-                  {CYCLE_OPEN_EARLY}
-                </span>
-              ) : (
+              {canForce && submitOpen ? (
+                confirming && !closeState?.ok ? (
+                  <form
+                    action={closeAction}
+                    className="stack"
+                    onSubmit={markCloseBusy}
+                    aria-busy={closeBusy || undefined}
+                  >
+                    <p className="muted small">Closes submit and makes the capsule.</p>
+                    <input type="hidden" name="groupId" value={groupId} />
+                    <input type="hidden" name="confirm" value={FORCE_CLOSE_CONFIRM_VALUE} />
+                    {closeState?.error ? <p className="err">{closeState.error}</p> : null}
+                    <div className="row">
+                      <button
+                        className="btn btn--secondary"
+                        type="button"
+                        disabled={closeBusy}
+                        onClick={() => setConfirming(false)}
+                      >
+                        Cancel
+                      </button>
+                      <PendingSubmitButton
+                        className="btn btn--danger"
+                        busy={closeBusy}
+                        pendingLabel="Working…"
+                      >
+                        {CYCLE_CLOSE_COMPILE}
+                      </PendingSubmitButton>
+                    </div>
+                    {closeBusy ? (
+                      <p className="btn-note" role="status">
+                        Working… making the capsule.
+                      </p>
+                    ) : null}
+                  </form>
+                ) : (
+                  <button className="btn btn--secondary" type="button" onClick={() => setConfirming(true)}>
+                    {CYCLE_CLOSE_COMPILE}
+                  </button>
+                )
+              ) : canForce ? (
                 <form action={openAction} onSubmit={markOpenBusy} aria-busy={openBusy || undefined}>
                   <input type="hidden" name="groupId" value={groupId} />
                   {openState?.error ? <p className="err">{openState.error}</p> : null}
@@ -204,21 +202,18 @@ export function CycleForm({
                     {CYCLE_OPEN_EARLY}
                   </PendingSubmitButton>
                 </form>
-              )}
+              ) : null}
             </div>
-            {submitOpen ? (
+            {canForce && submitOpen ? (
               <p className="muted tiny">
                 Closing makes this version of the capsule. You can open again for a new version.
               </p>
-            ) : openState?.error ? (
-              <p className="err">{openState.error}</p>
             ) : null}
             {closeState?.ok && closeState.message ? <p className="small">{closeState.message}</p> : null}
             {emailState?.error && !later ? <p className="err">{emailState.error}</p> : null}
           </div>
         </div>
       </section>
-      <p className="tiny muted">{CYCLE_SECTION}</p>
     </div>
   );
 }

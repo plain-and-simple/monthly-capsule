@@ -17,7 +17,7 @@ import {
 import { compileTargetYearMonth } from "@/lib/schedule";
 import { includedSubmissions } from "@/lib/submit";
 import { createAdminClient } from "@/lib/supabase";
-import type { Group, Month, Photo, Submission } from "@/lib/types";
+import type { Group, Month, Submission } from "@/lib/types";
 
 function asMonth(row: Record<string, unknown>): Month {
   return {
@@ -129,8 +129,7 @@ async function clearForceOpenIfMatch(group: Group, yearMonth: string) {
     .eq("force_open_year_month", yearMonth);
 }
 
-export async function closedYearMonths(groupId: string): Promise<string[]> {
-  const months = await listGroupMonthRows(groupId);
+export function closedYearMonthsFromRows(months: readonly Month[]): string[] {
   return [
     ...new Set(
       months
@@ -138,6 +137,10 @@ export async function closedYearMonths(groupId: string): Promise<string[]> {
         .map((row) => row.year_month),
     ),
   ];
+}
+
+export async function closedYearMonths(groupId: string): Promise<string[]> {
+  return closedYearMonthsFromRows(await listGroupMonthRows(groupId));
 }
 
 export async function findGroupCapsule(groupId: string, yearMonth: string, version?: number) {
@@ -196,27 +199,36 @@ export async function snapshotMonthArchive(
     ]),
   );
 
-  const letters: CapsuleArchiveLetter[] = await Promise.all(
-    included.map(async (submission) => {
-      const { data: photos } = await admin
-        .from("photos")
-        .select("storage_path, width, height, sort_order")
-        .eq("submission_id", submission.id)
-        .order("sort_order", { ascending: true });
-      return {
+  const letters: CapsuleArchiveLetter[] = [];
+  if (included.length > 0) {
+    const { data: photoRows } = await admin
+      .from("photos")
+      .select("submission_id, storage_path, width, height, sort_order")
+      .in(
+        "submission_id",
+        included.map((submission) => submission.id),
+      )
+      .order("sort_order", { ascending: true });
+    const photosBySubmission = new Map<string, CapsuleArchiveLetter["photos"]>();
+    for (const photo of photoRows ?? []) {
+      const submissionId = photo.submission_id as string;
+      const list = photosBySubmission.get(submissionId) ?? [];
+      list.push({
+        storage_path: photo.storage_path as string,
+        width: photo.width as number,
+        height: photo.height as number,
+        sort_order: (photo.sort_order as number | null) ?? list.length,
+      });
+      photosBySubmission.set(submissionId, list);
+    }
+    for (const submission of included) {
+      letters.push({
         preferred_name: nameById.get(submission.member_id) || "Friend",
         body: submission.body,
-        photos: ((photos ?? []) as Pick<Photo, "storage_path" | "width" | "height" | "sort_order">[]).map(
-          (photo, index) => ({
-            storage_path: photo.storage_path,
-            width: photo.width,
-            height: photo.height,
-            sort_order: photo.sort_order ?? index,
-          }),
-        ),
-      };
-    }),
-  );
+        photos: photosBySubmission.get(submission.id) ?? [],
+      });
+    }
+  }
 
   return buildCapsuleArchive({
     yearMonth,

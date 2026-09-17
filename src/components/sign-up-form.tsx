@@ -1,7 +1,8 @@
 "use client";
 
+import { EmailInput, PasswordInput } from "@/components/auth-fields";
 import { PendingSubmitButton, useInstantBusy } from "@/components/pending-submit-button";
-import { ACCOUNT_PASSWORD_LABEL, LANDING_SIGN_UP, PREFERRED_NAME_LABEL } from "@/lib/copy";
+import { LANDING_SIGN_UP, PREFERRED_NAME_LABEL } from "@/lib/copy";
 import { SIGNUP_PATH } from "@/lib/session-policy";
 
 export function SignUpForm({
@@ -35,30 +36,11 @@ export function SignUpForm({
             required
             maxLength={40}
             autoComplete="nickname"
+            disabled={busy}
           />
         </label>
-        <label className="field">
-          <span className="field__label">Email</span>
-          <input
-            className="input"
-            name="email"
-            type="email"
-            required
-            autoComplete="email"
-            placeholder="you@example.com"
-          />
-        </label>
-        <label className="field">
-          <span className="field__label">{ACCOUNT_PASSWORD_LABEL}</span>
-          <input
-            className="input"
-            name="password"
-            type="password"
-            required
-            minLength={8}
-            autoComplete="new-password"
-          />
-        </label>
+        <EmailInput disabled={busy} />
+        <PasswordInput autoComplete="new-password" disabled={busy} />
       </div>
       {error ? <p className="err">{error}</p> : null}
       <PendingSubmitButton

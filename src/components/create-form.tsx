@@ -3,13 +3,13 @@
 import { useActionState, useState } from "react";
 import Link from "next/link";
 import { createGroup, type CreateState } from "@/actions/create-group";
+import { EmailInput, PasswordInput } from "@/components/auth-fields";
 import { CopyButton } from "@/components/copy-button";
 import { CreateSteps } from "@/components/create-steps";
 import { DaySelect } from "@/components/day-select";
 import { PendingLink } from "@/components/pending-link";
 import { PendingSubmitButton, useInstantBusy } from "@/components/pending-submit-button";
 import {
-  ACCOUNT_PASSWORD_LABEL,
   PREFERRED_NAME_LABEL,
   createSuccessHero,
   groupDisplayName,
@@ -173,31 +173,8 @@ export function CreateForm({ signedInAs }: { signedInAs?: string | null }) {
                   />
                   <span className="field__hint">What your group sees above your letters.</span>
                 </label>
-                <label className="field">
-                  <span className="field__label">Email</span>
-                  <input
-                    className="input"
-                    name="email"
-                    type="email"
-                    required
-                    autoComplete="email"
-                    defaultValue={email}
-                  />
-                  <span className="field__hint">Where capsules arrive. Never shown to the group.</span>
-                </label>
-                <label className="field">
-                  <span className="field__label">{ACCOUNT_PASSWORD_LABEL}</span>
-                  <input
-                    className="input"
-                    name="password"
-                    type="password"
-                    required
-                    minLength={8}
-                    autoComplete="new-password"
-                    defaultValue={password}
-                  />
-                  <span className="field__hint">At least 8 characters.</span>
-                </label>
+                <EmailInput defaultValue={email} />
+                <PasswordInput autoComplete="new-password" defaultValue={password} />
               </div>
               <button className="btn btn--primary btn--block" type="submit">
                 Continue

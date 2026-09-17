@@ -6,6 +6,7 @@ import {
   type CapsuleTheme,
   type LetterBlock,
 } from "@/lib/capsule-theme";
+import { contributorsLine } from "@/lib/copy";
 import { monthLabel } from "@/lib/schedule";
 
 export const CAPSULE_ARCHIVE_VERSION = 1 as const;
@@ -180,16 +181,11 @@ function renderCoverHtml(input: {
   monthLabel: string;
   names: string[];
 }): string {
-  const names = input.names
-    .map((name) => `<li>${escapeHtml(name)}</li>`)
-    .join("");
-  const contents =
-    input.names.length > 0
-      ? `<ul class="capsule__contents capsule__contents--${input.theme}">${names}</ul>`
-      : "";
+  const names = contributorsLine(input.names);
+  const contents = names ? `<p class="capsule__cover-note">${escapeHtml(names)}</p>` : "";
 
   if (input.theme === "warm") {
-    return `<header class="capsule__cover"><p class="capsule__ribbon">${escapeHtml(input.monthLabel)}</p><h1>${escapeHtml(input.groupName)}</h1><p class="capsule__cover-note">Letters and photographs, kept together.</p>${contents}</header>`;
+    return `<header class="capsule__cover"><p class="capsule__ribbon">${escapeHtml(input.monthLabel)}</p><h1>${escapeHtml(input.groupName)}</h1>${contents}</header>`;
   }
   if (input.theme === "minimal") {
     return `<header class="capsule__cover"><p class="capsule__kicker">Capsule</p><h1>${escapeHtml(input.monthLabel)}</h1><p class="capsule__cover-note">${escapeHtml(input.groupName)}</p>${contents}</header>`;

@@ -2,7 +2,10 @@ export const PRODUCT_NAME = "Plain and Simple Monthly Capsule";
 /** Letters drawn in the header lockup. The mark SVG already includes PS — do not also render this as text. */
 export const CHROME_MARK = "PS";
 
-export const LANDING_PROMISE = "Friends write once a month. You get one capsule.";
+export const LANDING_PROMISE = "Friends write. You get one capsule.";
+export const LANDING_HEADLINE = LANDING_PROMISE;
+export const LANDING_MONTH_GOES =
+  "The window opens. Everyone writes, add a few photos, and submits. The window closes and the capsule goes out.";
 export const LANDING_CREATE_LABEL = "Create";
 export const LANDING_CREATE_CTA = "Create a capsule group";
 export const LANDING_MANAGE_HEADING = "Manage your capsule";
@@ -67,7 +70,7 @@ export const RESET_LINK_INVALID = "This reset link is not valid. Request a new o
 export const RESET_REQUEST_NEW = "Request a new link";
 
 export const INVITE_HELPER =
-  "Share the link. Type the PIN if you have it. We never show it again.";
+  "Share the link. Anyone you invite also needs the Group PIN. The owner can make a new PIN if it is lost.";
 
 export const GROUP_PRIMARY_SUBMIT = "Write your letter";
 export const GROUP_PRIMARY_VIEW = "Read the capsule";
@@ -75,6 +78,8 @@ export const GROUP_EARLIER_CAPSULES = "Earlier capsules";
 export const GROUP_FIRST_CAPSULE_HEADING = "Your first capsule";
 export const GROUP_NO_PREVIOUS_CAPSULES = "No previous capsules yet";
 export const GROUP_PRIMARY_EDIT = "Edit until the window closes";
+export const GROUP_PEOPLE_HEADING = "People";
+export const GROUP_NEXT_CAPSULE = "Next capsule";
 export const SUBMIT_DRAFT = "Save as draft";
 export const SUBMIT_AND_SEND = "Save and submit";
 export const SUBMIT_SAVED_DRAFT = "Saved as draft";
@@ -83,6 +88,7 @@ export const TOAST_SUCCESS = "Success";
 export const TOAST_DISMISS = "Dismiss";
 export const SIGNED_OUT_TOAST = "Signed out";
 
+export const SCHEDULE_SECTION = "Schedule";
 export const CYCLE_SECTION = "Capsule cycle";
 export const CYCLE_OPEN_EARLY = "Open submit early";
 export const CYCLE_CLOSE_COMPILE = "Close & make capsule";
@@ -98,6 +104,13 @@ export const CAPSULE_THEME_HINT =
 export const CAPSULE_THEME_SAVE = "Save theme";
 export const CAPSULE_THEME_INVALID = "Pick a theme.";
 
+export const MANAGE_TAG_SUBMIT = "Submit capsule";
+export const MANAGE_TAG_SUBMITTED = "Capsule already submitted";
+export const MANAGE_TAG_READ = "Read latest capsule";
+export const MANAGE_TAG_NOT_OPEN = "Next capsule not open";
+export const CONTRIBUTORS_PREFIX = "Contributors:";
+export const SUBMIT_CLOSED_HEADING = "Writing is closed";
+
 export const UNTITLED_GROUP = "Untitled group";
 
 export const LANDING_CUT_PHRASES = ["No phone.", "Create Capsule Group"] as const;
@@ -105,6 +118,11 @@ export const LANDING_CUT_PHRASES = ["No phone.", "Create Capsule Group"] as cons
 export function groupDisplayName(name: string | null | undefined): string {
   const trimmed = (name ?? "").trim();
   return trimmed || UNTITLED_GROUP;
+}
+
+export function contributorsLine(names: readonly string[]): string {
+  if (names.length === 0) return "";
+  return `${CONTRIBUTORS_PREFIX} ${names.join(", ")}`;
 }
 
 export type CreateSuccessHero = {

@@ -67,13 +67,14 @@ describe("Resend accept vs stamp", () => {
     expect(shouldMarkCapsuleEmailed({ attempted: 0, accepted: 0 })).toBe(false);
   });
 
-  it("stamps only when every attempted send was accepted", () => {
+  it("stamps when at least one recipient was accepted", () => {
     expect(resendSendAccepted({ data: { id: "re_123" }, error: null })).toEqual({
       ok: true,
       id: "re_123",
     });
     expect(shouldMarkCapsuleEmailed({ attempted: 1, accepted: 1 })).toBe(true);
-    expect(shouldMarkCapsuleEmailed({ attempted: 2, accepted: 1 })).toBe(false);
+    expect(shouldMarkCapsuleEmailed({ attempted: 2, accepted: 1 })).toBe(true);
+    expect(shouldMarkCapsuleEmailed({ attempted: 2, accepted: 0 })).toBe(false);
   });
 
   it("shows sent / skipped names / Resend error to the owner", () => {
