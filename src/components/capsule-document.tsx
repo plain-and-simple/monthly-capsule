@@ -6,7 +6,7 @@ import {
   type LetterBlock,
 } from "@/lib/capsule-theme";
 import type { CapsuleArchivePhoto } from "@/lib/capsule-archive";
-import { contributorsLine } from "@/lib/copy";
+import { contributorsLine, PHOTO_UNAVAILABLE } from "@/lib/copy";
 import { initials } from "@/lib/group-status";
 
 export type CapsuleViewPhoto = CapsuleArchivePhoto & { url: string | null };
@@ -191,10 +191,16 @@ function LetterBlockView({
 }
 
 function ThemePhoto({ photo }: { photo: CapsuleArchivePhoto & { url?: string | null } }) {
-  if (!("url" in photo) || !photo.url) return null;
+  if (!("url" in photo) || !photo.url) {
+    return (
+      <div className="photo photo--missing" role="img" aria-label={PHOTO_UNAVAILABLE}>
+        {PHOTO_UNAVAILABLE}
+      </div>
+    );
+  }
   return (
     <div className="photo">
-      <img src={photo.url} alt="" width={photo.width} height={photo.height} />
+      <img src={photo.url} alt="" width={photo.width} height={photo.height} loading="lazy" />
     </div>
   );
 }

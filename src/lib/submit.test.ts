@@ -8,6 +8,7 @@ import {
   missedCountPhrase,
   nextSubmissionWrite,
   parseSubmitIntent,
+  submissionHasContent,
   writtenCount,
   writtenCountPhrase,
 } from "./submit";
@@ -19,6 +20,13 @@ describe("submit model A", () => {
     expect(parseSubmitIntent(null)).toBe("submitted");
     expect(parseSubmitIntent("submit")).toBe("submitted");
     expect(parseSubmitIntent("draft")).toBe("draft");
+  });
+
+  it("requires a letter or a photo to submit, not to draft", () => {
+    expect(submissionHasContent("", 0)).toBe(false);
+    expect(submissionHasContent("   ", 0)).toBe(false);
+    expect(submissionHasContent("hello", 0)).toBe(true);
+    expect(submissionHasContent("", 1)).toBe(true);
   });
 
   it("hides drafts from the compiled capsule and treats legacy rows as submitted", () => {
@@ -92,6 +100,8 @@ describe("submit action error handling", () => {
     expect(source).not.toMatch(/\.upload\(storagePath, buffer,/);
     expect(source).toContain('return { error: "Could not save." }');
     expect(source).toContain("submitBlockedReason");
+    expect(source).toContain("submissionHasContent");
+    expect(source).toContain("SUBMIT_EMPTY");
     expect(source).toMatch(/catch \(error\)/);
     expect(source).toContain("if (isRedirectError(error)) throw error");
   });

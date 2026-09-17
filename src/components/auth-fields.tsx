@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, type InputHTMLAttributes } from "react";
-import { ACCOUNT_PASSWORD_LABEL } from "@/lib/copy";
+import { ACCOUNT_PASSWORD_LABEL, HIDE_PASSWORD, SHOW_PASSWORD } from "@/lib/copy";
 import {
   FIELD_IDLE_MS,
   PASSWORD_HINT,
@@ -66,27 +66,38 @@ export function PasswordInput({
   ...props
 }: AuthInputProps) {
   const [value, setValue] = useState(String(defaultValue ?? ""));
+  const [visible, setVisible] = useState(false);
   const { error, onBlur, onValue } = useIdleError(value, passwordFieldError);
 
   return (
     <label className="field">
       <span className="field__label">{ACCOUNT_PASSWORD_LABEL}</span>
-      <input
-        {...props}
-        className={props.className ?? "input"}
-        name={name}
-        type="password"
-        required={props.required ?? true}
-        minLength={8}
-        autoComplete={autoComplete}
-        defaultValue={defaultValue}
-        onChange={(event) => setValue(onValue(event.target.value))}
-        onBlur={(event) => {
-          const next = event.target.value;
-          setValue(next);
-          onBlur(next);
-        }}
-      />
+      <span className="field__control">
+        <input
+          {...props}
+          className={props.className ?? "input"}
+          name={name}
+          type={visible ? "text" : "password"}
+          required={props.required ?? true}
+          minLength={8}
+          autoComplete={autoComplete}
+          defaultValue={defaultValue}
+          onChange={(event) => setValue(onValue(event.target.value))}
+          onBlur={(event) => {
+            const next = event.target.value;
+            setValue(next);
+            onBlur(next);
+          }}
+        />
+        <button
+          type="button"
+          className="field__toggle"
+          onClick={() => setVisible((current) => !current)}
+          aria-pressed={visible}
+        >
+          {visible ? HIDE_PASSWORD : SHOW_PASSWORD}
+        </button>
+      </span>
       <span className="field__hint">{PASSWORD_HINT}</span>
       {error ? <span className="err">{error}</span> : null}
     </label>

@@ -15,7 +15,7 @@ export const EMAIL_INVALID = "Email looks wrong.";
 export const ACCOUNT_EXISTS = "That email already has an account.";
 export const JOIN_ACCOUNT_REQUIRED = "Create an account or sign in first.";
 export const SUBMIT_ACCOUNT_REQUIRED =
-  "Save a login (email and password) before you can save a letter.";
+  "Finish your account (email and password) before you can save a letter.";
 export const ACCOUNT_BANNED = "This account is not allowed.";
 
 export const ACCOUNT_FIELDS = ["preferred_name", "email", "password"] as const;

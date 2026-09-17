@@ -166,6 +166,11 @@ export function windowClosesPhrase(yearMonth: string, endDay: number): string {
   return chicagoWeekdayTheDay(parsed.year, parsed.month, endDay);
 }
 
+/** e.g. "You'll get an email on Sep 9, 2026." */
+export function capsuleEmailPhrase(yearMonth: string, emailDay: number): string {
+  return `You'll get an email on ${shortMonthDayYear(yearMonth, emailDay)}.`;
+}
+
 export function nextOpenPhrase(fromYearMonth: string, startDay: number): string {
   const open = cycleOpenChicagoDate(incrementYearMonth(fromYearMonth), startDay);
   const name = monthName(open.month);

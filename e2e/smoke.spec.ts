@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import {
   JOIN_AUTH_HINT,
   JOIN_EXISTING_CTA,
+  JOIN_PIN_LABEL,
   LANDING_HEADLINE,
   LANDING_MONTH_GOES,
   LANDING_SIGN_IN,
@@ -75,6 +76,17 @@ test.describe("Ready smoke (no secrets)", () => {
     await expect(page.getByRole("heading", { name: JOIN_EXISTING_CTA })).toBeVisible();
     await expect(page.getByText(JOIN_AUTH_HINT)).toBeVisible();
     await expect(page.getByRole("heading", { name: LANDING_SIGN_UP })).toBeVisible();
+    await expect(page.getByText("You have been invited")).toHaveCount(0);
+  });
+
+  test("unknown invite link is a dead-end, not a join form @smoke", async ({ page }) => {
+    await page.goto("/join/not-a-group");
+    await expect(page.getByRole("heading", { name: "This invite is not valid" })).toBeVisible();
+    await expect(page.getByLabel(JOIN_PIN_LABEL)).toHaveCount(0);
+    await expect(page.getByText("You have been invited")).toHaveCount(0);
+    await page.goto("/join/00000000-0000-4000-8000-000000000000");
+    await expect(page.getByRole("heading", { name: "This invite is not valid" })).toBeVisible();
+    await expect(page.getByLabel(JOIN_PIN_LABEL)).toHaveCount(0);
   });
 
   test("create-group studio gate loads without submitting a real code @smoke", async ({ page }) => {

@@ -4,6 +4,7 @@ import {
   GROUP_STATUS_READY,
   GROUP_STATUS_RESTING,
   decorateManagedGroup,
+  capsuleEmailPhrase,
   initials,
   manageGroupActionTag,
   manageGroupStatus,
@@ -154,6 +155,7 @@ describe("next open date label", () => {
   it("formats a short month, day, and year", () => {
     expect(shortMonthDayYear("2026-10", 1)).toBe("Oct 1, 2026");
     expect(shortMonthDayYear("2027-01", 9)).toBe("Jan 9, 2027");
+    expect(capsuleEmailPhrase("2026-09", 9)).toBe("You'll get an email on Sep 9, 2026.");
   });
 });
 

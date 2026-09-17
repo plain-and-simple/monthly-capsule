@@ -10,6 +10,12 @@ import { DaySelect } from "@/components/day-select";
 import { PendingLink } from "@/components/pending-link";
 import { PendingSubmitButton, useInstantBusy } from "@/components/pending-submit-button";
 import {
+  CREATE_NO_CODE_HINT,
+  CREATE_SAVED_CONFIRM,
+  CREATE_SCHEDULE_HINT,
+  JOIN_BACK_HOME,
+  JOIN_BACK_MANAGE,
+  JOIN_EXISTING_CTA,
   PREFERRED_NAME_LABEL,
   createSuccessHero,
   groupDisplayName,
@@ -19,6 +25,16 @@ import {
   DEFAULT_SUBMIT_END_DAY,
   DEFAULT_SUBMIT_START_DAY,
 } from "@/lib/constants";
+import { inviteMessageWithPin } from "@/lib/manage";
+
+function readAccountFields(form: HTMLFormElement) {
+  const data = new FormData(form);
+  return {
+    preferredName: String(data.get("preferred_name") ?? ""),
+    email: String(data.get("email") ?? ""),
+    password: String(data.get("password") ?? ""),
+  };
+}
 
 export function CreateForm({ signedInAs }: { signedInAs?: string | null }) {
   const [state, action, pending] = useActionState<CreateState, FormData>(createGroup, null);
@@ -28,11 +44,12 @@ export function CreateForm({ signedInAs }: { signedInAs?: string | null }) {
   const [preferredName, setPreferredName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [savedPin, setSavedPin] = useState(false);
 
   if (state?.ok) {
     const hero = createSuccessHero({ name: state.groupName, pin: state.pin });
     const groupName = groupDisplayName(state.groupName);
-    const combined = `Join ${groupName} on Plain and Simple Monthly Capsule.\n\nLink: ${state.shareUrl}\nGroup PIN: ${state.pin}`;
+    const combined = inviteMessageWithPin(state.shareUrl, state.pin, groupName);
     return (
       <div className="wrap">
         <div className="stack stack--loose">
@@ -74,10 +91,24 @@ export function CreateForm({ signedInAs }: { signedInAs?: string | null }) {
               away, and anyone already in the group stays in.
             </p>
           </div>
-          <PendingLink className="btn btn--secondary btn--block" href={`/g/${state.groupId}`} pendingLabel="Opening…">
-            I have saved these — go to {groupName}
-          </PendingLink>
           <p className="tiny muted">{hero.hint}</p>
+          <label className="check">
+            <input
+              type="checkbox"
+              checked={savedPin}
+              onChange={(event) => setSavedPin(event.target.checked)}
+            />
+            <span>{CREATE_SAVED_CONFIRM}</span>
+          </label>
+          {savedPin ? (
+            <PendingLink className="btn btn--secondary btn--block" href={`/g/${state.groupId}`} pendingLabel="Opening…">
+              Go to {groupName}
+            </PendingLink>
+          ) : (
+            <button type="button" className="btn btn--secondary btn--block" disabled>
+              Go to {groupName}
+            </button>
+          )}
         </div>
       </div>
     );
@@ -88,10 +119,10 @@ export function CreateForm({ signedInAs }: { signedInAs?: string | null }) {
       <div className="wrap wrap--narrow">
         <div className="stack stack--loose">
           <div className="stack stack--tight">
-            <Link className="backlink" href="/">
-              ← Back
+            <Link className="backlink" href={signedInAs ? "/manage" : "/"}>
+              {signedInAs ? JOIN_BACK_MANAGE : JOIN_BACK_HOME}
             </Link>
-            <CreateSteps current={1} />
+            <CreateSteps current={1} skipAccount={Boolean(signedInAs)} />
           </div>
           <div className="card card--pad-lg">
             <form
@@ -126,8 +157,13 @@ export function CreateForm({ signedInAs }: { signedInAs?: string | null }) {
             </form>
           </div>
           <p className="center small muted">
-            Already have an account? <Link href="/">Sign in</Link>
+            {CREATE_NO_CODE_HINT} <Link href="/join">{JOIN_EXISTING_CTA}</Link>
           </p>
+          {signedInAs ? null : (
+            <p className="center small muted">
+              Already have an account? <Link href="/">Sign in</Link>
+            </p>
+          )}
         </div>
       </div>
     );
@@ -138,21 +174,35 @@ export function CreateForm({ signedInAs }: { signedInAs?: string | null }) {
       <div className="wrap wrap--narrow">
         <div className="stack stack--loose">
           <div className="stack stack--tight">
-            <button className="backlink" type="button" onClick={() => setStep(1)}>
+            <button
+              className="backlink"
+              type="button"
+              onClick={() => {
+                const form = document.getElementById("create-account-form");
+                if (form instanceof HTMLFormElement) {
+                  const fields = readAccountFields(form);
+                  setPreferredName(fields.preferredName);
+                  setEmail(fields.email);
+                  setPassword(fields.password);
+                }
+                setStep(1);
+              }}
+            >
               ← Back
             </button>
             <CreateSteps current={2} />
           </div>
           <div className="card card--pad-lg">
             <form
+              id="create-account-form"
               className="stack"
               onSubmit={(event) => {
                 event.preventDefault();
                 if (!event.currentTarget.reportValidity()) return;
-                const data = new FormData(event.currentTarget);
-                setPreferredName(String(data.get("preferred_name") ?? ""));
-                setEmail(String(data.get("email") ?? ""));
-                setPassword(String(data.get("password") ?? ""));
+                const fields = readAccountFields(event.currentTarget);
+                setPreferredName(fields.preferredName);
+                setEmail(fields.email);
+                setPassword(fields.password);
                 setStep(3);
               }}
             >
@@ -193,7 +243,7 @@ export function CreateForm({ signedInAs }: { signedInAs?: string | null }) {
           <button className="backlink" type="button" onClick={() => setStep(signedInAs ? 1 : 2)}>
             ← Back
           </button>
-          <CreateSteps current={3} />
+          <CreateSteps current={3} skipAccount={Boolean(signedInAs)} />
         </div>
         <div className="card card--pad-lg">
           <form action={action} className="stack" onSubmit={markBusy} aria-busy={busy || undefined}>
@@ -201,7 +251,7 @@ export function CreateForm({ signedInAs }: { signedInAs?: string | null }) {
               <h1>Name the group</h1>
               <p className="muted small">
                 {signedInAs
-                  ? `Creating as ${signedInAs}. You can change the cycle later in Settings.`
+                  ? `Creating as ${signedInAs}. You can change the schedule later in Settings.`
                   : "You can change all of this later in Settings."}
               </p>
             </div>
@@ -219,7 +269,7 @@ export function CreateForm({ signedInAs }: { signedInAs?: string | null }) {
               <span className="field__hint">What everyone sees. Keep it short.</span>
             </label>
             <div className="field">
-              <span className="field__label">Monthly cycle</span>
+              <span className="field__label">Schedule</span>
               <div className="stack stack--tight">
                 <div className="field-inline">
                   <span className="small muted">Submit opens</span>
@@ -250,7 +300,7 @@ export function CreateForm({ signedInAs }: { signedInAs?: string | null }) {
                   />
                 </div>
               </div>
-              <span className="field__hint">Days of the month. America/Chicago.</span>
+              <span className="field__hint">{CREATE_SCHEDULE_HINT}</span>
             </div>
             {state && !state.ok ? <p className="err">{state.error}</p> : null}
             <PendingSubmitButton

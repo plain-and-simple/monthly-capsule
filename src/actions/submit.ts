@@ -11,7 +11,8 @@ import { deleteStoredPhotos } from "@/lib/photos";
 import { resolveSubmitWindow } from "@/lib/cycle-store";
 import { findAccountById } from "@/lib/memberships";
 import { requireGroupMember } from "@/lib/session";
-import { nextSubmissionWrite, parseSubmitIntent, type SubmitStatus } from "@/lib/submit";
+import { SUBMIT_EMPTY } from "@/lib/copy";
+import { nextSubmissionWrite, parseSubmitIntent, submissionHasContent, type SubmitStatus } from "@/lib/submit";
 import { createAdminClient } from "@/lib/supabase";
 
 export type SubmitState = {
@@ -64,6 +65,11 @@ export async function submitLetter(
     const photoError = validatePhotoList(files);
     if (photoError) {
       return { error: photoError };
+    }
+
+    const photoCount = keepPaths.length + files.length;
+    if (intent === "submitted" && !submissionHasContent(body, photoCount)) {
+      return { error: SUBMIT_EMPTY };
     }
 
     const yearMonth = window.yearMonth;

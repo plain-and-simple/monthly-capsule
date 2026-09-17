@@ -1,6 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect } from "react";
+import { ROUTE_ERROR_HOME } from "@/lib/copy";
 
 export function RouteError({
   error,
@@ -22,6 +24,9 @@ export function RouteError({
           <button className="btn btn--primary" type="button" onClick={() => reset()}>
             Try again
           </button>
+          <Link className="backlink" href="/">
+            {ROUTE_ERROR_HOME}
+          </Link>
         </div>
       </div>
     </main>

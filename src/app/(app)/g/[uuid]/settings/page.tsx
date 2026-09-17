@@ -2,6 +2,8 @@ import Link from "next/link";
 import { RegenPinForm } from "@/components/regen-pin-form";
 import { SettingsForm } from "@/components/settings-form";
 import { groupDisplayName } from "@/lib/copy";
+import { appUrl } from "@/lib/env";
+import { invitePayload } from "@/lib/manage";
 import { requireOwner } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
@@ -25,7 +27,11 @@ export default async function SettingsPage({ params }: { params: Promise<{ uuid:
 
           <SettingsForm group={group} />
           <hr className="rule" />
-          <RegenPinForm groupId={group.id} />
+          <RegenPinForm
+            groupId={group.id}
+            shareUrl={invitePayload(appUrl(), uuid).shareUrl}
+            groupName={name}
+          />
         </div>
       </div>
     </main>

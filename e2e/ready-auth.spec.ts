@@ -95,6 +95,7 @@ test.describe("Ready authenticated paths", () => {
     await page.goto("/join");
     await expect(page.getByLabel(JOIN_PIN_LABEL)).toBeVisible();
     await expect(page.getByLabel("Join link or group ID")).toBeVisible();
+    await expect(page.getByText("You have been invited")).toHaveCount(0);
   });
 
   test("join existing Capsule with group id and PIN", async ({ page }) => {

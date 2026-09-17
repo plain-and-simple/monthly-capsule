@@ -35,6 +35,12 @@ import {
   MANAGE_TAG_SUBMITTED,
   JOIN_AUTH_HINT,
   JOIN_EXISTING_CTA,
+  INVALID_INVITE_HEADING,
+  CREATE_SAVED_CONFIRM,
+  SAVE_LOGIN_REQUIRED_HEADING,
+  SAVE_LOGIN_REQUIRED_HINT,
+  SAVE_LOGIN_SUBMIT,
+  SUBMIT_EMPTY,
   MANAGE_CREATE_LABEL,
   MANAGE_EMPTY_HEADING,
   MANAGE_EMPTY_HINT,
@@ -140,6 +146,15 @@ describe("join and manage labels", () => {
     expect(JOIN_EXISTING_CTA).toBe("Join existing Capsule");
     expect(JOIN_AUTH_HINT).toMatch(/Group PIN/);
     expect(JOIN_EXISTING_CTA).not.toBe("Create Capsule Group");
+  });
+
+  it("renames leftover-seat save-login and invalid invites", () => {
+    expect(SAVE_LOGIN_REQUIRED_HEADING).toBe("Finish your account");
+    expect(SAVE_LOGIN_REQUIRED_HINT).toMatch(/email and password/);
+    expect(SAVE_LOGIN_SUBMIT).toBe("Save account");
+    expect(INVALID_INVITE_HEADING).toBe("This invite is not valid");
+    expect(SUBMIT_EMPTY).toBe("Write a letter or add a photo before you submit.");
+    expect(CREATE_SAVED_CONFIRM).toBe("I copied the link and PIN");
   });
 
   it("labels preferred name and manage-0 copy", () => {

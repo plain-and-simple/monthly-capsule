@@ -502,6 +502,30 @@ button.textlink:hover {
   margin-top: 0.4rem;
 }
 
+.field__control {
+  position: relative;
+  display: block;
+}
+
+.field__control input {
+  padding-right: 4.75rem;
+}
+
+.field__toggle {
+  position: absolute;
+  right: 0.4rem;
+  top: 50%;
+  transform: translateY(-50%);
+  border: 0;
+  background: transparent;
+  color: var(--accent-deep);
+  font: inherit;
+  font-size: 0.82rem;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 0.4rem 0.5rem;
+}
+
 .input,
 .textarea,
 .select,
@@ -668,6 +692,7 @@ button.textlink:hover {
 
 .copyrow {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.5rem;
   align-items: stretch;
 }
@@ -678,6 +703,8 @@ button.textlink:hover {
   font-size: 0.85rem;
   letter-spacing: 0;
   text-overflow: ellipsis;
+  min-width: 0;
+  flex: 1 1 12rem;
 }
 
 .copyrow .btn {
@@ -951,6 +978,16 @@ button.listitem:hover {
   color: var(--ink);
 }
 
+.photo--missing {
+  display: grid;
+  place-items: center;
+  background: var(--wash, #f4f0e8);
+  color: var(--muted);
+  font-size: 0.78rem;
+  text-align: center;
+  padding: 0.5rem;
+}
+
 .capsule {
   background: var(--card);
   border: 1px solid var(--line);
@@ -1109,6 +1146,18 @@ button.listitem:hover {
 
   .main {
     padding-top: 1.75rem;
+  }
+
+  .field-inline {
+    flex-wrap: wrap;
+  }
+
+  .field-inline .select,
+  .field-inline .input,
+  .field-inline input,
+  .field-inline select {
+    min-width: 0;
+    width: 100%;
   }
 }
 

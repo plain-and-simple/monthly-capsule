@@ -16,9 +16,33 @@ export const LANDING_NEED_ACCOUNT = "Need an account?";
 export const JOIN_EXISTING_CTA = "Join existing Capsule";
 export const JOIN_AUTH_HINT =
   "Create an account or sign in. Then you can enter the Group PIN and join.";
-export const SAVE_LOGIN_REQUIRED_HEADING = "Save a login";
+export const SAVE_LOGIN_REQUIRED_HEADING = "Finish your account";
 export const SAVE_LOGIN_REQUIRED_HINT =
-  "Email and password are required before you can save a letter. That is how we email the capsule.";
+  "This seat still needs an email and password. That is how you sign back in and how we email the capsule.";
+export const SAVE_LOGIN_SUBMIT = "Save account";
+export const JOIN_INVITED_EYEBROW = "You have been invited";
+export const JOIN_GENERIC_EYEBROW = "Join";
+export const JOIN_BACK_HOME = "← Home";
+export const JOIN_BACK_MANAGE = "← Your groups";
+export const INVALID_INVITE_HEADING = "This invite is not valid";
+export const INVALID_INVITE_HINT =
+  "The group is gone, or the link is wrong. Ask whoever sent it for a new one.";
+export const INVALID_INVITE_FALLBACK = "Join with a group ID";
+export const CREATE_SAVED_CONFIRM = "I copied the link and PIN";
+export const CREATE_NO_CODE_HINT = "Don't have a code?";
+export const CREATE_SCHEDULE_HINT =
+  "Days of the month. America/Chicago. Days 20–31 open in the previous month.";
+export const SUBMIT_EMPTY = "Write a letter or add a photo before you submit.";
+export const CAPSULE_NOT_READY_HEADING = "This capsule is not ready yet";
+export const CAPSULE_NOT_READY_HINT =
+  "It may still be compiling, or this month has not been made. Go back to the group and try again in a moment.";
+export const PHOTO_UNAVAILABLE = "Photo unavailable";
+export const COPY_FAILED = "Copy failed";
+export const SHOW_PASSWORD = "Show";
+export const HIDE_PASSWORD = "Hide";
+export const GROUP_INVITE_SOLO = "You're the only person here.";
+export const GROUP_INVITE_SOLO_CTA = "Invite someone";
+export const ROUTE_ERROR_HOME = "← Home";
 export const LANDING_LEDE =
   "A private page for a small group. Everyone sends a short letter and a few photos during the month. When the window closes, it all arrives as one thing to read.";
 

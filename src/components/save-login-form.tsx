@@ -2,7 +2,7 @@
 
 import { EmailInput, PasswordInput } from "@/components/auth-fields";
 import { PendingSubmitButton, useInstantBusy } from "@/components/pending-submit-button";
-import { SAVE_LOGIN_REQUIRED_HEADING, SAVE_LOGIN_REQUIRED_HINT } from "@/lib/copy";
+import { SAVE_LOGIN_REQUIRED_HEADING, SAVE_LOGIN_REQUIRED_HINT, SAVE_LOGIN_SUBMIT } from "@/lib/copy";
 import { SAVE_LOGIN_PATH } from "@/lib/session-policy";
 
 export function SaveLoginForm({
@@ -35,7 +35,7 @@ export function SaveLoginForm({
       <PasswordInput autoComplete="current-password" />
       {error ? <p className="err">{error}</p> : null}
       <PendingSubmitButton className="btn btn--secondary" busy={busy} pendingLabel="Saving…">
-        Save login
+        {SAVE_LOGIN_SUBMIT}
       </PendingSubmitButton>
     </form>
   );

@@ -8,6 +8,8 @@ import { latestUnsentCapsule } from "@/lib/compile";
 import {
   GROUP_EARLIER_CAPSULES,
   GROUP_FIRST_CAPSULE_HEADING,
+  GROUP_INVITE_SOLO,
+  GROUP_INVITE_SOLO_CTA,
   GROUP_NO_PREVIOUS_CAPSULES,
   GROUP_PEOPLE_HEADING,
   GROUP_PRIMARY_EDIT,
@@ -15,7 +17,7 @@ import {
   GROUP_PRIMARY_VIEW,
 } from "@/lib/copy";
 import { groupDisplayName } from "@/lib/copy";
-import { initials, nextOpenDateLabel, windowClosesPhrase } from "@/lib/group-status";
+import { capsuleEmailPhrase, initials, nextOpenDateLabel, windowClosesPhrase } from "@/lib/group-status";
 import { resolveSubmitWindow } from "@/lib/cycle-store";
 import { ROSTER_SELECT, canForceCycle, canKickMember, toRoster } from "@/lib/manage";
 import {
@@ -112,6 +114,8 @@ export default async function GroupHomePage({
       ? capsuleTitle(monthLabel(latestCapsule.yearMonth), latestCapsule.version)
       : name;
   const closes = featuredMonth ? windowClosesPhrase(featuredMonth, group.submit_end_day) : "";
+  const emailYearMonth = open && yearMonth ? yearMonth : latestCapsule?.yearMonth ?? yearMonth;
+  const emailPhrase = emailYearMonth ? capsuleEmailPhrase(emailYearMonth, group.email_day) : "";
   const nextOpenDate = nextOpenDateLabel(group, closed);
   const nextLabel = open && yearMonth
     ? capsuleTitle(monthLabel(yearMonth), version ?? 1)
@@ -147,7 +151,7 @@ export default async function GroupHomePage({
                     </h2>
                     <p className="muted small">
                       {writtenCountPhrase(written, total)}. The capsule is made after the window
-                      closes.
+                      closes. {emailPhrase}
                     </p>
                   </>
                 ) : open ? (
@@ -155,7 +159,7 @@ export default async function GroupHomePage({
                     <h2 className="serif" style={{ fontSize: "1.5rem" }}>
                       Writing is open until {closes}
                     </h2>
-                    <p className="muted small">A few paragraphs is plenty.</p>
+                    <p className="muted small">A few paragraphs is plenty. {emailPhrase}</p>
                   </>
                 ) : latestCapsule ? (
                   <>
@@ -163,6 +167,7 @@ export default async function GroupHomePage({
                       The {capsuleTitle(monthLabel(latestCapsule.yearMonth), latestCapsule.version)}{" "}
                       capsule is ready
                     </h2>
+                    {emailPhrase ? <p className="muted small">{emailPhrase}</p> : null}
                   </>
                 ) : (
                   <>
@@ -170,6 +175,7 @@ export default async function GroupHomePage({
                       {GROUP_FIRST_CAPSULE_HEADING}
                     </h2>
                     <p className="muted tiny">{GROUP_NO_PREVIOUS_CAPSULES}</p>
+                    {emailPhrase ? <p className="muted small">{emailPhrase}</p> : null}
                   </>
                 )}
               </div>
@@ -248,6 +254,12 @@ export default async function GroupHomePage({
                 );
               })}
             </ul>
+            {actorIsOwner && people.length <= 1 ? (
+              <p className="muted small">
+                {GROUP_INVITE_SOLO}{" "}
+                <Link href={`/g/${uuid}/invite`}>{GROUP_INVITE_SOLO_CTA}</Link>
+              </p>
+            ) : null}
           </div>
 
           {earlier.length > 0 ? (

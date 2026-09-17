@@ -4,7 +4,7 @@ import { CapsuleDocument } from "@/components/capsule-document";
 import { EmailGroupForm } from "@/components/email-group-form";
 import { parseCapsuleArchive } from "@/lib/capsule-archive";
 import { ensureCapsuleArchive, findMonthEdition } from "@/lib/compile";
-import { groupDisplayName } from "@/lib/copy";
+import { CAPSULE_NOT_READY_HEADING, CAPSULE_NOT_READY_HINT, groupDisplayName } from "@/lib/copy";
 import { canForceCycle } from "@/lib/manage";
 import { capsuleTitle, DEFAULT_MONTH_VERSION } from "@/lib/month-version";
 import { signedPhotoUrls } from "@/lib/photos";
@@ -41,7 +41,8 @@ export async function CapsuleView({
             <Link href={`/g/${uuid}`} className="backlink">
               ← {name}
             </Link>
-            <h1>Not ready</h1>
+            <h1>{CAPSULE_NOT_READY_HEADING}</h1>
+            <p className="muted">{CAPSULE_NOT_READY_HINT}</p>
           </div>
         </div>
       </main>

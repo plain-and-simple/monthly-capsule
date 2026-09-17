@@ -11,12 +11,13 @@ import {
   SUBMIT_AND_SEND,
   SUBMIT_CLOSED_HEADING,
   SUBMIT_DRAFT,
+  SUBMIT_EMPTY,
   SUBMIT_SAVED_DRAFT,
   SUBMIT_SUBMITTED,
 } from "@/lib/copy";
 import { appendPhotos } from "@/lib/photo-files";
 import { PHOTO_COMPRESS_FAILED, compressPhotoFile } from "@/lib/photo-compress";
-import type { SubmitStatus } from "@/lib/submit";
+import { submissionHasContent, type SubmitStatus } from "@/lib/submit";
 
 type StagedPhoto = {
   id: string;
@@ -138,6 +139,13 @@ export function SubmitForm({
       aria-busy={busy || undefined}
       onSubmit={markBusy}
       action={async (formData) => {
+        const intent = String(formData.get("intent") ?? "");
+        const body = String(formData.get("body") ?? "");
+        if (intent !== "draft" && !submissionHasContent(body, photos.length)) {
+          setPhotoError(SUBMIT_EMPTY);
+          return;
+        }
+        setPhotoError(null);
         markBusy();
         formData.set("groupId", groupId);
         if (photosTouched) formData.set("photos_touched", "1");
@@ -210,18 +218,13 @@ export function SubmitForm({
             </div>
           ))}
           {photos.length < MAX_PHOTOS ? (
-            <button
-              className="photo photo--add"
-              type="button"
-              disabled={busy}
-              aria-label="Add photos"
-              onClick={() => fileRef.current?.click()}
-            >
+            <label className="photo photo--add" htmlFor="letter-photos">
               Add
-            </button>
+            </label>
           ) : null}
         </div>
         <input
+          id="letter-photos"
           ref={fileRef}
           type="file"
           accept="image/jpeg,image/png,image/webp"

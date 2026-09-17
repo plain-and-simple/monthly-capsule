@@ -2,7 +2,15 @@
 
 import Link from "next/link";
 import { PendingSubmitButton, useInstantBusy } from "@/components/pending-submit-button";
-import { JOIN_PIN_LABEL, PREFERRED_NAME_LABEL, groupDisplayName } from "@/lib/copy";
+import {
+  JOIN_BACK_HOME,
+  JOIN_BACK_MANAGE,
+  JOIN_GENERIC_EYEBROW,
+  JOIN_INVITED_EYEBROW,
+  JOIN_PIN_LABEL,
+  PREFERRED_NAME_LABEL,
+  groupDisplayName,
+} from "@/lib/copy";
 import { JOIN_GROUP_PATH } from "@/lib/session-policy";
 
 export function JoinForm({
@@ -10,12 +18,14 @@ export function JoinForm({
   signedInAs,
   groupName,
   memberCount,
+  invited = false,
   error,
 }: {
   uuid?: string;
   signedInAs: string;
   groupName?: string | null;
   memberCount?: number;
+  invited?: boolean;
   error?: string | null;
 }) {
   const { busy, markBusy } = useInstantBusy(false);
@@ -26,7 +36,10 @@ export function JoinForm({
     <div className="wrap wrap--narrow">
       <div className="stack stack--loose">
         <div className="stack stack--tight">
-          <p className="eyebrow">You have been invited</p>
+          <Link className="backlink" href="/manage">
+            {JOIN_BACK_MANAGE}
+          </Link>
+          <p className="eyebrow">{invited ? JOIN_INVITED_EYEBROW : JOIN_GENERIC_EYEBROW}</p>
           <h1>{title}</h1>
           <p className="lede">
             {memberCount
@@ -84,7 +97,7 @@ export function JoinForm({
               </span>
             </label>
 
-            <p className="small muted">Signed in as {signedInAs}. This group will appear in Manage.</p>
+            <p className="small muted">Signed in as {signedInAs}. This group will appear in Your groups.</p>
 
             {error ? <p className="err">{error}</p> : null}
             <PendingSubmitButton
@@ -98,7 +111,10 @@ export function JoinForm({
         </div>
 
         <p className="center small muted">
-          Already in this group? <Link href="/manage">Open Manage</Link>
+          Already in this group? <Link href="/manage">Open Your groups</Link>
+        </p>
+        <p className="center tiny muted">
+          <Link href="/">{JOIN_BACK_HOME}</Link>
         </p>
       </div>
     </div>

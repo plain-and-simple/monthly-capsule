@@ -8,6 +8,10 @@ export function parseSubmitIntent(value: FormDataEntryValue | null | undefined):
   return String(value ?? "") === SUBMIT_INTENT_DRAFT ? "draft" : "submitted";
 }
 
+export function submissionHasContent(body: string, photoCount: number): boolean {
+  return body.trim().length > 0 || photoCount > 0;
+}
+
 export function isIncludedInCapsule(submission: { status?: string | null }): boolean {
   return (submission.status ?? "submitted") === "submitted";
 }

@@ -13,6 +13,7 @@ import {
   canRegeneratePin,
   groupChromeLinks,
   inviteMessage,
+  inviteMessageWithPin,
   invitePayload,
   inviteShareText,
   kickConfirmAccepted,
@@ -137,6 +138,8 @@ describe("manage UI scenarios 1–20", () => {
       ].join("\n"),
     );
     expect(inviteMessage(payload.shareUrl, "123456", "Sunday letters")).not.toContain("123456");
+    expect(inviteMessageWithPin(payload.shareUrl, "123456", "Sunday letters")).toContain("Group PIN: 123456");
+    expect(inviteMessageWithPin(payload.shareUrl, "123456", "Sunday letters")).toContain(payload.shareUrl);
   });
 
   it("14. invite payload never includes a PIN", () => {

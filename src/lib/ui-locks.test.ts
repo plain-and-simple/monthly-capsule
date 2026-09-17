@@ -141,6 +141,8 @@ describe("account-before-join IA", () => {
     const invite = readFileSync(resolve(here, "../app/(app)/join/[uuid]/page.tsx"), "utf8");
     expect(invite).toContain("JoinGate");
     expect(invite).toContain("inviteJoinPath");
+    expect(invite).toContain("InvalidInvite");
+    expect(invite).toContain("parseGroupId");
 
     const home = readFileSync(resolve(here, "../app/page.tsx"), "utf8");
     expect(home).toContain("AuthPanel");
@@ -184,6 +186,32 @@ describe("account-before-join IA", () => {
     const fields = readFileSync(resolve(here, "../components/auth-fields.tsx"), "utf8");
     expect(fields).not.toMatch(/value=\{value\}/);
     expect(fields).toContain("defaultValue={defaultValue}");
+    expect(fields).toContain("SHOW_PASSWORD");
+    expect(fields).toContain('type={visible ? "text" : "password"}');
+  });
+});
+
+describe("leftover journey locks", () => {
+  it("generic join is not invite copy", () => {
+    const joinForm = readFileSync(resolve(here, "../components/join-form.tsx"), "utf8");
+    expect(joinForm).toContain("invited ? JOIN_INVITED_EYEBROW");
+    expect(joinForm).not.toContain('<p className="eyebrow">You have been invited</p>');
+    const joinGate = readFileSync(resolve(here, "../components/join-gate.tsx"), "utf8");
+    expect(joinGate).toContain("invited = false");
+  });
+
+  it("copy reports clipboard denial instead of staying silent", () => {
+    const source = readFileSync(resolve(here, "../components/copy-button.tsx"), "utf8");
+    expect(source).toContain("copyTextToClipboard");
+    expect(source).toContain("COPY_FAILED");
+  });
+
+  it("create success requires a saved PIN checkbox before continue", () => {
+    const source = readFileSync(resolve(here, "../components/create-form.tsx"), "utf8");
+    expect(source).toContain("CREATE_SAVED_CONFIRM");
+    expect(source).toContain("savedPin");
+    expect(source).toContain("readAccountFields");
+    expect(source).toContain("skipAccount={Boolean(signedInAs)}");
   });
 });
 

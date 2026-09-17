@@ -78,6 +78,10 @@ export function inviteMessage(shareUrl: string, _typedPin: string, groupName: st
   ].join("\n");
 }
 
+export function inviteMessageWithPin(shareUrl: string, pin: string, groupName: string): string {
+  return `${inviteMessage(shareUrl, "", groupName)}\nGroup PIN: ${pin}`;
+}
+
 export const REGEN_CONFIRM_VALUE = "1";
 export const FORCE_CLOSE_CONFIRM_VALUE = "1";
 export const KICK_CONFIRM_VALUE = "1";

@@ -51,7 +51,7 @@ export function InvitePanel({
 
       {isOwner ? (
         <div className="card">
-          <RegenPinForm groupId={groupId} />
+          <RegenPinForm groupId={groupId} shareUrl={shareUrl} groupName={groupName} />
           <p className="tiny muted" style={{ marginTop: "0.75rem" }}>
             Anyone you already invited needs the new PIN.
           </p>

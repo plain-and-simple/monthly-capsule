@@ -4,12 +4,24 @@ import { useActionState, useState } from "react";
 import { regeneratePin, type RegenPinState } from "@/actions/regenerate-pin";
 import { CopyButton } from "@/components/copy-button";
 import { PendingSubmitButton, useInstantBusy } from "@/components/pending-submit-button";
-import { REGEN_CONFIRM_VALUE } from "@/lib/manage";
+import { REGEN_CONFIRM_VALUE, inviteMessageWithPin } from "@/lib/manage";
 
-export function RegenPinForm({ groupId }: { groupId: string }) {
+export function RegenPinForm({
+  groupId,
+  shareUrl,
+  groupName,
+}: {
+  groupId: string;
+  shareUrl?: string;
+  groupName?: string;
+}) {
   const [state, action, pending] = useActionState<RegenPinState, FormData>(regeneratePin, null);
   const { busy, markBusy } = useInstantBusy(pending);
   const [confirming, setConfirming] = useState(false);
+  const combined =
+    state?.ok && shareUrl && groupName
+      ? inviteMessageWithPin(shareUrl, state.pin, groupName)
+      : null;
 
   if (state?.ok) {
     return (
@@ -23,6 +35,13 @@ export function RegenPinForm({ groupId }: { groupId: string }) {
           <span className="pin">{state.pin}</span>
           <CopyButton text={state.pin} label="Copy" className="btn btn--quiet" />
         </div>
+        {combined ? (
+          <CopyButton
+            text={combined}
+            label="Copy link and PIN together"
+            className="btn btn--primary btn--block"
+          />
+        ) : null}
       </section>
     );
   }

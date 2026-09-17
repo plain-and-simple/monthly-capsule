@@ -86,6 +86,7 @@ describe("e2e suite locks", () => {
     expect(auth).toContain("storageState");
     expect(auth).not.toContain("signIn(");
     expect(auth).toContain("openCapsuleCover");
+    expect(auth).toContain("You have been invited");
     expect(setup).toContain("signIn(");
     expect(setup).toContain("storageState");
     expect(config).toContain("auth\\.setup\\.ts");
