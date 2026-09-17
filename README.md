@@ -2,6 +2,8 @@
 
 Friends write a letter (and up to six photos) each month. After the window closes, Capsule compiles a private HTML page and emails a link.
 
+Agents working in this repo: read `AGENTS.md` before changing product behavior.
+
 ## Hosting lock (do not reopen)
 
 - Origin: [https://capsule.plainandsimple.app](https://capsule.plainandsimple.app)
