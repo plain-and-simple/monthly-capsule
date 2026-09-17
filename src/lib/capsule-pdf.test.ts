@@ -112,17 +112,30 @@ describe("themed pdf keepsake", () => {
     expect(text).toContain("CEDAR STREET");
   });
 
-  it("heritage uses plates and the keepsake kicker", async () => {
+  it("heritage uses leftover plates and the keepsake kicker", async () => {
     const archive = buildCapsuleArchive({
       yearMonth: "2026-09",
       groupName: "Cedar Street",
       memberCount: 1,
       theme: "heritage",
-      letters: [letter],
+      letters: [
+        {
+          preferred_name: "Wren",
+          body: "The plum tree finally did something.",
+          photos: [
+            { storage_path: "g/m/0.jpg", width: 12, height: 8, sort_order: 0 },
+            { storage_path: "g/m/1.jpg", width: 12, height: 8, sort_order: 1 },
+          ],
+        },
+      ],
     });
+    const jpeg = await tinyJpeg();
     const bytes = await buildCapsulePdfBytes({
       archive,
-      photos: [{ storage_path: "g/m/0.jpg", bytes: await tinyJpeg() }],
+      photos: [
+        { storage_path: "g/m/0.jpg", bytes: jpeg },
+        { storage_path: "g/m/1.jpg", bytes: jpeg },
+      ],
     });
     const text = pdfExtractText(bytes);
     expect(text).toContain("A keepsake");
@@ -148,6 +161,40 @@ describe("themed pdf keepsake", () => {
       expect(text).toContain("Cedar Street");
       expect(text).toContain("plum tree");
     }
+  });
+
+  it("newspaper wrap still includes both paragraphs next to photos on every theme", async () => {
+    const jpeg = await tinyJpeg();
+    for (const theme of ["classic", "warm", "minimal", "heritage"] as const) {
+      const archive = buildCapsuleArchive({
+        yearMonth: "2026-09",
+        groupName: "Cedar Street",
+        memberCount: 1,
+        theme,
+        letters: [
+          {
+            preferred_name: "Wren",
+            body: "The plum tree finally did something this year after we almost gave up on it.\n\nA second thought about the porch light and the rain that would not quit.",
+            photos: [
+              { storage_path: "g/m/0.jpg", width: 800, height: 600, sort_order: 0 },
+              { storage_path: "g/m/1.jpg", width: 800, height: 600, sort_order: 1 },
+            ],
+          },
+        ],
+      });
+      const bytes = await buildCapsulePdfBytes({
+        archive,
+        photos: [
+          { storage_path: "g/m/0.jpg", bytes: jpeg },
+          { storage_path: "g/m/1.jpg", bytes: jpeg },
+        ],
+      });
+      const text = pdfExtractText(bytes);
+      expect(text).toContain("plum tree");
+      expect(text).toContain("porch light");
+    }
+    expect(source("./capsule-pdf.ts")).toContain("insetImage");
+    expect(source("./capsule-theme.ts")).toContain("leftoverPhotoBlocks");
   });
 
   it("embeds a webp photo after converting it", async () => {
@@ -205,6 +252,8 @@ describe("pdf wiring locks", () => {
     expect(compile).toContain("writeCapsulePdfKeepsake");
     expect(compile).toContain("capsule pdf generate failed");
     expect(compile).toContain("pdf_storage_path");
+    expect(source("../app/globals.css")).toContain("letter__photo--left");
+    expect(source("../app/globals.css")).toContain("float: right");
   });
 
   it("the capsule page offers Download PDF to members", () => {

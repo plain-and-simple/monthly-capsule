@@ -197,15 +197,8 @@ function renderCoverHtml(input: {
 }
 
 function renderPersonSectionHtml(theme: CapsuleTheme, letter: CapsuleArchiveLetter): string {
-  const layout = theme === "classic"
-    ? "letter-then-photos"
-    : theme === "warm"
-      ? "photos-woven"
-      : theme === "minimal"
-        ? "text-then-strip"
-        : "letter-then-plates";
   const inner = layoutPersonSection(theme, letter).map((block) => renderBlockHtml(block)).join("");
-  return `<section class="letter letter--${theme}" data-author="${escapeAttr(letter.preferred_name)}" data-layout="${layout}">${inner}</section>`;
+  return `<section class="letter letter--${theme}" data-author="${escapeAttr(letter.preferred_name)}" data-layout="photos-woven">${inner}</section>`;
 }
 
 function renderBlockHtml(block: LetterBlock): string {
@@ -225,7 +218,8 @@ function renderBlockHtml(block: LetterBlock): string {
     const caption = plateLabel(block.plateIndex ?? 0);
     return `<figure class="letter__plate">${img}<figcaption>${caption}</figcaption></figure>`;
   }
-  return `<figure class="letter__photo letter__photo--weave">${img}</figure>`;
+  const side = block.side === "left" ? "left" : "right";
+  return `<figure class="letter__photo letter__photo--weave letter__photo--${side}">${img}</figure>`;
 }
 
 function renderPhotoImg(photo: CapsuleArchivePhoto): string {

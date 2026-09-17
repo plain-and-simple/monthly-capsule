@@ -113,14 +113,6 @@ function CapsuleCover({
 }
 
 function PersonSection({ theme, letter }: { theme: CapsuleTheme; letter: CapsuleViewLetter }) {
-  const layout =
-    theme === "classic"
-      ? "letter-then-photos"
-      : theme === "warm"
-        ? "photos-woven"
-        : theme === "minimal"
-          ? "text-then-strip"
-          : "letter-then-plates";
   const photoByPath = new Map(letter.photos.map((photo) => [photo.storage_path, photo]));
   const blocks = layoutPersonSection(theme, letter);
 
@@ -128,7 +120,7 @@ function PersonSection({ theme, letter }: { theme: CapsuleTheme; letter: Capsule
     <section
       className={`letter letter--${theme}`}
       data-author={letter.preferred_name}
-      data-layout={layout}
+      data-layout="photos-woven"
     >
       {blocks.map((block, index) => (
         <LetterBlockView
@@ -184,7 +176,7 @@ function LetterBlockView({
     );
   }
   return (
-    <figure className="letter__photo letter__photo--weave">
+    <figure className={`letter__photo letter__photo--weave letter__photo--${block.side}`}>
       <ThemePhoto photo={photo} />
     </figure>
   );

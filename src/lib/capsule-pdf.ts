@@ -288,9 +288,15 @@ async function drawPerson(
   photoByPath: Map<string, Uint8Array>,
 ) {
   const blocks = layoutPersonSection(theme, letter);
-  for (const block of blocks) {
-    await drawBlock(doc, cursor, theme, block, fonts, photoByPath);
+  for (let i = 0; i < blocks.length; i += 1) {
+    const block = blocks[i]!;
+    const weaveBeside =
+      block.kind === "photo" &&
+      block.variant === "weave" &&
+      blocks.slice(i + 1).some((entry) => entry.kind === "text");
+    await drawBlock(doc, cursor, theme, block, fonts, photoByPath, weaveBeside);
   }
+  cursor.finishWrap();
 }
 
 async function drawBlock(
@@ -300,8 +306,10 @@ async function drawBlock(
   block: LetterBlock,
   fonts: { serif: PDFFont; serifBold: PDFFont; serifItalic: PDFFont; sans: PDFFont },
   photoByPath: Map<string, Uint8Array>,
+  weaveBeside = false,
 ) {
   if (block.kind === "heading") {
+    cursor.finishWrap();
     const center = theme === "minimal" || theme === "heritage";
     cursor.text(winAnsi(block.name), {
       font: fonts.serifBold,
@@ -319,7 +327,7 @@ async function drawBlock(
         size: 12,
         lineGap: 4,
         color: cursor.palette.ink,
-        center: theme === "heritage",
+        center: false,
       });
     }
     cursor.y -= 8;
@@ -338,6 +346,10 @@ async function drawBlock(
     await cursor.plate(image, plateLabel(block.plateIndex ?? 0), fonts.serifItalic);
     return;
   }
+  if (weaveBeside) {
+    cursor.insetImage(image, block.side, 210);
+    return;
+  }
   await cursor.image(image, 300);
 }
 
@@ -352,9 +364,12 @@ async function embedPhoto(doc: PDFDocument, bytes: Uint8Array | undefined): Prom
   }
 }
 
+type PdfWrap = { side: "left" | "right"; bottom: number; width: number };
+
 class PdfCursor {
   page: PDFPage;
   y: number;
+  private wrap: PdfWrap | null = null;
 
   constructor(
     private readonly doc: PDFDocument,
@@ -368,9 +383,28 @@ class PdfCursor {
 
   ensure(needed: number) {
     if (this.y - needed >= MARGIN) return;
+    this.wrap = null;
     this.page = this.doc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
     this.paintPage();
     this.y = PAGE_HEIGHT - MARGIN;
+  }
+
+  finishWrap(gap = 10) {
+    if (!this.wrap) return;
+    if (this.y > this.wrap.bottom) this.y = this.wrap.bottom;
+    this.y -= gap;
+    this.wrap = null;
+  }
+
+  column(lineSize: number): { x: number; width: number } {
+    if (!this.wrap || this.y - lineSize < this.wrap.bottom) {
+      return { x: MARGIN, width: CONTENT_WIDTH };
+    }
+    const taken = this.wrap.width + 14;
+    if (this.wrap.side === "right") {
+      return { x: MARGIN, width: CONTENT_WIDTH - taken };
+    }
+    return { x: MARGIN + taken, width: CONTENT_WIDTH - taken };
   }
 
   paintPage() {
@@ -417,15 +451,23 @@ class PdfCursor {
       center?: boolean;
     },
   ) {
-    const lines = wrapLine(value, opts.font, opts.size, CONTENT_WIDTH);
-    for (const line of lines) {
-      this.text(line, {
-        font: opts.font,
+    const words = value.split(/\s+/).filter(Boolean);
+    let remaining = words.length > 0 ? words : [""];
+    while (remaining.length > 0) {
+      this.ensure(opts.size + 6);
+      const col = this.column(opts.size);
+      const taken = takeLine(remaining, opts.font, opts.size, col.width);
+      const width = opts.font.widthOfTextAtSize(taken.line, opts.size);
+      const x = opts.center ? col.x + Math.max(0, (col.width - width) / 2) : col.x;
+      this.page.drawText(taken.line, {
+        x,
+        y: this.y - opts.size,
         size: opts.size,
+        font: opts.font,
         color: opts.color,
-        gap: opts.lineGap,
-        center: opts.center,
       });
+      this.y -= opts.size + opts.lineGap;
+      remaining = taken.rest;
     }
     if (opts.paragraphGap) this.y -= opts.paragraphGap;
   }
@@ -456,6 +498,7 @@ class PdfCursor {
   }
 
   rule(gapAfter = 20) {
+    this.finishWrap();
     this.ensure(12);
     this.page.drawLine({
       start: { x: MARGIN, y: this.y },
@@ -471,7 +514,24 @@ class PdfCursor {
     this.rule(theme === "heritage" ? 18 : 20);
   }
 
+  insetImage(image: PDFImage, side: "left" | "right", maxH: number) {
+    this.finishWrap();
+    const maxW = CONTENT_WIDTH * 0.42;
+    const scale = Math.min(maxW / image.width, maxH / image.height, 1);
+    const drawW = image.width * scale;
+    const drawH = image.height * scale;
+    this.ensure(drawH + 16);
+    this.page.drawImage(image, {
+      x: side === "right" ? PAGE_WIDTH - MARGIN - drawW : MARGIN,
+      y: this.y - drawH,
+      width: drawW,
+      height: drawH,
+    });
+    this.wrap = { side, bottom: this.y - drawH, width: drawW };
+  }
+
   async image(image: PDFImage, maxH: number) {
+    this.finishWrap();
     const scale = Math.min(CONTENT_WIDTH / image.width, maxH / image.height, 1);
     const drawW = image.width * scale;
     const drawH = image.height * scale;
@@ -487,6 +547,7 @@ class PdfCursor {
   }
 
   async plate(image: PDFImage, caption: string, captionFont: PDFFont) {
+    this.finishWrap();
     const inset = 8;
     const scale = Math.min((CONTENT_WIDTH - inset * 2) / image.width, 260 / image.height, 1);
     const drawW = image.width * scale;
@@ -527,6 +588,7 @@ class PdfCursor {
     photoByPath: Map<string, Uint8Array>,
     opts: { cols: number; maxH: number; gap: number },
   ) {
+    this.finishWrap();
     const colW = (CONTENT_WIDTH - opts.gap * (opts.cols - 1)) / opts.cols;
     for (let i = 0; i < photos.length; i += opts.cols) {
       const slice = photos.slice(i, i + opts.cols);
@@ -555,36 +617,41 @@ class PdfCursor {
   }
 }
 
-function wrapLine(text: string, font: PDFFont, size: number, maxWidth: number): string[] {
-  const words = text.split(/\s+/).filter(Boolean);
-  if (words.length === 0) return [""];
-  const lines: string[] = [];
+function takeLine(
+  words: string[],
+  font: PDFFont,
+  size: number,
+  maxWidth: number,
+): { line: string; rest: string[] } {
+  if (words.length === 0) return { line: "", rest: [] };
   let current = "";
+  let count = 0;
   for (const word of words) {
     const next = current ? `${current} ${word}` : word;
     if (font.widthOfTextAtSize(next, size) <= maxWidth) {
       current = next;
+      count += 1;
       continue;
     }
-    if (current) lines.push(current);
-    if (font.widthOfTextAtSize(word, size) <= maxWidth) {
-      current = word;
-      continue;
-    }
-    let chunk = "";
-    for (const char of word) {
-      const trial = chunk + char;
-      if (font.widthOfTextAtSize(trial, size) <= maxWidth) {
-        chunk = trial;
-      } else {
-        if (chunk) lines.push(chunk);
-        chunk = char;
-      }
-    }
-    current = chunk;
+    break;
   }
-  if (current) lines.push(current);
-  return lines;
+  if (count > 0) return { line: current, rest: words.slice(count) };
+
+  const word = words[0]!;
+  if (font.widthOfTextAtSize(word, size) <= maxWidth) {
+    return { line: word, rest: words.slice(1) };
+  }
+  let chunk = "";
+  for (const char of word) {
+    const trial = chunk + char;
+    if (font.widthOfTextAtSize(trial, size) <= maxWidth || chunk.length === 0) {
+      chunk = trial;
+    } else {
+      break;
+    }
+  }
+  const leftover = word.slice(chunk.length);
+  return { line: chunk, rest: leftover ? [leftover, ...words.slice(1)] : words.slice(1) };
 }
 
 function hexRgb(hex: string): RGB {
