@@ -2,6 +2,8 @@ import "server-only";
 import { Resend } from "resend";
 import { capsuleEmailHtml, capsuleEmailSubject, capsuleEmailText } from "@/lib/capsule-email";
 import { parseCapsuleArchive } from "@/lib/capsule-archive";
+import { PDF_CONTENT_TYPE } from "@/lib/capsule-pdf";
+import { loadStoredCapsulePdf } from "@/lib/capsule-pdf-store";
 import { appUrl, resendApiKey, resendFromEmail } from "@/lib/env";
 import {
   capsuleFromHeader,
@@ -314,6 +316,27 @@ async function sendCapsuleEmail(
     });
   }
 
+  let pdfAttachment:
+    | { filename: string; content: Buffer; contentType: string }
+    | undefined;
+  try {
+    const pdf = await loadStoredCapsulePdf({
+      groupName: group.name,
+      yearMonth: month.year_month,
+      version: edition,
+      pdfStoragePath: capsule.pdf_storage_path,
+    });
+    if (pdf) {
+      pdfAttachment = {
+        filename: pdf.filename,
+        content: Buffer.from(pdf.bytes),
+        contentType: PDF_CONTENT_TYPE,
+      };
+    }
+  } catch (caught) {
+    console.error("capsule pdf attach failed", caught instanceof Error ? caught.message : caught);
+  }
+
   const resend = new Resend(key);
   let accepted = 0;
   let error: string | null = null;
@@ -326,6 +349,17 @@ async function sendCapsuleEmail(
           subject,
           html,
           text,
+          ...(pdfAttachment
+            ? {
+                attachments: [
+                  {
+                    filename: pdfAttachment.filename,
+                    content: pdfAttachment.content,
+                    contentType: pdfAttachment.contentType,
+                  },
+                ],
+              }
+            : {}),
         }),
         RESEND_SEND_TIMEOUT_MS,
         RESEND_TIMEOUT_MESSAGE,

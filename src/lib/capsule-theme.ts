@@ -45,11 +45,12 @@ export function capsuleThemeMeta(theme: CapsuleTheme): CapsuleThemeSwatch {
   return CAPSULE_THEME_CATALOG.find((row) => row.id === theme) ?? CAPSULE_THEME_CATALOG[0]!;
 }
 
-export type LetterPhotoLayout = "grid" | "weave" | "strip" | "plates";
+export type LetterPhotoLayout = "grid" | "strip" | "plates";
 
+/** Extra photos after the writing. In-flow photos weave beside paragraphs on every theme. */
 export const THEME_PHOTO_LAYOUT: Record<CapsuleTheme, LetterPhotoLayout> = {
   classic: "grid",
-  warm: "weave",
+  warm: "grid",
   minimal: "strip",
   heritage: "plates",
 };
@@ -61,11 +62,18 @@ export type ThemePhoto = {
   sort_order: number;
 };
 
+export type WeaveSide = "left" | "right";
+
 export type LetterBlock =
   | { kind: "heading"; name: string }
   | { kind: "text"; text: string }
-  | { kind: "photo"; photo: ThemePhoto; variant: "weave" | "plate"; plateIndex?: number }
+  | { kind: "photo"; photo: ThemePhoto; variant: "weave"; side: WeaveSide }
+  | { kind: "photo"; photo: ThemePhoto; variant: "plate"; plateIndex?: number }
   | { kind: "gallery"; photos: ThemePhoto[]; variant: "grid" | "strip" };
+
+export function weavePhotoSide(index: number): WeaveSide {
+  return index % 2 === 0 ? "right" : "left";
+}
 
 export function letterParagraphs(body: string): string[] {
   const normalized = body.replace(/\r\n/g, "\n").trim();
@@ -108,38 +116,70 @@ function toRoman(value: number): string {
 export function weaveLetterBlocks(
   paragraphs: string[],
   photos: ThemePhoto[],
-): Array<Extract<LetterBlock, { kind: "text" } | { kind: "photo" }>> {
+): Array<
+  | Extract<LetterBlock, { kind: "text" }>
+  | Extract<LetterBlock, { kind: "photo"; variant: "weave" }>
+> {
+  if (paragraphs.length === 0) return [];
   if (photos.length === 0) {
     return paragraphs.map((text) => ({ kind: "text" as const, text }));
   }
-  if (paragraphs.length === 0) {
-    return photos.map((photo) => ({ kind: "photo" as const, photo, variant: "weave" as const }));
-  }
 
-  const blocks: Array<Extract<LetterBlock, { kind: "text" } | { kind: "photo" }>> = [];
+  const blocks: Array<
+    | Extract<LetterBlock, { kind: "text" }>
+    | Extract<LetterBlock, { kind: "photo"; variant: "weave" }>
+  > = [];
   let photoIndex = 0;
   paragraphs.forEach((text, index) => {
-    blocks.push({ kind: "text", text });
     const expected = Math.floor(((index + 1) * photos.length) / paragraphs.length);
-    while (photoIndex < expected && photoIndex < photos.length) {
+    if (photoIndex < expected && photoIndex < photos.length) {
       blocks.push({
         kind: "photo",
         photo: photos[photoIndex]!,
         variant: "weave",
+        side: weavePhotoSide(photoIndex),
       });
       photoIndex += 1;
     }
+    blocks.push({ kind: "text", text });
   });
-  while (photoIndex < photos.length) {
-    blocks.push({
-      kind: "photo",
-      photo: photos[photoIndex]!,
-      variant: "weave",
-    });
-    photoIndex += 1;
-  }
 
   return blocks;
+}
+
+export type LetterRun = {
+  kind: "run";
+  photo: Extract<LetterBlock, { kind: "photo"; variant: "weave" }>;
+  text: string;
+};
+
+export function groupWovenRuns(blocks: LetterBlock[]): Array<LetterBlock | LetterRun> {
+  const out: Array<LetterBlock | LetterRun> = [];
+  for (let i = 0; i < blocks.length; i += 1) {
+    const block = blocks[i]!;
+    const next = blocks[i + 1];
+    if (block.kind === "photo" && block.variant === "weave" && next?.kind === "text") {
+      out.push({ kind: "run", photo: block, text: next.text });
+      i += 1;
+      continue;
+    }
+    out.push(block);
+  }
+  return out;
+}
+
+export function leftoverPhotoBlocks(theme: CapsuleTheme, photos: ThemePhoto[]): LetterBlock[] {
+  if (photos.length === 0) return [];
+  const layout = THEME_PHOTO_LAYOUT[theme];
+  if (layout === "plates") {
+    return photos.map((photo, index) => ({
+      kind: "photo" as const,
+      photo,
+      variant: "plate" as const,
+      plateIndex: index,
+    }));
+  }
+  return [{ kind: "gallery", photos, variant: layout }];
 }
 
 export function layoutPersonSection(
@@ -149,31 +189,12 @@ export function layoutPersonSection(
   const heading: LetterBlock = { kind: "heading", name: letter.preferred_name };
   const paragraphs = letterParagraphs(letter.body);
   const photos = letter.photos;
-  const layout = THEME_PHOTO_LAYOUT[theme];
-
-  if (layout === "weave") {
-    return [heading, ...weaveLetterBlocks(paragraphs, photos)];
-  }
-
-  const textBlocks: LetterBlock[] = paragraphs.map((text) => ({ kind: "text", text }));
-  if (layout === "strip") {
-    const gallery: LetterBlock[] =
-      photos.length > 0 ? [{ kind: "gallery", photos, variant: "strip" }] : [];
-    return [heading, ...textBlocks, ...gallery];
-  }
-  if (layout === "plates") {
-    const plates: LetterBlock[] = photos.map((photo, index) => ({
-      kind: "photo",
-      photo,
-      variant: "plate",
-      plateIndex: index,
-    }));
-    return [heading, ...textBlocks, ...plates];
-  }
-
-  const gallery: LetterBlock[] =
-    photos.length > 0 ? [{ kind: "gallery", photos, variant: "grid" }] : [];
-  return [heading, ...textBlocks, ...gallery];
+  const besideCount = Math.min(photos.length, paragraphs.length);
+  return [
+    heading,
+    ...weaveLetterBlocks(paragraphs, photos.slice(0, besideCount)),
+    ...leftoverPhotoBlocks(theme, photos.slice(besideCount)),
+  ];
 }
 
 export function layoutCapsuleSections(

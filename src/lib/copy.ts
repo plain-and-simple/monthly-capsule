@@ -134,6 +134,8 @@ export const MANAGE_TAG_SUBMITTED = "Capsule already submitted";
 export const MANAGE_TAG_READ = "Read latest capsule";
 export const MANAGE_TAG_NOT_OPEN = "Next capsule not open";
 export const CONTRIBUTORS_PREFIX = "Contributors:";
+export const DOWNLOAD_PDF_LABEL = "Download PDF";
+export const CAPSULE_EMAIL_PDF_NOTE = "A PDF keepsake is attached when we have one.";
 export const SUBMIT_CLOSED_HEADING = "Writing is closed";
 
 export const UNTITLED_GROUP = "Untitled group";

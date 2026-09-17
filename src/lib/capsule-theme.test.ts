@@ -10,6 +10,8 @@ import {
   themeFormValue,
   THEME_PHOTO_LAYOUT,
   weaveLetterBlocks,
+  weavePhotoSide,
+  groupWovenRuns,
 } from "./capsule-theme";
 
 const ada = {
@@ -104,83 +106,74 @@ describe("section-per-person structure", () => {
 });
 
 describe("theme-owned photo vs text layout", () => {
-  it("classic is letter then a photo grid", () => {
+  it("every theme weaves photos beside the writing", () => {
+    for (const theme of ["classic", "warm", "minimal", "heritage"] as const) {
+      const kinds = layoutPersonSection(theme, ada).map((block) => block.kind);
+      expect(kinds[0]).toBe("heading");
+      expect(kinds.filter((kind) => kind === "photo")).toHaveLength(2);
+      expect(kinds.filter((kind) => kind === "text")).toHaveLength(3);
+      expect(kinds.join(" ")).toBe("heading text photo text photo text");
+    }
+  });
+
+  it("classic and warm park leftover photos in a grid", () => {
     expect(THEME_PHOTO_LAYOUT.classic).toBe("grid");
-    const kinds = layoutPersonSection("classic", ada).map((block) =>
-      block.kind === "gallery" ? `gallery:${block.variant}` : block.kind,
-    );
-    expect(kinds[0]).toBe("heading");
-    expect(kinds.slice(1, -1).every((kind) => kind === "text")).toBe(true);
-    expect(kinds.at(-1)).toBe("gallery:grid");
+    expect(THEME_PHOTO_LAYOUT.warm).toBe("grid");
   });
 
-  it("warm weaves photos through the writing", () => {
-    expect(THEME_PHOTO_LAYOUT.warm).toBe("weave");
-    const kinds = layoutPersonSection("warm", ada).map((block) => block.kind);
-    expect(kinds[0]).toBe("heading");
-    expect(kinds.filter((kind) => kind === "photo")).toHaveLength(2);
-    expect(kinds.filter((kind) => kind === "text")).toHaveLength(3);
-    const firstPhoto = kinds.indexOf("photo");
-    const lastText = kinds.lastIndexOf("text");
-    expect(firstPhoto).toBeGreaterThan(1);
-    expect(firstPhoto).toBeLessThan(lastText);
-  });
-
-  it("minimal is text-first with a quiet strip at the end", () => {
+  it("minimal leftover photos stay a quiet strip", () => {
     expect(THEME_PHOTO_LAYOUT.minimal).toBe("strip");
-    const kinds = layoutPersonSection("minimal", ada).map((block) =>
-      block.kind === "gallery" ? `gallery:${block.variant}` : block.kind,
-    );
-    expect(kinds.at(-1)).toBe("gallery:strip");
-    expect(kinds.slice(1, -1).every((kind) => kind === "text")).toBe(true);
   });
 
-  it("heritage places bordered plates after the letter", () => {
+  it("heritage leftover photos become bordered plates", () => {
     expect(THEME_PHOTO_LAYOUT.heritage).toBe("plates");
-    const blocks = layoutPersonSection("heritage", ada);
-    expect(blocks.filter((block) => block.kind === "text").length).toBeGreaterThan(0);
-    const plates = blocks.filter((block) => block.kind === "photo");
-    expect(plates).toHaveLength(2);
-    expect(plates.every((block) => block.kind === "photo" && block.variant === "plate")).toBe(true);
-    expect(blocks.findIndex((block) => block.kind === "photo")).toBeGreaterThan(
-      blocks.findIndex((block) => block.kind === "text"),
-    );
     expect(plateLabel(0)).toBe("Plate I");
     expect(plateLabel(1)).toBe("Plate II");
   });
 
-  it("html marks the four layouts distinctly", () => {
+  it("html weaves photos on every theme and keeps leftover chrome distinct", () => {
+    const extra = {
+      ...ada,
+      body: "One short note.\n\nAnother beat.",
+      photos: [
+        ...ada.photos,
+        { storage_path: "g/a3.jpg", width: 800, height: 600, sort_order: 2 },
+      ],
+    };
     const classic = renderArchiveHtml({
       year_month: "2026-10",
       group_name: "Kitchen",
       theme: "classic",
-      letters: [ada],
+      letters: [extra],
     });
     const warm = renderArchiveHtml({
       year_month: "2026-10",
       group_name: "Kitchen",
       theme: "warm",
-      letters: [ada],
+      letters: [extra],
     });
     const minimal = renderArchiveHtml({
       year_month: "2026-10",
       group_name: "Kitchen",
       theme: "minimal",
-      letters: [ada],
+      letters: [extra],
     });
     const heritage = renderArchiveHtml({
       year_month: "2026-10",
       group_name: "Kitchen",
       theme: "heritage",
-      letters: [ada],
+      letters: [extra],
     });
-    expect(classic).toContain('data-layout="letter-then-photos"');
+    for (const html of [classic, warm, minimal, heritage]) {
+      expect(html).toContain('data-layout="photos-woven"');
+      expect(html).toContain("letter__run");
+      expect(html).toContain("letter__photo--weave");
+      expect(html).toContain("letter__photo--right");
+      expect(html).toContain("letter__photo--left");
+    }
     expect(classic).toContain("letter__photos--grid");
-    expect(warm).toContain('data-layout="photos-woven"');
-    expect(warm).toContain("letter__photo--weave");
-    expect(minimal).toContain('data-layout="text-then-strip"');
+    expect(warm).toContain("letter__photos--grid");
     expect(minimal).toContain("letter__photos--strip");
-    expect(heritage).toContain('data-layout="letter-then-plates"');
     expect(heritage).toContain("letter__plate");
     expect(heritage).toContain("Plate I");
     expect(new Set([classic, warm, minimal, heritage]).size).toBe(4);
@@ -200,13 +193,68 @@ describe("theme-owned photo vs text layout", () => {
   });
 });
 
-describe("warm weave rhythm", () => {
+describe("newspaper weave rhythm", () => {
   it("places a photo between writing, not only in a trailing blob", () => {
     const woven = weaveLetterBlocks(["One.", "Two.", "Three."], ada.photos);
     const kinds = woven.map((block) => block.kind);
     expect(kinds.filter((kind) => kind === "photo")).toHaveLength(2);
     expect(kinds.filter((kind) => kind === "text")).toHaveLength(3);
     expect(kinds.indexOf("photo")).toBeLessThan(kinds.lastIndexOf("text"));
-    expect(kinds.join(" ")).toBe("text text photo text photo");
+    expect(kinds.join(" ")).toBe("text photo text photo text");
+  });
+
+  it("puts a photo beside each of two paragraphs, alternating sides", () => {
+    const woven = weaveLetterBlocks(["One.", "Two."], ada.photos);
+    expect(
+      woven.map((block) =>
+        block.kind === "photo" ? `photo:${block.side}` : block.kind,
+      ),
+    ).toEqual(["photo:right", "text", "photo:left", "text"]);
+    expect(weavePhotoSide(0)).toBe("right");
+    expect(weavePhotoSide(1)).toBe("left");
+  });
+
+  it("keeps extra photos after the letter when someone writes little", () => {
+    const extra = {
+      preferred_name: "Ada",
+      body: "One.\n\nTwo.",
+      photos: [
+        ...ada.photos,
+        { storage_path: "g/a3.jpg", width: 800, height: 600, sort_order: 2 },
+      ],
+    };
+    const label = (block: ReturnType<typeof layoutPersonSection>[number]) =>
+      block.kind === "gallery" ? `gallery:${block.variant}` : block.kind === "photo" ? block.variant : block.kind;
+
+    expect(layoutPersonSection("classic", extra).map(label).join(" ")).toBe(
+      "heading weave text weave text gallery:grid",
+    );
+    expect(layoutPersonSection("warm", extra).map(label).join(" ")).toBe(
+      "heading weave text weave text gallery:grid",
+    );
+    expect(layoutPersonSection("minimal", extra).map(label).join(" ")).toBe(
+      "heading weave text weave text gallery:strip",
+    );
+    expect(layoutPersonSection("heritage", extra).map(label).join(" ")).toBe(
+      "heading weave text weave text plate",
+    );
+  });
+
+  it("with no writing, every photo lands at the end", () => {
+    const photosOnly = { preferred_name: "Ada", body: "", photos: ada.photos };
+    expect(layoutPersonSection("classic", photosOnly).map((block) => block.kind)).toEqual([
+      "heading",
+      "gallery",
+    ]);
+    expect(layoutPersonSection("heritage", photosOnly).map((block) => block.kind)).toEqual([
+      "heading",
+      "photo",
+      "photo",
+    ]);
+  });
+
+  it("pairs each in-flow photo with the paragraph it wraps", () => {
+    const grouped = groupWovenRuns(layoutPersonSection("classic", { preferred_name: "Ada", body: "One.\n\nTwo.", photos: ada.photos }));
+    expect(grouped.map((block) => block.kind)).toEqual(["heading", "run", "run"]);
   });
 });

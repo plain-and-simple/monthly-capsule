@@ -1282,14 +1282,76 @@ button.listitem:hover {
   filter: grayscale(0.15);
 }
 
+.letter[data-layout="photos-woven"] {
+  display: flow-root;
+}
+
+.letter__run {
+  display: flow-root;
+}
+
+.letter__run + .letter__run,
+.letter__run + .letter__text,
+.letter__text + .letter__run {
+  margin-top: 1.05rem;
+}
+
+.letter[data-layout="photos-woven"] > h2 + .letter__text,
+.letter[data-layout="photos-woven"] > h2 + .letter__run,
+.letter[data-layout="photos-woven"] > h2 + .letter__photo--weave + .letter__text,
+.letter[data-layout="photos-woven"] > .letter__head + .letter__text,
+.letter[data-layout="photos-woven"] > .letter__head + .letter__run,
+.letter[data-layout="photos-woven"] > .letter__head + .letter__photo--weave + .letter__text {
+  margin-top: 0;
+}
+
+.letter[data-layout="photos-woven"] .letter__photos,
+.letter[data-layout="photos-woven"] .letter__plate {
+  clear: both;
+}
+
 .letter__photo--weave {
-  margin: 1.15rem 0 0;
+  float: right;
+  width: min(42%, 15rem);
+  margin: 0.2rem 0 0.9rem 1.15rem;
+}
+
+.letter__photo--weave.letter__photo--left {
+  float: left;
+  margin: 0.2rem 1.15rem 0.9rem 0;
 }
 
 .letter__photo--weave .photo {
   aspect-ratio: auto;
+  height: auto;
   border-radius: 10px;
   overflow: hidden;
+  border: 0;
+}
+
+.letter__photo--weave .photo img {
+  width: 100%;
+  height: auto;
+  object-fit: contain;
+}
+
+.capsule--classic .letter__photo--weave .photo {
+  border-radius: 4px;
+  border: 1px solid var(--line);
+}
+
+.capsule--minimal .letter__photo--weave .photo {
+  border-radius: 2px;
+}
+
+.capsule--minimal .letter__photo--weave .photo img {
+  filter: grayscale(0.15);
+}
+
+.capsule--heritage .letter__photo--weave .photo {
+  border-radius: 0;
+  border: 1px solid #1c1710;
+  box-shadow: inset 0 0 0 4px #f8f1de, inset 0 0 0 5px #8a6a32;
 }
 
 .letter__plate {
@@ -1525,9 +1587,7 @@ button.listitem:hover {
   font-size: 1.14rem;
   line-height: 1.85;
   color: #1c1710;
-  max-width: 38rem;
-  margin-left: auto;
-  margin-right: auto;
+  text-align: left;
 }
 
 .capsule--heritage .capsule__colophon {
@@ -1537,11 +1597,16 @@ button.listitem:hover {
   color: #5c5140;
 }
 
+.capsule__keepsake {
+  margin: 0;
+}
+
 @media print {
   .topbar,
   .backlink,
   .footer,
-  .quietnav {
+  .quietnav,
+  .capsule__keepsake {
     display: none !important;
   }
 
@@ -1581,5 +1646,12 @@ button.listitem:hover {
   .capsule--heritage,
   .capsule--warm {
     padding: 1.6rem 1.1rem;
+  }
+
+  .letter__photo--weave,
+  .letter__photo--weave.letter__photo--left {
+    float: none;
+    width: auto;
+    margin: 1.15rem 0 0;
   }
 }

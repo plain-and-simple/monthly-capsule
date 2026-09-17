@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { CAPSULE_EMAIL_PDF_NOTE } from "./copy";
 import { capsuleEmailHtml, capsuleEmailSubject, capsuleEmailText } from "./capsule-email";
 
 describe("capsule email", () => {
@@ -16,6 +17,13 @@ describe("capsule email", () => {
         link: "https://capsule.plainandsimple.app/g/x/capsule/2026-09",
       }),
     ).toContain("Read the whole capsule: https://capsule.plainandsimple.app/g/x/capsule/2026-09");
+    expect(
+      capsuleEmailText({
+        groupName: "Cedar Street",
+        monthLabel: "September 2026",
+        link: "https://capsule.plainandsimple.app/g/x/capsule/2026-09",
+      }),
+    ).toContain(CAPSULE_EMAIL_PDF_NOTE);
   });
 
   it("includes submitted letters and a read link, never a late writer's name", () => {
@@ -28,6 +36,7 @@ describe("capsule email", () => {
     });
     expect(html).toContain("The plum tree finally did something.");
     expect(html).toContain("Read the whole capsule");
+    expect(html).toContain(CAPSULE_EMAIL_PDF_NOTE);
     expect(html).toContain("October 10");
     expect(html).not.toContain("Theo");
   });

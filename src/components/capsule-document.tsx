@@ -1,9 +1,11 @@
 import {
+  groupWovenRuns,
   layoutPersonSection,
   parseCapsuleTheme,
   plateLabel,
   type CapsuleTheme,
   type LetterBlock,
+  type LetterRun,
 } from "@/lib/capsule-theme";
 import type { CapsuleArchivePhoto } from "@/lib/capsule-archive";
 import { contributorsLine, PHOTO_UNAVAILABLE } from "@/lib/copy";
@@ -113,22 +115,14 @@ function CapsuleCover({
 }
 
 function PersonSection({ theme, letter }: { theme: CapsuleTheme; letter: CapsuleViewLetter }) {
-  const layout =
-    theme === "classic"
-      ? "letter-then-photos"
-      : theme === "warm"
-        ? "photos-woven"
-        : theme === "minimal"
-          ? "text-then-strip"
-          : "letter-then-plates";
   const photoByPath = new Map(letter.photos.map((photo) => [photo.storage_path, photo]));
-  const blocks = layoutPersonSection(theme, letter);
+  const blocks = groupWovenRuns(layoutPersonSection(theme, letter));
 
   return (
     <section
       className={`letter letter--${theme}`}
       data-author={letter.preferred_name}
-      data-layout={layout}
+      data-layout="photos-woven"
     >
       {blocks.map((block, index) => (
         <LetterBlockView
@@ -148,9 +142,17 @@ function LetterBlockView({
   photoByPath,
 }: {
   theme: CapsuleTheme;
-  block: LetterBlock;
+  block: LetterBlock | LetterRun;
   photoByPath: Map<string, CapsuleViewPhoto>;
 }) {
+  if (block.kind === "run") {
+    return (
+      <div className="letter__run">
+        <LetterBlockView theme={theme} block={block.photo} photoByPath={photoByPath} />
+        <p className="letter__text">{block.text}</p>
+      </div>
+    );
+  }
   if (block.kind === "heading") {
     if (theme === "minimal" || theme === "heritage") {
       return <h2 className="letter__name">{block.name}</h2>;
@@ -184,7 +186,7 @@ function LetterBlockView({
     );
   }
   return (
-    <figure className="letter__photo letter__photo--weave">
+    <figure className={`letter__photo letter__photo--weave letter__photo--${block.side}`}>
       <ThemePhoto photo={photo} />
     </figure>
   );
