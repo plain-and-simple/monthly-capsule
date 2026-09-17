@@ -57,4 +57,5 @@ People typically write about two paragraphs and put photos on the sides so it re
 
 - Web: `npm run dev` on port 3000. `.cursor/start.sh` may start local Supabase first.
 - Keep PRs focused. PIN, PDF/layout, and photo-cap are separate concerns.
+- **Merge ready work into `main` yourself.** Chandler does not merge or track pull requests. After CI is green, land it.
 - Dogfood against the real submit → compile → capsule → PDF path. Do not invent a second editor or a second photo pipeline.
