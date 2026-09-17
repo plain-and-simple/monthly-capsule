@@ -603,6 +603,11 @@ button.textlink:hover {
   font-size: 0.85rem;
 }
 
+.field .err {
+  display: block;
+  margin-top: 0.25rem;
+}
+
 .toast {
   position: fixed;
   z-index: 80;
