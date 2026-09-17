@@ -1,6 +1,7 @@
 import { expect, type Page } from "@playwright/test";
 import {
   CONTRIBUTORS_PREFIX,
+  CYCLE_CLOSE_COMPILE,
   GROUP_PRIMARY_EDIT,
   GROUP_PRIMARY_SUBMIT,
   LANDING_SIGN_IN,
@@ -10,7 +11,7 @@ import {
   SUBMIT_DRAFT,
   SUBMIT_SAVED_DRAFT,
 } from "../../src/lib/copy";
-import { CYCLE_OPENED } from "../../src/lib/cycle";
+import { CYCLE_ALREADY_OPEN, CYCLE_OPENED } from "../../src/lib/cycle";
 import { canRunAuthenticatedE2E } from "../../src/lib/e2e-target";
 import { STUDIO_CODE_ERROR } from "../../src/lib/studio-code";
 import { E2E_STORAGE_STATE_PATH } from "./auth-file";
@@ -106,7 +107,15 @@ export async function openSubmitIfClosed(page: Page) {
   const openEarly = page.getByRole("button", { name: "Open submit early" });
   if ((await openEarly.count()) === 0) return;
   await openEarly.click();
-  await expect(page.getByText(CYCLE_OPENED)).toBeVisible({ timeout: 20_000 });
+  const opened = page.getByText(CYCLE_OPENED);
+  const already = page.getByText(CYCLE_ALREADY_OPEN);
+  const close = page.getByRole("button", { name: CYCLE_CLOSE_COMPILE });
+  const write = page.getByRole("link", { name: GROUP_PRIMARY_SUBMIT });
+  const err = page.locator(".err");
+  await expect(opened.or(already).or(close).or(write).or(err)).toBeVisible({ timeout: 30_000 });
+  if ((await err.count()) > 0 && (await opened.count()) === 0 && (await already.count()) === 0) {
+    throw new Error(`Open submit early failed: ${await err.first().innerText()}`);
+  }
   await page.reload();
 }
 

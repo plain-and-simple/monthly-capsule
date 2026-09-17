@@ -91,5 +91,9 @@ describe("e2e suite locks", () => {
     expect(setup).toContain("storageState");
     expect(config).toContain("auth\\.setup\\.ts");
     expect(config).toContain('name: "setup"');
+    const ready = readFileSync(resolve(repoRoot, "e2e/helpers/ready.ts"), "utf8");
+    expect(ready).toContain("CYCLE_ALREADY_OPEN");
+    expect(ready).toContain("CYCLE_CLOSE_COMPILE");
+    expect(ready).toContain("opened.or(already).or(close)");
   });
 });

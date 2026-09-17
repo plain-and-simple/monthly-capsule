@@ -148,6 +148,8 @@ export function CycleForm({
               {writtenPhrase ? `. ${writtenPhrase}.` : "."}
               {!submitOpen && nextOpenDate ? ` Writing opens ${nextOpenDate}.` : ""}
             </p>
+            {openState?.ok ? <p>{CYCLE_OPENED}</p> : null}
+            {openState?.error ? <p className="err">{openState.error}</p> : null}
             <div className="row">
               {canForce && submitOpen ? (
                 confirming && !closeState?.ok ? (
@@ -192,8 +194,6 @@ export function CycleForm({
               ) : canForce ? (
                 <form action={openAction} onSubmit={markOpenBusy} aria-busy={openBusy || undefined}>
                   <input type="hidden" name="groupId" value={groupId} />
-                  {openState?.error ? <p className="err">{openState.error}</p> : null}
-                  {openState?.ok ? <p>{CYCLE_OPENED}</p> : null}
                   <PendingSubmitButton
                     className="btn btn--secondary"
                     busy={openBusy}
