@@ -1,8 +1,10 @@
 import { expect, test } from "@playwright/test";
+import { readFileSync } from "node:fs";
 import {
   CONTRIBUTORS_PREFIX,
   CYCLE_CLOSE_COMPILE,
   CYCLE_OPEN_EARLY,
+  DOWNLOAD_PDF_LABEL,
   GROUP_NEXT_CAPSULE,
   GROUP_PEOPLE_HEADING,
   JOIN_PIN_LABEL,
@@ -78,6 +80,7 @@ test.describe("Ready authenticated paths", () => {
     await goYourGroupsThenOpenGroup(page);
     const cover = await openCapsuleCover(page);
     test.skip(cover === "none", "No compiled capsule to read yet.");
+    await expect(page.getByRole("link", { name: DOWNLOAD_PDF_LABEL })).toBeVisible();
     test.skip(cover === "empty", "Latest compiled capsule has no letters.");
     await expect(page.getByText(new RegExp(`^${CONTRIBUTORS_PREFIX}`))).toBeVisible();
     await expect(page.getByText("Letters and photographs, kept together.")).toHaveCount(0);
@@ -141,6 +144,17 @@ test.describe("Ready authenticated paths", () => {
     expect(cover).toBe("letters");
     await expect(page.getByText(new RegExp(`^${CONTRIBUTORS_PREFIX}`))).toBeVisible();
     await expect(page.getByText("Letters and photographs, kept together.")).toHaveCount(0);
+    const pdfLink = page.getByRole("link", { name: DOWNLOAD_PDF_LABEL });
+    await expect(pdfLink).toBeVisible();
+    const [download] = await Promise.all([
+      page.waitForEvent("download", { timeout: 60_000 }),
+      pdfLink.click(),
+    ]);
+    expect(download.suggestedFilename()).toMatch(/\.pdf$/);
+    const downloadPath = await download.path();
+    expect(downloadPath).toBeTruthy();
+    const header = readFileSync(downloadPath!).subarray(0, 4).toString("ascii");
+    expect(header).toBe("%PDF");
 
     await page.getByRole("link", { name: /^← / }).click();
     await page.getByRole("link", { name: "Settings" }).click();

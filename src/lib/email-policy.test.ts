@@ -227,6 +227,8 @@ describe("send path must not stamp blindly", () => {
     expect(source).toContain("previewCapsuleSend");
     expect(source).toContain("capsuleEmailText");
     expect(source).toContain("to: [to]");
+    expect(source).toContain("loadStoredCapsulePdf");
+    expect(source).toContain("attachments");
     const cycle = readFileSync(resolve(here, "../actions/cycle.ts"), "utf8");
     expect(cycle).toContain("ownerEmailFailed");
     expect(cycle).toContain("forceResend");

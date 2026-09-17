@@ -1537,11 +1537,16 @@ button.listitem:hover {
   color: #5c5140;
 }
 
+.capsule__keepsake {
+  margin: 0;
+}
+
 @media print {
   .topbar,
   .backlink,
   .footer,
-  .quietnav {
+  .quietnav,
+  .capsule__keepsake {
     display: none !important;
   }
 

@@ -102,6 +102,8 @@ describe("compile and view wire the archive", () => {
     expect(page).toContain("archive.letters");
     expect(page).toContain("archive.theme");
     expect(page).toContain("CapsuleDocument");
+    expect(page).toContain("DOWNLOAD_PDF_LABEL");
+    expect(page).toContain("capsulePdfHref");
     expect(page).not.toContain("includedSubmissions");
   });
 });

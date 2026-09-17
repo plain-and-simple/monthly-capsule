@@ -3,8 +3,14 @@ import { notFound } from "next/navigation";
 import { CapsuleDocument } from "@/components/capsule-document";
 import { EmailGroupForm } from "@/components/email-group-form";
 import { parseCapsuleArchive } from "@/lib/capsule-archive";
+import { capsulePdfHref } from "@/lib/capsule-pdf";
 import { ensureCapsuleArchive, findMonthEdition } from "@/lib/compile";
-import { CAPSULE_NOT_READY_HEADING, CAPSULE_NOT_READY_HINT, groupDisplayName } from "@/lib/copy";
+import {
+  CAPSULE_NOT_READY_HEADING,
+  CAPSULE_NOT_READY_HINT,
+  DOWNLOAD_PDF_LABEL,
+  groupDisplayName,
+} from "@/lib/copy";
 import { canForceCycle } from "@/lib/manage";
 import { capsuleTitle, DEFAULT_MONTH_VERSION } from "@/lib/month-version";
 import { signedPhotoUrls } from "@/lib/photos";
@@ -84,6 +90,12 @@ export async function CapsuleView({
               alreadySent={Boolean(capsule.email_sent_at)}
             />
           ) : null}
+
+          <p className="capsule__keepsake">
+            <a className="btn btn--secondary" href={capsulePdfHref(uuid, yearMonth, month.version)}>
+              {DOWNLOAD_PDF_LABEL}
+            </a>
+          </p>
 
           <CapsuleDocument
             theme={archive.theme}
