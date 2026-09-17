@@ -147,6 +147,27 @@ export function weaveLetterBlocks(
   return blocks;
 }
 
+export type LetterRun = {
+  kind: "run";
+  photo: Extract<LetterBlock, { kind: "photo"; variant: "weave" }>;
+  text: string;
+};
+
+export function groupWovenRuns(blocks: LetterBlock[]): Array<LetterBlock | LetterRun> {
+  const out: Array<LetterBlock | LetterRun> = [];
+  for (let i = 0; i < blocks.length; i += 1) {
+    const block = blocks[i]!;
+    const next = blocks[i + 1];
+    if (block.kind === "photo" && block.variant === "weave" && next?.kind === "text") {
+      out.push({ kind: "run", photo: block, text: next.text });
+      i += 1;
+      continue;
+    }
+    out.push(block);
+  }
+  return out;
+}
+
 export function leftoverPhotoBlocks(theme: CapsuleTheme, photos: ThemePhoto[]): LetterBlock[] {
   if (photos.length === 0) return [];
   const layout = THEME_PHOTO_LAYOUT[theme];

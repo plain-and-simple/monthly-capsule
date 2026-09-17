@@ -11,6 +11,7 @@ import {
   THEME_PHOTO_LAYOUT,
   weaveLetterBlocks,
   weavePhotoSide,
+  groupWovenRuns,
 } from "./capsule-theme";
 
 const ada = {
@@ -165,6 +166,7 @@ describe("theme-owned photo vs text layout", () => {
     });
     for (const html of [classic, warm, minimal, heritage]) {
       expect(html).toContain('data-layout="photos-woven"');
+      expect(html).toContain("letter__run");
       expect(html).toContain("letter__photo--weave");
       expect(html).toContain("letter__photo--right");
       expect(html).toContain("letter__photo--left");
@@ -249,5 +251,10 @@ describe("newspaper weave rhythm", () => {
       "photo",
       "photo",
     ]);
+  });
+
+  it("pairs each in-flow photo with the paragraph it wraps", () => {
+    const grouped = groupWovenRuns(layoutPersonSection("classic", { preferred_name: "Ada", body: "One.\n\nTwo.", photos: ada.photos }));
+    expect(grouped.map((block) => block.kind)).toEqual(["heading", "run", "run"]);
   });
 });

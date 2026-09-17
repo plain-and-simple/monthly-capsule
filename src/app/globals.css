@@ -1286,9 +1286,21 @@ button.listitem:hover {
   display: flow-root;
 }
 
+.letter__run {
+  display: flow-root;
+}
+
+.letter__run + .letter__run,
+.letter__run + .letter__text,
+.letter__text + .letter__run {
+  margin-top: 1.05rem;
+}
+
 .letter[data-layout="photos-woven"] > h2 + .letter__text,
+.letter[data-layout="photos-woven"] > h2 + .letter__run,
 .letter[data-layout="photos-woven"] > h2 + .letter__photo--weave + .letter__text,
 .letter[data-layout="photos-woven"] > .letter__head + .letter__text,
+.letter[data-layout="photos-woven"] > .letter__head + .letter__run,
 .letter[data-layout="photos-woven"] > .letter__head + .letter__photo--weave + .letter__text {
   margin-top: 0;
 }

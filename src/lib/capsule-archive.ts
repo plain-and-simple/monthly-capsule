@@ -1,10 +1,12 @@
 import {
   DEFAULT_CAPSULE_THEME,
+  groupWovenRuns,
   layoutPersonSection,
   parseCapsuleTheme,
   plateLabel,
   type CapsuleTheme,
   type LetterBlock,
+  type LetterRun,
 } from "@/lib/capsule-theme";
 import { contributorsLine } from "@/lib/copy";
 import { monthLabel } from "@/lib/schedule";
@@ -197,11 +199,18 @@ function renderCoverHtml(input: {
 }
 
 function renderPersonSectionHtml(theme: CapsuleTheme, letter: CapsuleArchiveLetter): string {
-  const inner = layoutPersonSection(theme, letter).map((block) => renderBlockHtml(block)).join("");
+  const inner = groupWovenRuns(layoutPersonSection(theme, letter))
+    .map((block) => renderBlockHtml(block))
+    .join("");
   return `<section class="letter letter--${theme}" data-author="${escapeAttr(letter.preferred_name)}" data-layout="photos-woven">${inner}</section>`;
 }
 
-function renderBlockHtml(block: LetterBlock): string {
+function renderBlockHtml(block: LetterBlock | LetterRun): string {
+  if (block.kind === "run") {
+    const photoHtml = renderBlockHtml(block.photo);
+    const body = escapeHtml(block.text).replace(/\n/g, "<br />");
+    return `<div class="letter__run">${photoHtml}<p class="letter__text">${body}</p></div>`;
+  }
   if (block.kind === "heading") {
     return `<h2>${escapeHtml(block.name)}</h2>`;
   }
