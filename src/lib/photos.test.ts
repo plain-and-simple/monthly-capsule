@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { MAX_PHOTO_BYTES } from "./constants";
-import { collectPhotoFiles, appendPhotos, isPhotoUpload, photoContentType, validatePhotoList } from "./photo-files";
+import { PHOTOS_MAX } from "./copy";
+import { collectPhotoFiles, appendPhotos, isPhotoUpload, photoBatchFit, photoContentType, takePhotosUpToMax, validatePhotoList } from "./photo-files";
 
 describe("submit photo uploads", () => {
   it("treats a Blob with size as a photo even when it is not a File", () => {
@@ -38,11 +39,24 @@ describe("submit photo uploads", () => {
 
   it("respects the max photo count", () => {
     const files = Array.from({ length: 7 }, () => new Blob([new Uint8Array([1])], { type: "image/jpeg" }));
-    expect(validatePhotoList(files)).toBe("Max 6 photos.");
+    expect(validatePhotoList(files)).toBe(PHOTOS_MAX);
   });
 
-  it("appends photos up to the max instead of replacing", () => {
+  it("keeps the first 6 and reports extras that did not fit", () => {
     expect(appendPhotos([1, 2], [3, 4], 6)).toEqual([1, 2, 3, 4]);
     expect(appendPhotos([1, 2, 3, 4, 5], [6, 7], 6)).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(takePhotosUpToMax([1, 2, 3, 4, 5], [6, 7, 8, 9, 10], 6)).toEqual({
+      next: [1, 2, 3, 4, 5, 6],
+      kept: [6],
+      dropped: 4,
+    });
+    expect(takePhotosUpToMax([1, 2, 3, 4, 5, 6], [7, 8], 6)).toEqual({
+      next: [1, 2, 3, 4, 5, 6],
+      kept: [],
+      dropped: 2,
+    });
+    expect(photoBatchFit(0, 10, 6)).toEqual({ keep: 6, dropped: 4 });
+    expect(photoBatchFit(5, 5, 6)).toEqual({ keep: 1, dropped: 4 });
+    expect(photoBatchFit(6, 2, 6)).toEqual({ keep: 0, dropped: 2 });
   });
 });

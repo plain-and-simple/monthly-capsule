@@ -14,6 +14,10 @@ describe("submit model A UI", () => {
     expect(source).toContain('value="submit"');
     expect(source).toContain("compressPhotoFile");
     expect(source).toContain("appendPhotos");
+    expect(source).toContain("photoBatchFit");
+    expect(source).toContain("PHOTOS_MAX");
+    expect(source).toContain("of {MAX_PHOTOS} photos.");
+    expect(source).toContain('role="alert"');
     expect(source).not.toContain("0.85");
   });
 

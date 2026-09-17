@@ -11,7 +11,7 @@ import { deleteStoredPhotos } from "@/lib/photos";
 import { resolveSubmitWindow } from "@/lib/cycle-store";
 import { findAccountById } from "@/lib/memberships";
 import { requireGroupMember } from "@/lib/session";
-import { SUBMIT_EMPTY } from "@/lib/copy";
+import { SUBMIT_EMPTY, PHOTOS_MAX } from "@/lib/copy";
 import { nextSubmissionWrite, parseSubmitIntent, submissionHasContent, type SubmitStatus } from "@/lib/submit";
 import { createAdminClient } from "@/lib/supabase";
 
@@ -59,7 +59,7 @@ export async function submitLetter(
       .filter(Boolean);
     const photosTouched = String(formData.get("photos_touched") ?? "") === "1";
     if (keepPaths.length + files.length > MAX_PHOTOS) {
-      return { error: `Max ${MAX_PHOTOS} photos.` };
+      return { error: PHOTOS_MAX };
     }
 
     const photoError = validatePhotoList(files);

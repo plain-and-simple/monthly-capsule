@@ -12,10 +12,11 @@ import {
   SUBMIT_CLOSED_HEADING,
   SUBMIT_DRAFT,
   SUBMIT_EMPTY,
+  PHOTOS_MAX,
   SUBMIT_SAVED_DRAFT,
   SUBMIT_SUBMITTED,
 } from "@/lib/copy";
-import { appendPhotos } from "@/lib/photo-files";
+import { appendPhotos, photoBatchFit } from "@/lib/photo-files";
 import { PHOTO_COMPRESS_FAILED, compressPhotoFile } from "@/lib/photo-compress";
 import { submissionHasContent, type SubmitStatus } from "@/lib/submit";
 
@@ -74,10 +75,16 @@ export function SubmitForm({
 
   async function onFiles(list: FileList | null) {
     const files = Array.from(list ?? []);
-    setPhotoError(null);
+    if (fileRef.current) fileRef.current.value = "";
+    const { keep, dropped } = photoBatchFit(photos.length, files.length, MAX_PHOTOS);
+    const kept = files.slice(0, keep);
+    if (kept.length === 0) {
+      setPhotoError(dropped > 0 ? PHOTOS_MAX : null);
+      return;
+    }
     try {
       const next = await Promise.all(
-        files.map(async (file) => {
+        kept.map(async (file) => {
           const photo = await compressPhotoFile(file);
           return {
             id: `${photo.name}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
@@ -90,10 +97,10 @@ export function SubmitForm({
         }),
       );
       setPhotos((current) => appendPhotos(current, next, MAX_PHOTOS));
+      setPhotoError(dropped > 0 ? PHOTOS_MAX : null);
     } catch (error) {
       setPhotoError(error instanceof Error ? error.message : PHOTO_COMPRESS_FAILED);
     }
-    if (fileRef.current) fileRef.current.value = "";
   }
 
   const status = state?.status ?? initialStatus;
@@ -233,10 +240,17 @@ export function SubmitForm({
           disabled={busy}
           onChange={(event) => void onFiles(event.target.files)}
         />
-        <p className="field__hint">Up to {MAX_PHOTOS}. Add more or remove any you do not want.</p>
+        <p className="field__hint">
+          {photos.length} of {MAX_PHOTOS} photos.
+          {photos.length >= MAX_PHOTOS ? " Remove one to add another." : ""}
+        </p>
       </div>
 
-      {photoError ? <p className="err">{photoError}</p> : null}
+      {photoError ? (
+        <p className="err" role="alert">
+          {photoError}
+        </p>
+      ) : null}
       {state?.error ? <p className="err">{state.error}</p> : null}
       <MutationToast pending={busy} ok={state?.ok} message={toastMessage} />
       <div className="stack stack--tight">
