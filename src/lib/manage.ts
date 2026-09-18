@@ -1,3 +1,4 @@
+import { INVITE_PIN_ASK } from "@/lib/copy";
 import type { Role, SessionPayload } from "@/lib/types";
 
 export const JOIN_WRONG_PIN = "Wrong PIN.";
@@ -75,11 +76,18 @@ export function inviteMessage(shareUrl: string, _typedPin: string, groupName: st
     `Join ${groupName} on Plain and Simple Monthly Capsule.`,
     "",
     `Link: ${shareUrl}`,
+    "",
+    INVITE_PIN_ASK,
   ].join("\n");
 }
 
 export function inviteMessageWithPin(shareUrl: string, pin: string, groupName: string): string {
-  return `${inviteMessage(shareUrl, "", groupName)}\nGroup PIN: ${pin}`;
+  return [
+    `Join ${groupName} on Plain and Simple Monthly Capsule.`,
+    "",
+    `Link: ${shareUrl}`,
+    `Group PIN: ${pin}`,
+  ].join("\n");
 }
 
 export const REGEN_CONFIRM_VALUE = "1";

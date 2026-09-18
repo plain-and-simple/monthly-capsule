@@ -4,6 +4,7 @@ import { useActionState, useState } from "react";
 import { regeneratePin, type RegenPinState } from "@/actions/regenerate-pin";
 import { CopyButton } from "@/components/copy-button";
 import { PendingSubmitButton, useInstantBusy } from "@/components/pending-submit-button";
+import { MAKE_NEW_PIN } from "@/lib/copy";
 import { REGEN_CONFIRM_VALUE, inviteMessageWithPin } from "@/lib/manage";
 
 export function RegenPinForm({
@@ -57,7 +58,7 @@ export function RegenPinForm({
         {state && !state.ok ? <p className="err">{state.error}</p> : null}
         <div>
           <button className="btn btn--secondary" type="button" onClick={() => setConfirming(true)}>
-            Make a new PIN
+            {MAKE_NEW_PIN}
           </button>
         </div>
       </section>
@@ -83,7 +84,7 @@ export function RegenPinForm({
           Cancel
         </button>
         <PendingSubmitButton className="btn btn--primary" busy={busy} pendingLabel="Making…">
-          Make a new PIN
+          {MAKE_NEW_PIN}
         </PendingSubmitButton>
       </div>
     </form>

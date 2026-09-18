@@ -99,8 +99,12 @@ describe("privacy and chrome locks", () => {
     expect(source).toContain("closedCountForMonth");
     expect(source).toContain("GROUP_EARLIER_CAPSULES");
     expect(source).toContain("capsuleTitle");
+    expect(source).toContain("submitWindowCloseDay");
+    expect(source).toContain("capsuleEmailLine");
+    expect(source).toContain("nextOpenMonthLabel");
     expect(source).not.toContain("Last month");
     expect(source).not.toContain("compiled.slice(1)");
+    expect(source).not.toContain("compiled.length > 0");
   });
 
   it("Your groups goes to /manage and the month badge sits in the card", () => {
@@ -125,6 +129,7 @@ describe("privacy and chrome locks", () => {
     expect(source).toContain('href="/join"');
     expect(source).toContain("decideOpenGroupUi");
     expect(source).toContain("manageGroupActionTag");
+    expect(source).toContain("MANAGE_EMPTY_HEADING");
     expect(source).not.toContain("Pick one");
     expect(source).not.toContain("@/actions/open-group");
   });
@@ -216,6 +221,8 @@ describe("leftover journey locks", () => {
     expect(source).toContain("savedPin");
     expect(source).toContain("readAccountFields");
     expect(source).toContain("skipAccount={Boolean(signedInAs)}");
+    expect(source).toContain("MAKE_NEW_PIN");
+    expect(source).not.toContain("Regenerate PIN");
   });
 });
 
@@ -241,6 +248,8 @@ describe("previous-month open picker", () => {
     expect(settings).not.toContain("defaultValue={group.submit_start_day}");
     expect(settings).not.toMatch(/name="submit_end_day"[\s\S]{0,80}variant="open"/);
     expect(settings).not.toMatch(/name="email_day"[\s\S]{0,80}variant="open"/);
+    expect(settings).toContain("CREATE_SCHEDULE_HINT");
+    expect(settings).not.toContain("Days of the month. America/Chicago.</p>");
 
     expect(create).toContain('name="submit_start_day"');
     expect(create).toContain('variant="open"');

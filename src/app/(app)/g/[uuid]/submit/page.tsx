@@ -3,7 +3,7 @@ import { SaveLoginForm } from "@/components/save-login-form";
 import { SubmitForm } from "@/components/submit-form";
 import { membershipHasAccount } from "@/lib/account";
 import { groupDisplayName } from "@/lib/copy";
-import { windowClosesPhrase } from "@/lib/group-status";
+import { submitWindowCloseDay, windowClosesPhrase } from "@/lib/group-status";
 import { resolveSubmitWindow } from "@/lib/cycle-store";
 import { capsuleHref, normalizeMonthVersion } from "@/lib/month-version";
 import { signedPhotoUrls } from "@/lib/photos";
@@ -93,7 +93,9 @@ export default async function SubmitPage({
     : null;
 
   const title = yearMonth ? `Your ${monthLabel(yearMonth).replace(/ \d{4}$/, "")} letter` : "Your letter";
-  const closes = yearMonth ? windowClosesPhrase(yearMonth, group.submit_end_day) : "the window closes";
+  const closes = yearMonth
+    ? windowClosesPhrase(yearMonth, submitWindowCloseDay(group, yearMonth))
+    : "the window closes";
 
   return (
     <main className="main">

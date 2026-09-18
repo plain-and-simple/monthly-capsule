@@ -4,15 +4,18 @@ import {
   GROUP_STATUS_READY,
   GROUP_STATUS_RESTING,
   decorateManagedGroup,
+  capsuleEmailLine,
   capsuleEmailPhrase,
   initials,
   manageGroupActionTag,
   manageGroupStatus,
   membershipRoleLabel,
   nextOpenDateLabel,
+  nextOpenMonthLabel,
   nextOpenPhrase,
   shortMonthDay,
   shortMonthDayYear,
+  submitWindowCloseDay,
   windowClosesPhrase,
 } from "./group-status";
 
@@ -100,6 +103,23 @@ describe("manage group status", () => {
     expect(row.meta).not.toMatch(/2026|2027/);
     expect(shortMonthDay("2026-10", 1)).toBe("Oct 1");
   });
+
+  it("shows month-end when force-open is still active after the scheduled close", () => {
+    const row = decorateManagedGroup(
+      { ...group, force_open_year_month: "2026-09" },
+      {
+        closedYearMonths: [],
+        compiledYearMonths: [],
+        now: new Date("2026-09-18T17:00:00Z"),
+      },
+    );
+    expect(row.status).toBe(GROUP_STATUS_OPEN);
+    expect(row.meta).toBe("Open until Sep 30");
+    expect(submitWindowCloseDay({ ...group, force_open_year_month: "2026-09" }, "2026-09", new Date("2026-09-18T17:00:00Z"))).toBe(
+      30,
+    );
+    expect(submitWindowCloseDay(group, "2026-09", new Date("2026-09-04T17:00:00Z"))).toBe(8);
+  });
 });
 
 describe("next open date label", () => {
@@ -156,6 +176,43 @@ describe("next open date label", () => {
     expect(shortMonthDayYear("2026-10", 1)).toBe("Oct 1, 2026");
     expect(shortMonthDayYear("2027-01", 9)).toBe("Jan 9, 2027");
     expect(capsuleEmailPhrase("2026-09", 9)).toBe("You'll get an email on Sep 9, 2026.");
+  });
+
+  it("hides a calendar email day once the capsule is made or the day has passed", () => {
+    expect(
+      capsuleEmailLine({
+        yearMonth: "2026-09",
+        emailDay: 9,
+        now: new Date("2026-09-04T17:00:00Z"),
+      }),
+    ).toBe("You'll get an email on Sep 9, 2026.");
+    expect(
+      capsuleEmailLine({
+        yearMonth: "2026-09",
+        emailDay: 9,
+        now: new Date("2026-09-18T17:00:00Z"),
+      }),
+    ).toBe("Email goes out after the capsule is made.");
+    expect(
+      capsuleEmailLine({
+        yearMonth: "2026-09",
+        emailDay: 9,
+        compiled: true,
+        now: new Date("2026-09-18T17:00:00Z"),
+      }),
+    ).toBe("");
+    expect(
+      capsuleEmailLine({
+        yearMonth: "2026-09",
+        emailDay: 9,
+        sent: true,
+        now: new Date("2026-09-04T17:00:00Z"),
+      }),
+    ).toBe("");
+  });
+
+  it("names the next closed cycle by month, not the open date", () => {
+    expect(nextOpenMonthLabel(group, [], new Date("2026-09-10T17:00:00Z"))).toBe("October 2026");
   });
 });
 

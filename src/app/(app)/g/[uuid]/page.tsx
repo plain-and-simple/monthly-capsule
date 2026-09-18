@@ -17,7 +17,14 @@ import {
   GROUP_PRIMARY_VIEW,
 } from "@/lib/copy";
 import { groupDisplayName } from "@/lib/copy";
-import { capsuleEmailPhrase, initials, nextOpenDateLabel, windowClosesPhrase } from "@/lib/group-status";
+import {
+  capsuleEmailLine,
+  initials,
+  nextOpenDateLabel,
+  nextOpenMonthLabel,
+  submitWindowCloseDay,
+  windowClosesPhrase,
+} from "@/lib/group-status";
 import { resolveSubmitWindow } from "@/lib/cycle-store";
 import { ROSTER_SELECT, canForceCycle, canKickMember, toRoster } from "@/lib/manage";
 import {
@@ -113,13 +120,21 @@ export default async function GroupHomePage({
     : latestCapsule
       ? capsuleTitle(monthLabel(latestCapsule.yearMonth), latestCapsule.version)
       : name;
-  const closes = featuredMonth ? windowClosesPhrase(featuredMonth, group.submit_end_day) : "";
+  const closeDay =
+    open && yearMonth ? submitWindowCloseDay(group, yearMonth) : group.submit_end_day;
+  const closes = featuredMonth ? windowClosesPhrase(featuredMonth, closeDay) : "";
   const emailYearMonth = open && yearMonth ? yearMonth : latestCapsule?.yearMonth ?? yearMonth;
-  const emailPhrase = emailYearMonth ? capsuleEmailPhrase(emailYearMonth, group.email_day) : "";
+  const emailPhrase = emailYearMonth
+    ? capsuleEmailLine({
+        yearMonth: emailYearMonth,
+        emailDay: group.email_day,
+        compiled: Boolean(!open && latestCapsule),
+      })
+    : "";
   const nextOpenDate = nextOpenDateLabel(group, closed);
   const nextLabel = open && yearMonth
     ? capsuleTitle(monthLabel(yearMonth), version ?? 1)
-    : nextOpenDate;
+    : nextOpenMonthLabel(group, closed);
 
   return (
     <main className="main">
@@ -287,11 +302,6 @@ export default async function GroupHomePage({
                   </li>
                 ))}
               </ul>
-            </div>
-          ) : compiled.length > 0 ? (
-            <div className="stack stack--tight">
-              <p className="eyebrow">{GROUP_EARLIER_CAPSULES}</p>
-              <p className="muted small">{GROUP_NO_PREVIOUS_CAPSULES}</p>
             </div>
           ) : null}
 

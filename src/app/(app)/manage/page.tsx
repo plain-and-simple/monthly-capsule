@@ -4,6 +4,7 @@ import { OpenGroupForm } from "@/components/open-group-form";
 import {
   JOIN_EXISTING_CTA,
   LANDING_CREATE_CTA,
+  MANAGE_EMPTY_HEADING,
   MANAGE_EMPTY_HINT,
   MANAGE_EMPTY_TITLE,
   groupDisplayName,
@@ -83,7 +84,7 @@ export default async function ManagePage() {
                 <div className="empty">
                   <div className="empty__mark" />
                   <div className="stack stack--tight">
-                    <h2 className="serif">Nothing here yet</h2>
+                    <h2 className="serif">{MANAGE_EMPTY_HEADING}</h2>
                     <p className="muted small">
                       Groups start one of two ways: someone sends you a link, or you make one.
                     </p>

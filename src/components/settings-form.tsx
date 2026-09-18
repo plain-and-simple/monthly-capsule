@@ -5,6 +5,7 @@ import { updateGroupName, updateSchedule, type SettingsState } from "@/actions/s
 import { DaySelect } from "@/components/day-select";
 import { PendingSubmitButton, useInstantBusy } from "@/components/pending-submit-button";
 import { ThemeForm } from "@/components/theme-form";
+import { CREATE_SCHEDULE_HINT } from "@/lib/copy";
 import { scheduleFormDays, type ScheduleDays } from "@/lib/schedule";
 import type { Group } from "@/lib/types";
 
@@ -69,7 +70,7 @@ export function SettingsForm({ group }: { group: Group }) {
               label="Email capsule"
             />
           </div>
-          <p className="formnote">Days of the month. America/Chicago.</p>
+          <p className="formnote">{CREATE_SCHEDULE_HINT}</p>
           {scheduleState?.error ? <p className="err">{scheduleState.error}</p> : null}
           {scheduleState?.ok ? <p className="small">Saved.</p> : null}
           <div>

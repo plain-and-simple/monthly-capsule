@@ -4,6 +4,7 @@ import {
   CYCLE_CLOSE_COMPILE,
   GROUP_PRIMARY_EDIT,
   GROUP_PRIMARY_SUBMIT,
+  GROUP_PRIMARY_VIEW,
   LANDING_SIGN_IN,
   MANAGE_EMPTY_TITLE,
   SUBMIT_AND_SEND,
@@ -112,11 +113,18 @@ export async function openSubmitIfClosed(page: Page) {
   const close = page.getByRole("button", { name: CYCLE_CLOSE_COMPILE });
   const write = page.getByRole("link", { name: GROUP_PRIMARY_SUBMIT });
   const err = page.locator(".err");
-  await expect(opened.or(already).or(close).or(write).or(err)).toBeVisible({ timeout: 30_000 });
+  await expect(opened.or(already).or(close).or(write).or(err).first()).toBeVisible({ timeout: 30_000 });
   if ((await err.count()) > 0 && (await opened.count()) === 0 && (await already.count()) === 0) {
     throw new Error(`Open submit early failed: ${await err.first().innerText()}`);
   }
   await page.reload();
+  const writeAfter = page.getByRole("link", { name: GROUP_PRIMARY_SUBMIT });
+  const editAfter = page.getByRole("link", { name: GROUP_PRIMARY_EDIT });
+  const resumeAfter = page.getByRole("link", { name: "Continue your draft" });
+  const readAfter = page.getByRole("link", { name: GROUP_PRIMARY_VIEW });
+  await expect(writeAfter.or(editAfter).or(resumeAfter).or(readAfter).first()).toBeVisible({
+    timeout: 15_000,
+  });
 }
 
 export async function submitLetterWithTwoPhotos(page: Page) {

@@ -636,7 +636,7 @@ button.textlink:hover {
   position: fixed;
   z-index: 80;
   left: 50%;
-  bottom: 1.5rem;
+  top: 4.75rem;
   transform: translateX(-50%);
   display: flex;
   align-items: flex-start;

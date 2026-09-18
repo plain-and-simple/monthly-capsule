@@ -135,11 +135,22 @@ describe("manage UI scenarios 1–20", () => {
         "Join Sunday letters on Plain and Simple Monthly Capsule.",
         "",
         `Link: ${payload.shareUrl}`,
+        "",
+        "Ask the owner for the Group PIN. You need both.",
       ].join("\n"),
     );
     expect(inviteMessage(payload.shareUrl, "123456", "Sunday letters")).not.toContain("123456");
-    expect(inviteMessageWithPin(payload.shareUrl, "123456", "Sunday letters")).toContain("Group PIN: 123456");
-    expect(inviteMessageWithPin(payload.shareUrl, "123456", "Sunday letters")).toContain(payload.shareUrl);
+    expect(inviteMessageWithPin(payload.shareUrl, "123456", "Sunday letters")).toBe(
+      [
+        "Join Sunday letters on Plain and Simple Monthly Capsule.",
+        "",
+        `Link: ${payload.shareUrl}`,
+        "Group PIN: 123456",
+      ].join("\n"),
+    );
+    expect(inviteMessageWithPin(payload.shareUrl, "123456", "Sunday letters")).not.toContain(
+      "Ask the owner",
+    );
   });
 
   it("14. invite payload never includes a PIN", () => {

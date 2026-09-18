@@ -1,4 +1,5 @@
 import {
+  CAPSULE_EMAIL_AFTER_MAKE,
   MANAGE_TAG_NOT_OPEN,
   MANAGE_TAG_READ,
   MANAGE_TAG_SUBMIT,
@@ -6,16 +7,18 @@ import {
   ROLE_MEMBER_LABEL,
   ROLE_OWNER_LABEL,
 } from "@/lib/copy";
-import { openSubmitYearMonth, type CycleGroup } from "@/lib/cycle";
+import { forceOpenStillActive, openSubmitYearMonth, type CycleGroup } from "@/lib/cycle";
 import { chicagoWeekdayTheDay, monthName, ordinal } from "@/lib/dates";
 import type { Role } from "@/lib/types";
 import {
   chicagoDate,
+  clampDayOfMonth,
   compareChicagoDate,
   compileTargetYearMonth,
   cycleCloseChicagoDate,
   cycleOpenChicagoDate,
   incrementYearMonth,
+  lastDayOfMonth,
   monthLabel,
   parseYearMonth,
   yearMonthString,
@@ -87,7 +90,7 @@ export function decorateManagedGroup(
   if (status === GROUP_STATUS_OPEN && openYearMonth) {
     return {
       status,
-      meta: `Open until ${shortMonthDay(openYearMonth, group.submit_end_day)}`,
+      meta: `Open until ${shortMonthDay(openYearMonth, submitWindowCloseDay(group, openYearMonth, now))}`,
     };
   }
   if (status === GROUP_STATUS_READY) {
@@ -160,15 +163,67 @@ export function shortMonthDayYear(yearMonth: string, day: number): string {
   return `${monthName(parsed.month).slice(0, 3)} ${day}, ${parsed.year}`;
 }
 
+/** Close day shown while a window is open: schedule end, or month-end after force-open. */
+export function submitWindowCloseDay(
+  group: Pick<CycleGroup, "submit_end_day" | "force_open_year_month">,
+  yearMonth: string,
+  now: Date = new Date(),
+): number {
+  const forceYM = group.force_open_year_month;
+  if (forceYM && forceYM === yearMonth && forceOpenStillActive(forceYM, group, now)) {
+    const parsed = parseYearMonth(yearMonth);
+    if (parsed) return lastDayOfMonth(parsed.year, parsed.month);
+  }
+  return group.submit_end_day;
+}
+
 export function windowClosesPhrase(yearMonth: string, endDay: number): string {
   const parsed = parseYearMonth(yearMonth);
   if (!parsed) return `the ${ordinal(endDay)}`;
   return chicagoWeekdayTheDay(parsed.year, parsed.month, endDay);
 }
 
+export function emailDayHasPassed(
+  yearMonth: string,
+  emailDay: number,
+  now: Date = new Date(),
+): boolean {
+  const parsed = parseYearMonth(yearMonth);
+  if (!parsed) return false;
+  const due = {
+    year: parsed.year,
+    month: parsed.month,
+    day: clampDayOfMonth(parsed.year, parsed.month, emailDay),
+  };
+  return compareChicagoDate(chicagoDate(now), due) > 0;
+}
+
 /** e.g. "You'll get an email on Sep 9, 2026." */
 export function capsuleEmailPhrase(yearMonth: string, emailDay: number): string {
   return `You'll get an email on ${shortMonthDayYear(yearMonth, emailDay)}.`;
+}
+
+export function capsuleEmailLine(input: {
+  yearMonth: string;
+  emailDay: number;
+  now?: Date;
+  compiled?: boolean;
+  sent?: boolean;
+}): string {
+  if (input.sent || input.compiled) return "";
+  if (emailDayHasPassed(input.yearMonth, input.emailDay, input.now)) {
+    return CAPSULE_EMAIL_AFTER_MAKE;
+  }
+  return capsuleEmailPhrase(input.yearMonth, input.emailDay);
+}
+
+export function nextOpenMonthLabel(
+  group: CycleGroup,
+  closedYearMonths: readonly string[],
+  now: Date = new Date(),
+): string {
+  const open = nextOpenChicagoDate(group, now, closedYearMonths);
+  return monthLabel(yearMonthString(open));
 }
 
 export function nextOpenPhrase(fromYearMonth: string, startDay: number): string {

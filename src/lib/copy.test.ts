@@ -13,6 +13,7 @@ import {
   CYCLE_SEND_AGAIN,
   CAPSULE_THEME_SAVE,
   CAPSULE_THEME_SECTION,
+  CREATE_SCHEDULE_HINT,
   FORGOT_PASSWORD_ACK,
   FORGOT_PASSWORD_HEADING,
   FORGOT_PASSWORD_LEDE,
@@ -35,6 +36,8 @@ import {
   MANAGE_TAG_READ,
   MANAGE_TAG_SUBMIT,
   MANAGE_TAG_SUBMITTED,
+  INVITE_HELPER,
+  INVITE_PIN_ASK,
   JOIN_AUTH_HINT,
   JOIN_EXISTING_CTA,
   INVALID_INVITE_HEADING,
@@ -47,6 +50,7 @@ import {
   MANAGE_CREATE_LABEL,
   MANAGE_EMPTY_HEADING,
   MANAGE_EMPTY_HINT,
+  MAKE_NEW_PIN,
   PREFERRED_NAME_LABEL,
   PRODUCT_NAME,
   RESET_PASSWORD_HEADING,
@@ -85,7 +89,7 @@ describe("landing copy smoke", () => {
     expect(chrome.promise).toBe("Friends write. You get one capsule.");
     expect(LANDING_HEADLINE).toBe("Friends write. You get one capsule.");
     expect(LANDING_MONTH_GOES).toBe(
-      "The window opens. Everyone writes, add a few photos, and submits. The window closes and the capsule goes out.",
+      "The window opens. Everyone writes, adds a few photos, and submits. The window closes and the capsule goes out.",
     );
     expect(chrome.createLabel).toBe("Create");
     expect(chrome.manageHeading).toBe("Manage your capsule");
@@ -163,11 +167,15 @@ describe("join and manage labels", () => {
 
   it("labels preferred name and manage-0 copy", () => {
     expect(PREFERRED_NAME_LABEL).toBe("Preferred name");
-    expect(MANAGE_EMPTY_HEADING).toBe("No groups yet");
+    expect(MANAGE_EMPTY_HEADING).toBe("Nothing here yet");
     expect(MANAGE_EMPTY_HINT).toBe("Have a link? Open it to join.");
     expect(MANAGE_CREATE_LABEL).toBe("Create");
     expect(ROLE_OWNER_LABEL).toBe("Owner");
     expect(ROLE_MEMBER_LABEL).toBe("Member");
+    expect(MAKE_NEW_PIN).toBe("Make a new PIN");
+    expect(INVITE_PIN_ASK).toBe("Ask the owner for the Group PIN. You need both.");
+    expect(INVITE_HELPER).toMatch(/Group PIN/);
+    expect(CREATE_SCHEDULE_HINT).toMatch(/previous month/);
   });
 
   it("brands password reset as Plain and Simple Monthly Capsule", () => {

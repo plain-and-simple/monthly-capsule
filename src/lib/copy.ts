@@ -5,7 +5,7 @@ export const CHROME_MARK = "PS";
 export const LANDING_PROMISE = "Friends write. You get one capsule.";
 export const LANDING_HEADLINE = LANDING_PROMISE;
 export const LANDING_MONTH_GOES =
-  "The window opens. Everyone writes, add a few photos, and submits. The window closes and the capsule goes out.";
+  "The window opens. Everyone writes, adds a few photos, and submits. The window closes and the capsule goes out.";
 export const LANDING_CREATE_LABEL = "Create";
 export const LANDING_CREATE_CTA = "Create a capsule group";
 export const LANDING_MANAGE_HEADING = "Manage your capsule";
@@ -50,7 +50,7 @@ export const LANDING_LEDE =
 export const CREATE_SUCCESS_HINT = "Show once — save it.";
 export const CREATE_SUCCESS_COPY = "Copy";
 
-export const MANAGE_EMPTY_HEADING = "No groups yet";
+export const MANAGE_EMPTY_HEADING = "Nothing here yet";
 export const MANAGE_EMPTY_TITLE = "Your groups";
 export const MANAGE_EMPTY_HINT = "Have a link? Open it to join.";
 export const MANAGE_CREATE_LABEL = "Create";
@@ -96,6 +96,9 @@ export const RESET_REQUEST_NEW = "Request a new link";
 
 export const INVITE_HELPER =
   "Share the link. Anyone you invite also needs the Group PIN. The owner can make a new PIN if it is lost.";
+export const INVITE_PIN_ASK = "Ask the owner for the Group PIN. You need both.";
+export const MAKE_NEW_PIN = "Make a new PIN";
+export const CAPSULE_EMAIL_AFTER_MAKE = "Email goes out after the capsule is made.";
 
 export const GROUP_PRIMARY_SUBMIT = "Write your letter";
 export const GROUP_PRIMARY_VIEW = "Read the capsule";

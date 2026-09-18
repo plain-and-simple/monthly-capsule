@@ -96,5 +96,7 @@ describe("e2e suite locks", () => {
     expect(ready).toContain("CYCLE_ALREADY_OPEN");
     expect(ready).toContain("CYCLE_CLOSE_COMPILE");
     expect(ready).toContain("opened.or(already).or(close)");
+    expect(ready).toContain(".first()");
+    expect(ready).toContain("GROUP_PRIMARY_VIEW");
   });
 });

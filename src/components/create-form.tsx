@@ -13,6 +13,7 @@ import {
   CREATE_NO_CODE_HINT,
   CREATE_SAVED_CONFIRM,
   CREATE_SCHEDULE_HINT,
+  MAKE_NEW_PIN,
   JOIN_BACK_HOME,
   JOIN_BACK_MANAGE,
   JOIN_EXISTING_CTA,
@@ -87,7 +88,7 @@ export function CreateForm({ signedInAs }: { signedInAs?: string | null }) {
           </div>
           <div className="panel">
             <p className="small muted">
-              Lost the PIN? Settings has <b>Regenerate PIN</b>. The old one stops working straight
+              Lost the PIN? Settings has <b>{MAKE_NEW_PIN}</b>. The old one stops working straight
               away, and anyone already in the group stays in.
             </p>
           </div>

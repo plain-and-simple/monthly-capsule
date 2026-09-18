@@ -32,6 +32,8 @@ describe("success toast", () => {
 
     const css = readFileSync(resolve(root, "src/app/globals.css"), "utf8");
     expect(css).toContain(".toast");
+    expect(css).toContain("top: 4.75rem");
+    expect(css).not.toMatch(/\.toast\s*\{[^}]*bottom:/);
     expect(css).toContain("var(--accent)");
     expect(css).toContain("var(--card)");
 
