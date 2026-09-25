@@ -60,4 +60,23 @@ CRON_SECRET=${CRON_SECRET}
 CREATE_GROUP_CODE=plainandsimple
 EOF
 
+echo "[start] Checking the Supabase API port ..."
+# A dockerd reload can drop docker-proxy while containers stay "up", so the
+# published port refuses connections. Restart restores the proxy.
+if ! curl -fsS -o /dev/null --max-time 5 "${API_URL}/rest/v1/"; then
+  echo "[start] API port refused connections. Restarting Supabase containers ..."
+  mapfile -t names < <(docker ps -a --format '{{.Names}}' | grep '^supabase_' || true)
+  if [ "${#names[@]}" -gt 0 ]; then
+    docker restart "${names[@]}" >/dev/null
+  fi
+  for _ in $(seq 1 30); do
+    if curl -fsS -o /dev/null --max-time 2 "${API_URL}/rest/v1/"; then
+      break
+    fi
+    sleep 1
+  done
+fi
+curl -fsS -o /dev/null --max-time 5 "${API_URL}/rest/v1/"
+
 echo "[start] Ready. Supabase API: ${API_URL}"
+echo "[start] Open the app at http://localhost:3000."

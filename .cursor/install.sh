@@ -10,9 +10,12 @@ cd "$REPO_DIR"
 echo "[install] Ensuring system packages (docker, fuse) ..."
 if ! command -v docker >/dev/null 2>&1 || ! command -v fuse-overlayfs >/dev/null 2>&1; then
   sudo apt-get update -qq
+  # fuse3's conffile prompt ignores DEBIAN_FRONTEND unless dpkg is forced.
+  # Without --force-confold this step hangs forever on an unattended VM.
   sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
+    -o Dpkg::Options::=--force-confdef \
+    -o Dpkg::Options::=--force-confold \
     docker.io fuse-overlayfs fuse3 curl ca-certificates
-  # fuse3 ships an interactive conffile prompt; force keep-old to avoid hanging.
   sudo DEBIAN_FRONTEND=noninteractive dpkg --force-confold --configure -a || true
 fi
 
@@ -36,5 +39,8 @@ supabase --version
 
 echo "[install] Installing Node dependencies (npm ci) ..."
 npm ci
+
+echo "[install] Installing Playwright Chromium (local e2e) ..."
+npx playwright install chromium
 
 echo "[install] Done."
