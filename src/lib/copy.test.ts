@@ -63,8 +63,12 @@ import {
   GROUP_PRIMARY_VIEW,
   SUBMIT_AND_SEND,
   SUBMIT_DRAFT,
+  SUBMIT_IN_AND_EDITABLE,
+  SUBMIT_IN_HEADING,
   SUBMIT_SAVED_DRAFT,
+  SUBMIT_STILL_EDITABLE,
   SUBMIT_SUBMITTED,
+  PHOTOS_TYPE,
   TOAST_SUCCESS,
   SIGNED_OUT_TOAST,
   UNTITLED_GROUP,
@@ -131,6 +135,12 @@ describe("create success hero smoke", () => {
     expect(TOAST_SUCCESS).toBe("Success");
     expect(SUBMIT_SAVED_DRAFT).toBe("Saved as draft");
     expect(SUBMIT_SUBMITTED).toBe("Submitted");
+    expect(SUBMIT_IN_HEADING).toBe("Your letter is in.");
+    expect(SUBMIT_STILL_EDITABLE).toBe("You can keep editing until the window closes.");
+    expect(SUBMIT_IN_AND_EDITABLE).toBe(
+      "Your letter is in. You can keep editing until the window closes.",
+    );
+    expect(PHOTOS_TYPE).toBe("Photos must be JPEG, PNG, WebP, or HEIC.");
     expect(SIGNED_OUT_TOAST).toBe("Signed out");
   });
 
@@ -202,6 +212,7 @@ describe("join and manage labels", () => {
   it("locks submit model A labels", () => {
     expect(SUBMIT_DRAFT).toBe("Save as draft");
     expect(SUBMIT_AND_SEND).toBe("Save and submit");
+    expect(SUBMIT_IN_AND_EDITABLE).toMatch(/keep editing/i);
   });
 
   it("locks owner force-cycle labels", () => {

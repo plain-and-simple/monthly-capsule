@@ -9,6 +9,7 @@ import {
   nextSubmissionWrite,
   parseSubmitIntent,
   submissionHasContent,
+  visibleSubmitLetter,
   writtenCount,
   writtenCountPhrase,
 } from "./submit";
@@ -86,6 +87,31 @@ describe("submit model A", () => {
     });
     expect(edited.status).toBe("submitted");
     expect(edited.submitted_at).toBeUndefined();
+  });
+
+  it("keeps the posted letter after submit when the first-paint body is blank", () => {
+    expect(
+      visibleSubmitLetter({
+        initialBody: "",
+        currentBody: "",
+        justSaved: true,
+        savedBody: "October was loud and good.",
+      }),
+    ).toBe("October was loud and good.");
+    expect(
+      visibleSubmitLetter({
+        initialBody: "October was loud and good.",
+        currentBody: "",
+        justSaved: false,
+      }),
+    ).toBe("October was loud and good.");
+    expect(
+      visibleSubmitLetter({
+        initialBody: "October was loud and good.",
+        currentBody: "October was loud and good.\n\nP.S. soup.",
+        justSaved: false,
+      }),
+    ).toBe("October was loud and good.\n\nP.S. soup.");
   });
 });
 

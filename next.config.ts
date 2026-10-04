@@ -9,7 +9,7 @@ const nextConfig: NextConfig = {
   // (1 MB each) plus letter + form overhead. 16mb stays above that budget.
   // Do not lower below product caps × max photos + overhead.
   // Exceeding it throws Next.js E394 (digest …@E394) before submitLetter runs.
-  serverExternalPackages: ["sharp"],
+  serverExternalPackages: ["sharp", "heic-convert", "heic-decode", "libheif-js"],
   experimental: {
     serverActions: {
       bodySizeLimit: "16mb",

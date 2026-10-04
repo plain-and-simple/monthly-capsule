@@ -20,7 +20,7 @@ describe("success toast", () => {
     const submit = readFileSync(resolve(root, "src/components/submit-form.tsx"), "utf8");
     expect(submit).toContain("MutationToast");
     expect(submit).toContain("SUBMIT_SAVED_DRAFT");
-    expect(submit).toContain("SUBMIT_SUBMITTED");
+    expect(submit).toContain("SUBMIT_IN_AND_EDITABLE");
 
     const email = readFileSync(resolve(root, "src/components/email-group-form.tsx"), "utf8");
     expect(email).toContain("MutationToast");

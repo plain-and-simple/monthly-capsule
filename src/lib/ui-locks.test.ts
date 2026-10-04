@@ -18,6 +18,12 @@ describe("submit model A UI", () => {
     expect(source).toContain("PHOTOS_MAX");
     expect(source).toContain("of {MAX_PHOTOS} photos.");
     expect(source).toContain('role="alert"');
+    expect(source).toContain("value={body}");
+    expect(source).toContain("visibleSubmitLetter");
+    expect(source).toContain("SUBMIT_IN_HEADING");
+    expect(source).toContain("SUBMIT_STILL_EDITABLE");
+    expect(source).toContain("PHOTO_FILE_ACCEPT");
+    expect(source).not.toContain('accept="image/jpeg,image/png,image/webp"');
     expect(source).not.toContain("0.85");
   });
 
@@ -102,6 +108,8 @@ describe("privacy and chrome locks", () => {
     expect(source).toContain("submitWindowCloseDay");
     expect(source).toContain("capsuleEmailLine");
     expect(source).toContain("nextOpenMonthLabel");
+    expect(source).toContain("GROUP_PRIMARY_EDIT");
+    expect(source).toContain("href={`/g/${uuid}/submit`}");
     expect(source).not.toContain("Last month");
     expect(source).not.toContain("compiled.slice(1)");
     expect(source).not.toContain("compiled.length > 0");

@@ -12,6 +12,24 @@ export function submissionHasContent(body: string, photoCount: number): boolean 
   return body.trim().length > 0 || photoCount > 0;
 }
 
+/**
+ * After a successful save, keep the posted letter. Do not fall back to an
+ * empty first-paint `initialBody` (React 19 resets uncontrolled fields).
+ * Returning to the form uses `initialBody` from the same submission row.
+ */
+export function visibleSubmitLetter(input: {
+  initialBody: string;
+  currentBody: string;
+  justSaved: boolean;
+  savedBody?: string;
+}): string {
+  if (input.justSaved) {
+    return input.savedBody ?? input.currentBody;
+  }
+  if (input.currentBody.length > 0) return input.currentBody;
+  return input.initialBody;
+}
+
 export function isIncludedInCapsule(submission: { status?: string | null }): boolean {
   return (submission.status ?? "submitted") === "submitted";
 }

@@ -197,7 +197,12 @@ export default async function GroupHomePage({
 
               {open && myStatus === "submitted" ? (
                 <div className="row" style={{ justifyContent: "center" }}>
-                  <PendingLink className="btn btn--secondary" href={`/g/${uuid}/submit`} pendingLabel="Opening…">
+                  <PendingLink
+                    className="btn btn--secondary"
+                    href={`/g/${uuid}/submit`}
+                    pendingLabel="Opening…"
+                    prefetch={false}
+                  >
                     {GROUP_PRIMARY_EDIT}
                   </PendingLink>
                 </div>
@@ -207,6 +212,7 @@ export default async function GroupHomePage({
                     className="btn btn--primary btn--block btn--lg"
                     href={`/g/${uuid}/submit`}
                     pendingLabel="Opening…"
+                    prefetch={false}
                   >
                     {myStatus === "draft" ? "Continue your draft" : GROUP_PRIMARY_SUBMIT}
                   </PendingLink>
