@@ -5,6 +5,7 @@ import {
   PHOTO_ENCODE_QUALITY_MIN,
   PHOTO_ENCODE_QUALITY_STEP,
 } from "@/lib/constants";
+import { isHeicPhotoInput } from "@/lib/photo-files";
 
 export type PhotoEncodeType = "image/webp" | "image/jpeg";
 
@@ -101,12 +102,30 @@ export function canvasSupportsWebP(): boolean {
   }
 }
 
-export async function compressPhotoFile(file: File): Promise<{
+export type PreparedPhotoFile = {
   blob: Blob;
   name: string;
   width: number;
   height: number;
-}> {
+  passthrough?: boolean;
+};
+
+/**
+ * When the browser cannot rasterize HEIC (Chrome, older Safari), send the
+ * original to the server. Sharp or a HEIC decoder turns it into WebP/JPEG.
+ * iPhone Safari usually succeeds here and never uploads HEIC.
+ */
+export function heicPassthroughPhoto(file: File): PreparedPhotoFile {
+  return {
+    blob: file,
+    name: file.name || "photo.heic",
+    width: 0,
+    height: 0,
+    passthrough: true,
+  };
+}
+
+export async function compressPhotoFile(file: File): Promise<PreparedPhotoFile> {
   try {
     const bitmap = await createImageBitmap(file);
     const { width, height } = scalePhotoDimensions(bitmap.width, bitmap.height);
@@ -138,6 +157,9 @@ export async function compressPhotoFile(file: File): Promise<{
     };
   } catch (error) {
     if (error instanceof PhotoCompressError) throw error;
+    if (isHeicPhotoInput(file) && file.size > 0) {
+      return heicPassthroughPhoto(file);
+    }
     throw new PhotoCompressError();
   }
 }

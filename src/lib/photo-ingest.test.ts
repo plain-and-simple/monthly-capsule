@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { MAX_PHOTO_BYTES, MAX_PHOTO_EDGE_PX } from "./constants";
 import { PHOTO_COMPRESS_FAILED, PHOTO_TOO_LARGE } from "./photo-compress";
-import { compressPhotoForStorage } from "./photo-ingest";
+import { compressPhotoForStorage, ensureReadablePhotoBuffer } from "./photo-ingest";
+import { looksLikeHeic } from "./photo-files";
 
 async function makeNoisySource(width: number, height: number, exifText?: string) {
   const sharp = (await import("sharp")).default;
@@ -85,6 +86,37 @@ describe("server photo ingest", () => {
       name: "PhotoCompressError",
       message: PHOTO_COMPRESS_FAILED,
     });
+  });
+
+  it("decodes HEIC to JPEG before the usual WebP/JPEG store path", async () => {
+    const jpeg = await makeSource({ width: 32, height: 24 });
+    const heicLike = Buffer.from([0, 0, 0, 24, 102, 116, 121, 112, 104, 101, 105, 99, 1, 2, 3]);
+    expect(looksLikeHeic(heicLike)).toBe(true);
+
+    let decoded = 0;
+    const readable = await ensureReadablePhotoBuffer(heicLike, async () => {
+      decoded += 1;
+      return jpeg;
+    });
+    expect(decoded).toBe(1);
+    expect(readable.equals(jpeg)).toBe(true);
+
+    const out = await compressPhotoForStorage(readable);
+    expect(out.contentType).toBe("image/webp");
+    expect(["image/webp", "image/jpeg"]).toContain(out.contentType);
+    expect(out.buffer.equals(heicLike)).toBe(false);
+    expect(out.buffer.equals(jpeg)).toBe(false);
+  });
+
+  it("leaves JPEG/PNG/WebP bytes for sharp and does not invent a HEIC decode", async () => {
+    const jpeg = await makeSource({ width: 64, height: 48 });
+    let decoded = 0;
+    const readable = await ensureReadablePhotoBuffer(jpeg, async () => {
+      decoded += 1;
+      return Buffer.from("nope");
+    });
+    expect(decoded).toBe(0);
+    expect(readable.equals(jpeg)).toBe(true);
   });
 
   it("does not keep the original when the payload is empty", async () => {

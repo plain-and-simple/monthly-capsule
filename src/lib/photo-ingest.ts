@@ -1,4 +1,5 @@
 import "server-only";
+import convert from "heic-convert";
 import sharp from "sharp";
 import { MAX_PHOTO_EDGE_PX } from "@/lib/constants";
 import {
@@ -10,6 +11,7 @@ import {
   sharpQuality,
   type PhotoEncodeType,
 } from "@/lib/photo-compress";
+import { looksLikeHeic } from "@/lib/photo-files";
 
 export type CompressedPhoto = {
   buffer: Buffer;
@@ -63,18 +65,55 @@ function toCompressed(encoded: EncodedPhoto): CompressedPhoto {
   };
 }
 
+export async function decodeHeicToJpeg(input: Buffer): Promise<Buffer> {
+  const jpeg = await convert({
+    buffer: input,
+    format: "JPEG",
+    quality: 0.9,
+  });
+  return Buffer.from(jpeg);
+}
+
+export async function sharpCanRead(input: Buffer): Promise<boolean> {
+  try {
+    const meta = await sharp(input, { failOn: "none" }).metadata();
+    return Boolean(meta.width && meta.height);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Sharp's prebuilt libvips often decodes AVIF but not iPhone HEVC HEIC.
+ * Convert those to JPEG first, then the usual WebP/JPEG storage pipeline.
+ */
+export async function ensureReadablePhotoBuffer(
+  input: Buffer,
+  decodeHeic: (buf: Buffer) => Promise<Buffer> = decodeHeicToJpeg,
+): Promise<Buffer> {
+  if (await sharpCanRead(input)) return input;
+  if (!looksLikeHeic(input)) return input;
+  try {
+    return await decodeHeic(input);
+  } catch {
+    throw new PhotoCompressError();
+  }
+}
+
 /**
  * Re-encode for storage: max edge 1600, WebP (JPEG fallback), EXIF stripped.
- * Never returns the input bytes.
+ * Never returns the input bytes. HEIC is decoded first, never stored.
  */
 export async function compressPhotoForStorage(input: Buffer): Promise<CompressedPhoto> {
   if (!input.length) {
     throw new PhotoCompressError();
   }
 
+  const readable = await ensureReadablePhotoBuffer(input);
+
   let pipeline: SharpPipeline;
   try {
-    pipeline = sharp(input, { failOn: "none", sequentialRead: true })
+    pipeline = sharp(readable, { failOn: "none", sequentialRead: true })
       .rotate()
       .flatten({ background: "#ffffff" })
       .resize({

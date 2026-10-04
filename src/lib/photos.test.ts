@@ -1,7 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { MAX_PHOTO_BYTES } from "./constants";
-import { PHOTOS_MAX } from "./copy";
-import { collectPhotoFiles, appendPhotos, isPhotoUpload, photoBatchFit, photoContentType, takePhotosUpToMax, validatePhotoList } from "./photo-files";
+import { MAX_PHOTO_BYTES, MAX_PHOTO_SOURCE_BYTES, PHOTO_FILE_ACCEPT } from "./constants";
+import { PHOTOS_MAX, PHOTOS_TYPE } from "./copy";
+import {
+  collectPhotoFiles,
+  appendPhotos,
+  isHeicPhotoInput,
+  isPhotoUpload,
+  looksLikeHeic,
+  photoBatchFit,
+  photoContentType,
+  takePhotosUpToMax,
+  validatePhotoFile,
+  validatePhotoList,
+} from "./photo-files";
 
 describe("submit photo uploads", () => {
   it("treats a Blob with size as a photo even when it is not a File", () => {
@@ -29,7 +40,29 @@ describe("submit photo uploads", () => {
 
   it("rejects a non-image type", () => {
     const blob = new Blob([new Uint8Array([1])], { type: "application/pdf" });
-    expect(validatePhotoList([blob])).toBe("Photos must be JPEG, PNG, or WebP.");
+    expect(validatePhotoList([blob])).toBe(PHOTOS_TYPE);
+  });
+
+  it("accepts iPhone HEIC/HEIF as input and does not treat it as too large at 1 MB", () => {
+    const heic = new Blob([new Uint8Array(MAX_PHOTO_BYTES + 2048)], { type: "image/heic" });
+    Object.defineProperty(heic, "name", { value: "IMG_1234.HEIC" });
+    expect(isHeicPhotoInput({ type: "image/heic", name: "IMG_1234.HEIC" })).toBe(true);
+    expect(isHeicPhotoInput({ type: "image/heif", name: "photo.heif" })).toBe(true);
+    expect(photoContentType(heic)).toBe("image/heic");
+    expect(validatePhotoFile(heic)).toBeNull();
+    expect(validatePhotoList([heic])).toBeNull();
+    expect(PHOTO_FILE_ACCEPT).toContain("image/heic");
+    expect(PHOTO_FILE_ACCEPT).toContain(".heic");
+    const huge = new Blob([new Uint8Array(MAX_PHOTO_SOURCE_BYTES + 1)], { type: "image/heic" });
+    expect(validatePhotoFile(huge)).toBe("Photo is too large.");
+  });
+
+  it("recognizes an ISO-BMFF HEIC brand without trusting the MIME type", () => {
+    const bytes = new Uint8Array([0, 0, 0, 24, 102, 116, 121, 112, 104, 101, 105, 99]);
+    expect(looksLikeHeic(bytes)).toBe(true);
+    expect(looksLikeHeic(new Uint8Array([0, 0, 0, 24, 102, 116, 121, 112, 105, 115, 111, 109]))).toBe(
+      false,
+    );
   });
 
   it("rejects a photo over the 1 MB compressed cap", () => {

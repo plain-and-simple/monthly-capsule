@@ -17,8 +17,10 @@ import {
   photoQualityLadder,
   scalePhotoDimensions,
   sharpQuality,
+  heicPassthroughPhoto,
   storedPhotoExtension,
 } from "./photo-compress";
+import { isHeicPhotoInput } from "./photo-files";
 
 describe("photo compress helpers", () => {
   it("scales the long edge to 1600 and leaves smaller images alone", () => {
@@ -41,6 +43,13 @@ describe("photo compress helpers", () => {
     expect(storedPhotoExtension("image/jpeg")).toBe("jpg");
     expect(photoOutputName("IMG_1234.HEIC", "image/webp")).toBe("IMG_1234.webp");
     expect(photoOutputName("shot.png", "image/jpeg")).toBe("shot.jpg");
+    expect(isHeicPhotoInput({ type: "image/heic", name: "IMG_1234.HEIC" })).toBe(true);
+    const passthrough = heicPassthroughPhoto(
+      new File([new Uint8Array([1, 2, 3])], "IMG_1234.HEIC", { type: "image/heic" }),
+    );
+    expect(passthrough.passthrough).toBe(true);
+    expect(passthrough.name).toBe("IMG_1234.HEIC");
+    expect(passthrough.blob.type).toBe("image/heic");
   });
 
   it("caps a photo at 1 MB and keeps the action post under 16 MB", () => {

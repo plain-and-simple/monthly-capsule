@@ -10,6 +10,7 @@ import {
   SUBMIT_AND_SEND,
   SUBMIT_CLOSED_HEADING,
   SUBMIT_DRAFT,
+  SUBMIT_IN_HEADING,
   SUBMIT_SAVED_DRAFT,
 } from "../../src/lib/copy";
 import { CYCLE_ALREADY_OPEN, CYCLE_OPENED } from "../../src/lib/cycle";
@@ -148,7 +149,7 @@ export async function submitLetterWithTwoPhotos(page: Page) {
   await addSubmitPhoto(page, "one.png");
   await addSubmitPhoto(page, "two.png");
   await page.getByRole("button", { name: SUBMIT_AND_SEND }).click();
-  await expect(page.getByText("Submitted").first()).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText(SUBMIT_IN_HEADING).first()).toBeVisible({ timeout: 30_000 });
 }
 
 export async function goYourGroupsThenOpenGroup(page: Page) {

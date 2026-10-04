@@ -1,11 +1,12 @@
 "use client";
 
 import { useActionState, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { submitLetter, type SubmitState } from "@/actions/submit";
 import { MutationToast } from "@/components/app-toast";
 import { PendingLink } from "@/components/pending-link";
 import { PendingSubmitButton, useInstantBusy } from "@/components/pending-submit-button";
-import { MAX_PHOTOS } from "@/lib/constants";
+import { MAX_PHOTOS, PHOTO_FILE_ACCEPT } from "@/lib/constants";
 import {
   GROUP_PRIMARY_VIEW,
   SUBMIT_AND_SEND,
@@ -13,12 +14,14 @@ import {
   SUBMIT_DRAFT,
   SUBMIT_EMPTY,
   PHOTOS_MAX,
+  SUBMIT_IN_AND_EDITABLE,
+  SUBMIT_IN_HEADING,
   SUBMIT_SAVED_DRAFT,
-  SUBMIT_SUBMITTED,
+  SUBMIT_STILL_EDITABLE,
 } from "@/lib/copy";
 import { appendPhotos, photoBatchFit } from "@/lib/photo-files";
 import { PHOTO_COMPRESS_FAILED, compressPhotoFile } from "@/lib/photo-compress";
-import { submissionHasContent, type SubmitStatus } from "@/lib/submit";
+import { submissionHasContent, visibleSubmitLetter, type SubmitStatus } from "@/lib/submit";
 
 type StagedPhoto = {
   id: string;
@@ -49,6 +52,9 @@ export function SubmitForm({
   closesPhrase: string;
   latestCapsuleHref?: string | null;
 }) {
+  const router = useRouter();
+  const [body, setBody] = useState(initialBody);
+  const savedBodyRef = useRef<string | null>(null);
   const [photos, setPhotos] = useState<StagedPhoto[]>(() =>
     existingPhotos.map((photo) => ({
       id: photo.storagePath,
@@ -72,6 +78,33 @@ export function SubmitForm({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- unmount only
   }, []);
+
+  useEffect(() => {
+    setBody((current) =>
+      visibleSubmitLetter({
+        initialBody,
+        currentBody: current,
+        justSaved: false,
+      }),
+    );
+  }, [initialBody]);
+
+  useEffect(() => {
+    if (!state?.ok) return;
+    setBody((current) =>
+      visibleSubmitLetter({
+        initialBody,
+        currentBody: current,
+        justSaved: true,
+        savedBody: savedBodyRef.current ?? current,
+      }),
+    );
+  }, [state, initialBody]);
+
+  useEffect(() => {
+    if (!state?.ok) return;
+    router.refresh();
+  }, [state, router]);
 
   async function onFiles(list: FileList | null) {
     const files = Array.from(list ?? []);
@@ -104,21 +137,18 @@ export function SubmitForm({
   }
 
   const status = state?.status ?? initialStatus;
+  const submitted = status === "submitted";
   const statusLine =
     state?.ok && status === "draft"
       ? SUBMIT_SAVED_DRAFT
-      : state?.ok && status === "submitted"
-        ? SUBMIT_SUBMITTED
-        : status === "draft"
-          ? SUBMIT_SAVED_DRAFT
-          : status === "submitted"
-            ? SUBMIT_SUBMITTED
-            : null;
+      : status === "draft"
+        ? SUBMIT_SAVED_DRAFT
+        : null;
   const toastMessage =
     state?.ok && status === "draft"
       ? SUBMIT_SAVED_DRAFT
-      : state?.ok && status === "submitted"
-        ? SUBMIT_SUBMITTED
+      : state?.ok && submitted
+        ? SUBMIT_IN_AND_EDITABLE
         : null;
   const keptPaths = photos.map((photo) => photo.savedPath).filter(Boolean) as string[];
   const photosTouched = keptPaths.join("|") !== initialSaved || photos.some((photo) => photo.blob);
@@ -147,14 +177,17 @@ export function SubmitForm({
       onSubmit={markBusy}
       action={async (formData) => {
         const intent = String(formData.get("intent") ?? "");
-        const body = String(formData.get("body") ?? "");
-        if (intent !== "draft" && !submissionHasContent(body, photos.length)) {
+        const posted = String(formData.get("body") ?? "");
+        if (intent !== "draft" && !submissionHasContent(posted, photos.length)) {
           setPhotoError(SUBMIT_EMPTY);
           return;
         }
         setPhotoError(null);
         markBusy();
+        savedBodyRef.current = posted;
+        setBody(posted);
         formData.set("groupId", groupId);
+        formData.set("body", posted);
         if (photosTouched) formData.set("photos_touched", "1");
         keptPaths.forEach((path) => formData.append("keep_path", path));
         photos.forEach((photo) => {
@@ -178,9 +211,16 @@ export function SubmitForm({
             </span>
           ) : null}
         </div>
-        <p className="muted small">
-          Open until {closesPhrase}. A draft stays hidden from the capsule until you submit.
-        </p>
+        {submitted ? (
+          <div className="confirm" role="status">
+            <p className="confirm__title">{SUBMIT_IN_HEADING}</p>
+            <p className="muted small">{SUBMIT_STILL_EDITABLE}</p>
+          </div>
+        ) : (
+          <p className="muted small">
+            Open until {closesPhrase}. A draft stays hidden from the capsule until you submit.
+          </p>
+        )}
       </div>
 
       <label className="field">
@@ -188,7 +228,8 @@ export function SubmitForm({
         <textarea
           className="textarea"
           name="body"
-          defaultValue={initialBody}
+          value={body}
+          onChange={(event) => setBody(event.target.value)}
           maxLength={20000}
           readOnly={busy}
           placeholder="What has this month been like?"
@@ -204,8 +245,8 @@ export function SubmitForm({
               <img
                 src={photo.preview}
                 alt=""
-                width={photo.width}
-                height={photo.height}
+                width={photo.width || undefined}
+                height={photo.height || undefined}
               />
               <button
                 className="photo__remove"
@@ -234,7 +275,7 @@ export function SubmitForm({
           id="letter-photos"
           ref={fileRef}
           type="file"
-          accept="image/jpeg,image/png,image/webp"
+          accept={PHOTO_FILE_ACCEPT}
           multiple
           hidden
           disabled={busy}
@@ -277,7 +318,9 @@ export function SubmitForm({
             ? photos.some((photo) => photo.blob)
               ? "Working… uploading photos."
               : "Working…"
-            : "Save as draft to keep it hidden. After you submit, you can still edit until the window closes."}
+            : submitted
+              ? SUBMIT_STILL_EDITABLE
+              : "Save as draft to keep it hidden. After you submit, you can still edit until the window closes."}
         </p>
       </div>
     </form>

@@ -9,6 +9,21 @@ export const PHOTO_ENCODE_QUALITY = 0.8;
 export const PHOTO_ENCODE_QUALITY_MIN = 0.5;
 export const PHOTO_ENCODE_QUALITY_STEP = 0.1;
 export const ALLOWED_PHOTO_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
+/** iPhone camera originals. Accepted as input only — stored output stays WebP/JPEG. */
+export const HEIC_PHOTO_TYPES = [
+  "image/heic",
+  "image/heif",
+  "image/heic-sequence",
+  "image/heif-sequence",
+] as const;
+export const PHOTO_FILE_ACCEPT = [
+  ...ALLOWED_PHOTO_TYPES,
+  ...HEIC_PHOTO_TYPES,
+  ".heic",
+  ".heif",
+].join(",");
+/** Uncompressed HEIC from the camera, before server re-encode. Not a stored-object cap. */
+export const MAX_PHOTO_SOURCE_BYTES = 8 * 1_048_576;
 /** Server Action body must stay ≥ this (6 × 1 MB + letter + form overhead). */
 export const PHOTO_POST_BUDGET_BYTES = MAX_PHOTOS * MAX_PHOTO_BYTES + 512_000;
 
