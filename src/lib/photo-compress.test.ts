@@ -18,6 +18,7 @@ import {
   scalePhotoDimensions,
   sharpQuality,
   heicPassthroughPhoto,
+  rasterizeHeicInBrowser,
   storedPhotoExtension,
 } from "./photo-compress";
 import { isHeicPhotoInput } from "./photo-files";
@@ -50,6 +51,7 @@ describe("photo compress helpers", () => {
     expect(passthrough.passthrough).toBe(true);
     expect(passthrough.name).toBe("IMG_1234.HEIC");
     expect(passthrough.blob.type).toBe("image/heic");
+    expect(rasterizeHeicInBrowser).toEqual(expect.any(Function));
   });
 
   it("caps a photo at 1 MB and keeps the action post under 16 MB", () => {

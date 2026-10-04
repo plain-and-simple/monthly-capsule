@@ -24,6 +24,10 @@ describe("submit model A UI", () => {
     expect(source).toContain("SUBMIT_STILL_EDITABLE");
     expect(source).toContain("PHOTO_FILE_ACCEPT");
     expect(source).not.toContain('accept="image/jpeg,image/png,image/webp"');
+    const compress = readFileSync(resolve(here, "../lib/photo-compress.ts"), "utf8");
+    expect(compress).toContain("rasterizeHeicInBrowser");
+    expect(compress).toContain("heic-decode");
+    expect(compress).toContain("heicPassthroughPhoto");
     expect(source).not.toContain("0.85");
   });
 

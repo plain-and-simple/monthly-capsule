@@ -1,4 +1,6 @@
 import "server-only";
+// Pin the wasm decoder so NFT / Vercel tracing keeps libheif-bundle.js.
+import "libheif-js/wasm-bundle";
 import convert from "heic-convert";
 import sharp from "sharp";
 import { MAX_PHOTO_EDGE_PX } from "@/lib/constants";
@@ -84,20 +86,24 @@ export async function sharpCanRead(input: Buffer): Promise<boolean> {
 }
 
 /**
- * Sharp's prebuilt libvips often decodes AVIF but not iPhone HEVC HEIC.
- * Convert those to JPEG first, then the usual WebP/JPEG storage pipeline.
+ * Sharp's prebuilt libvips (especially on Vercel) often decodes AVIF but not
+ * iPhone HEVC HEIC. Decode those to JPEG first, then the usual WebP/JPEG path.
+ * Prefer heic-convert whenever the bytes look like HEIC so production — where
+ * sharp cannot read HEVC — is the same path CI exercises.
  */
 export async function ensureReadablePhotoBuffer(
   input: Buffer,
   decodeHeic: (buf: Buffer) => Promise<Buffer> = decodeHeicToJpeg,
 ): Promise<Buffer> {
-  if (await sharpCanRead(input)) return input;
-  if (!looksLikeHeic(input)) return input;
-  try {
-    return await decodeHeic(input);
-  } catch {
-    throw new PhotoCompressError();
+  if (looksLikeHeic(input)) {
+    try {
+      return await decodeHeic(input);
+    } catch {
+      if (await sharpCanRead(input)) return input;
+      throw new PhotoCompressError();
+    }
   }
+  return input;
 }
 
 /**
