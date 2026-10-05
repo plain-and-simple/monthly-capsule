@@ -61,6 +61,8 @@ import {
   GROUP_FIRST_CAPSULE_HEADING,
   GROUP_NO_PREVIOUS_CAPSULES,
   GROUP_PRIMARY_VIEW,
+  ROSTER_NOT_YET,
+  ROSTER_SUBMITTED,
   SUBMIT_AND_SEND,
   SUBMIT_DRAFT,
   SUBMIT_IN_AND_EDITABLE,
@@ -201,6 +203,12 @@ describe("join and manage labels", () => {
   it("locks closed-home capsule labels", () => {
     expect(GROUP_PRIMARY_VIEW).toBe("Read the capsule");
     expect(GROUP_EARLIER_CAPSULES).toBe("Earlier capsules");
+  });
+
+  it("locks open-month roster labels", () => {
+    expect(ROSTER_SUBMITTED).toBe("Submitted");
+    expect(ROSTER_NOT_YET).toBe("Not yet");
+    expect(ROSTER_SUBMITTED).not.toBe(ROSTER_NOT_YET);
   });
 
   it("locks first-run and empty-state capsule labels", () => {

@@ -88,8 +88,13 @@ describe("privacy and chrome locks", () => {
     expect(source).toContain('redirect(`/g/${uuid}`)');
     expect(source).not.toContain("Not yet");
     const home = readFileSync(resolve(here, "../app/(app)/g/[uuid]/page.tsx"), "utf8");
-    expect(home).toContain("KickMemberForm");
-    expect(home).toContain("canKickMember");
+    expect(home).toContain("PeopleRoster");
+    expect(home).toContain("periodRoster");
+    const roster = readFileSync(resolve(here, "../components/people-roster.tsx"), "utf8");
+    expect(roster).toContain("KickMemberForm");
+    expect(roster).toContain("canKickMember");
+    expect(roster).toContain("ROSTER_SUBMITTED");
+    expect(roster).toContain("ROSTER_NOT_YET");
   });
 
   it("group home signs out instead of an ambiguous Leave", () => {

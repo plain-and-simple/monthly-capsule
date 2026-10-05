@@ -267,6 +267,11 @@ a {
   font-weight: 600;
 }
 
+.roster-heading {
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
 .serif {
   font-family: var(--font-serif);
 }
