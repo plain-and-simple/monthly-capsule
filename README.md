@@ -129,7 +129,7 @@ Browser tests live in `e2e/`. Grok is out of scope — this is repo/CI only.
 | `CI` | `pull_request` and `push` to `main` | Unit + typecheck. E2E **local smoke only** (`next start`). Does **not** receive `E2E_BASE_URL` / auth / `E2E_ALLOW_PRODUCTION` secrets. |
 | `E2E production` | GitHub `deployment_status` when Vercel marks **Production** `success` | Authenticated Playwright against the production origin from repo secrets. |
 
-Push to `main` is not used for production e2e — that job can finish before Vercel Production is Ready. `deployment_status` is the trigger because this repo already has Vercel GitHub Deployments named `Production` / `Preview`. The production workflow must be on `main` before it will fire. Preview deployments are ignored.
+Push to `main` is not used for production e2e — that job can finish before Vercel Production is Ready. `deployment_status` is the trigger because this repo already has Vercel GitHub Deployments named `Production` / `Preview`. The production workflow must be on `main` before it will fire. Preview deployments are ignored. Concurrency is grouped by that deployment environment so a Preview event cannot cancel an in-flight Production e2e run.
 
 ### GitHub Actions secrets (repository scope)
 

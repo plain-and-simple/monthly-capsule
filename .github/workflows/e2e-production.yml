@@ -7,11 +7,15 @@ name: E2E production
 # named Production / Preview with state success. Preview is ignored.
 # Do not set jobs.*.environment to Production — that would create another
 # GitHub Deployment and loop this workflow.
+#
+# Concurrency is evaluated before the Production-only job `if`. A shared
+# group lets a Preview deployment_status event cancel an in-flight Production
+# e2e run, then skip itself. Scope the group by deployment environment.
 on:
   deployment_status:
 
 concurrency:
-  group: e2e-production
+  group: e2e-${{ github.event.deployment.environment || github.event.deployment_status.environment }}
   cancel-in-progress: true
 
 permissions:
