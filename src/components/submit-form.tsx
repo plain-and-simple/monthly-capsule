@@ -1,8 +1,8 @@
 "use client";
 
-import { useActionState, useEffect, useRef, useState } from "react";
+import { useActionState, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { submitLetter, type SubmitState } from "@/actions/submit";
+import { saveLetterDraft, submitLetter, type SubmitState } from "@/actions/submit";
 import { MutationToast } from "@/components/app-toast";
 import { PendingLink } from "@/components/pending-link";
 import { PendingSubmitButton, useInstantBusy } from "@/components/pending-submit-button";
@@ -17,11 +17,18 @@ import {
   SUBMIT_IN_AND_EDITABLE,
   SUBMIT_IN_HEADING,
   SUBMIT_SAVED_DRAFT,
+  SUBMIT_DRAFT_SAVED,
   SUBMIT_STILL_EDITABLE,
 } from "@/lib/copy";
 import { appendPhotos, photoBatchFit } from "@/lib/photo-files";
 import { PHOTO_COMPRESS_FAILED, compressPhotoFile } from "@/lib/photo-compress";
-import { submissionHasContent, visibleSubmitLetter, type SubmitStatus } from "@/lib/submit";
+import {
+  LETTER_AUTOSAVE_MS,
+  shouldAutosaveLetter,
+  submissionHasContent,
+  visibleSubmitLetter,
+  type SubmitStatus,
+} from "@/lib/submit";
 
 type StagedPhoto = {
   id: string;
@@ -55,6 +62,9 @@ export function SubmitForm({
   const router = useRouter();
   const [body, setBody] = useState(initialBody);
   const savedBodyRef = useRef<string | null>(null);
+  const lastSavedBodyRef = useRef(initialBody);
+  const [draftHint, setDraftHint] = useState(initialStatus === "draft");
+  const [autosaveStatus, setAutosaveStatus] = useState<SubmitStatus | null>(null);
   const [photos, setPhotos] = useState<StagedPhoto[]>(() =>
     existingPhotos.map((photo) => ({
       id: photo.storagePath,
@@ -68,7 +78,19 @@ export function SubmitForm({
   const [state, action, pending] = useActionState<SubmitState, FormData>(submitLetter, null);
   const { busy, markBusy } = useInstantBusy(pending);
   const fileRef = useRef<HTMLInputElement>(null);
+  const bodyRef = useRef(body);
+  const closedRef = useRef(closed);
+  const submittedRef = useRef(false);
+  const autosaveGenRef = useRef(0);
   const initialSaved = existingPhotos.map((photo) => photo.storagePath).join("|");
+  const explicitBusyRef = useRef(false);
+
+  const status = state?.status ?? autosaveStatus ?? initialStatus;
+  const submitted = status === "submitted";
+  bodyRef.current = body;
+  closedRef.current = closed;
+  submittedRef.current = submitted;
+  explicitBusyRef.current = busy;
 
   useEffect(() => {
     return () => {
@@ -91,6 +113,9 @@ export function SubmitForm({
 
   useEffect(() => {
     if (!state?.ok) return;
+    lastSavedBodyRef.current = savedBodyRef.current ?? lastSavedBodyRef.current;
+    if (state.status === "draft") setDraftHint(true);
+    if (state.status === "submitted") setDraftHint(false);
     setBody((current) =>
       visibleSubmitLetter({
         initialBody,
@@ -105,6 +130,47 @@ export function SubmitForm({
     if (!state?.ok) return;
     router.refresh();
   }, [state, router]);
+
+  const persistLetterDraft = useCallback(async () => {
+    const text = bodyRef.current;
+    if (
+      !shouldAutosaveLetter({
+        closed: closedRef.current,
+        submitted: submittedRef.current,
+        explicitBusy: explicitBusyRef.current,
+        currentBody: text,
+        lastSavedBody: lastSavedBodyRef.current,
+      })
+    ) {
+      return;
+    }
+    const gen = ++autosaveGenRef.current;
+    const result = await saveLetterDraft(groupId, text);
+    if (gen !== autosaveGenRef.current) return;
+    if (explicitBusyRef.current || submittedRef.current) return;
+    if (!result?.ok || result.status !== "draft") return;
+    lastSavedBodyRef.current = text;
+    setAutosaveStatus("draft");
+    setDraftHint(true);
+  }, [groupId]);
+
+  useEffect(() => {
+    if (
+      !shouldAutosaveLetter({
+        closed,
+        submitted,
+        explicitBusy: busy,
+        currentBody: body,
+        lastSavedBody: lastSavedBodyRef.current,
+      })
+    ) {
+      return;
+    }
+    const handle = window.setTimeout(() => {
+      void persistLetterDraft();
+    }, LETTER_AUTOSAVE_MS);
+    return () => window.clearTimeout(handle);
+  }, [body, busy, closed, persistLetterDraft, submitted]);
 
   async function onFiles(list: FileList | null) {
     const files = Array.from(list ?? []);
@@ -136,14 +202,7 @@ export function SubmitForm({
     }
   }
 
-  const status = state?.status ?? initialStatus;
-  const submitted = status === "submitted";
-  const statusLine =
-    state?.ok && status === "draft"
-      ? SUBMIT_SAVED_DRAFT
-      : status === "draft"
-        ? SUBMIT_SAVED_DRAFT
-        : null;
+  const statusLine = submitted ? null : draftHint || status === "draft" ? SUBMIT_DRAFT_SAVED : null;
   const toastMessage =
     state?.ok && status === "draft"
       ? SUBMIT_SAVED_DRAFT
@@ -184,6 +243,7 @@ export function SubmitForm({
         }
         setPhotoError(null);
         markBusy();
+        autosaveGenRef.current += 1;
         savedBodyRef.current = posted;
         setBody(posted);
         formData.set("groupId", groupId);
@@ -205,7 +265,7 @@ export function SubmitForm({
         <div className="row row--between">
           <h1>{title}</h1>
           {statusLine ? (
-            <span className="status">
+            <span className="status" role="status" aria-live="polite">
               <span className="dot" />
               {statusLine}
             </span>
@@ -230,6 +290,9 @@ export function SubmitForm({
           name="body"
           value={body}
           onChange={(event) => setBody(event.target.value)}
+          onBlur={() => {
+            void persistLetterDraft();
+          }}
           maxLength={20000}
           readOnly={busy}
           placeholder="What has this month been like?"

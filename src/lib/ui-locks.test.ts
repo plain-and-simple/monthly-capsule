@@ -10,6 +10,13 @@ describe("submit model A UI", () => {
     const source = readFileSync(resolve(here, "../components/submit-form.tsx"), "utf8");
     expect(source).toContain("SUBMIT_DRAFT");
     expect(source).toContain("SUBMIT_AND_SEND");
+    expect(source).toContain("SUBMIT_DRAFT_SAVED");
+    expect(source).toContain("saveLetterDraft");
+    expect(source).toContain("LETTER_AUTOSAVE_MS");
+    expect(source).toContain("shouldAutosaveLetter");
+    expect(source).toContain("onBlur");
+    expect(source).toContain("persistLetterDraft");
+    expect(source).not.toMatch(/saveLetterDraft\([^)]*photo/i);
     expect(source).toContain('value="draft"');
     expect(source).toContain('value="submit"');
     expect(source).toContain("compressPhotoFile");

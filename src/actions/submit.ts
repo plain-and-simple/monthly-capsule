@@ -12,7 +12,14 @@ import { resolveSubmitWindow } from "@/lib/cycle-store";
 import { findAccountById } from "@/lib/memberships";
 import { requireGroupMember } from "@/lib/session";
 import { SUBMIT_EMPTY, PHOTOS_MAX } from "@/lib/copy";
-import { nextSubmissionWrite, parseSubmitIntent, submissionHasContent, type SubmitStatus } from "@/lib/submit";
+import {
+  isUniqueConstraintError,
+  nextAutosaveWrite,
+  nextSubmissionWrite,
+  parseSubmitIntent,
+  submissionHasContent,
+  type SubmitStatus,
+} from "@/lib/submit";
 import { createAdminClient } from "@/lib/supabase";
 
 export type SubmitState = {
@@ -189,6 +196,82 @@ export async function submitLetter(
     // photo/storage failures must not become the Next.js digest 500 page.
     if (isRedirectError(error)) throw error;
     console.error("submitLetter failed", error);
+    return { error: "Could not save." };
+  }
+}
+
+/** Letter text only. Never reads photos, keep_path, or photos_touched. */
+export async function saveLetterDraft(groupId: string, body: string): Promise<SubmitState> {
+  try {
+    const letter = String(body ?? "").trim();
+    if (letter.length > 20_000) {
+      return { error: "Letter is too long." };
+    }
+
+    const { member, group } = await requireGroupMember(groupId);
+    if (!membershipIsActive(member)) {
+      return { error: "Could not save." };
+    }
+    const linkedAccount = member.account_id ? await findAccountById(member.account_id) : null;
+    const blocked = submitBlockedReason(member, linkedAccount);
+    if (blocked) {
+      return { error: blocked };
+    }
+    const window = await resolveSubmitWindow(group);
+    if (!window.open || !window.yearMonth || window.version == null) {
+      return { error: "Submit is closed." };
+    }
+
+    const month = await ensureMonth(groupId, window.yearMonth, "open", window.version);
+    const admin = createAdminClient();
+    const { data: existing } = await admin
+      .from("submissions")
+      .select("id, status")
+      .eq("month_id", month.id)
+      .eq("member_id", member.id)
+      .maybeSingle();
+
+    const write = nextAutosaveWrite({
+      existing: existing ? { status: (existing.status as string | null) ?? null } : null,
+      body: letter,
+      now: new Date().toISOString(),
+    });
+    if (write.skip) {
+      return { ok: true, status: write.status };
+    }
+
+    if (existing) {
+      const { data: updated, error } = await admin
+        .from("submissions")
+        .update(write.patch)
+        .eq("id", existing.id)
+        .neq("status", "submitted")
+        .select("id")
+        .maybeSingle();
+      if (error) return { error: "Could not save." };
+      if (!updated) {
+        return { ok: true, status: "submitted" };
+      }
+    } else {
+      const { error } = await admin.from("submissions").insert({
+        month_id: month.id,
+        member_id: member.id,
+        ...write.patch,
+      });
+      if (error) {
+        if (isUniqueConstraintError(error)) {
+          return { ok: true, status: "submitted" };
+        }
+        return { error: "Could not save." };
+      }
+    }
+
+    revalidatePath(`/g/${groupId}`);
+    revalidatePath(`/g/${groupId}/submit`);
+    return { ok: true, status: "draft" };
+  } catch (error) {
+    if (isRedirectError(error)) throw error;
+    console.error("saveLetterDraft failed", error);
     return { error: "Could not save." };
   }
 }

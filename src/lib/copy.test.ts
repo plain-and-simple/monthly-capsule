@@ -68,6 +68,7 @@ import {
   SUBMIT_IN_AND_EDITABLE,
   SUBMIT_IN_HEADING,
   SUBMIT_SAVED_DRAFT,
+  SUBMIT_DRAFT_SAVED,
   SUBMIT_STILL_EDITABLE,
   SUBMIT_SUBMITTED,
   PHOTOS_TYPE,
@@ -136,6 +137,7 @@ describe("create success hero smoke", () => {
     expect(hero.hint).toBe("Show once — save it.");
     expect(TOAST_SUCCESS).toBe("Success");
     expect(SUBMIT_SAVED_DRAFT).toBe("Saved as draft");
+    expect(SUBMIT_DRAFT_SAVED).toBe("Draft saved");
     expect(SUBMIT_SUBMITTED).toBe("Submitted");
     expect(SUBMIT_IN_HEADING).toBe("Your letter is in.");
     expect(SUBMIT_STILL_EDITABLE).toBe("You can keep editing until the window closes.");
@@ -220,6 +222,7 @@ describe("join and manage labels", () => {
   it("locks submit model A labels", () => {
     expect(SUBMIT_DRAFT).toBe("Save as draft");
     expect(SUBMIT_AND_SEND).toBe("Save and submit");
+    expect(SUBMIT_DRAFT_SAVED).toBe("Draft saved");
     expect(SUBMIT_IN_AND_EDITABLE).toMatch(/keep editing/i);
   });
 

@@ -2,12 +2,20 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { isSubmittedThisPeriod } from "./roster";
 import {
+  LETTER_AUTOSAVE_MS,
+  POSTGRES_UNIQUE_VIOLATION,
+  applyAutosaveInsert,
+  applyAutosaveUpdate,
   includedSubmissions,
   isIncludedInCapsule,
+  isUniqueConstraintError,
   missedCountPhrase,
+  nextAutosaveWrite,
   nextSubmissionWrite,
   parseSubmitIntent,
+  shouldAutosaveLetter,
   submissionHasContent,
   visibleSubmitLetter,
   writtenCount,
@@ -130,5 +138,175 @@ describe("submit action error handling", () => {
     expect(source).toContain("SUBMIT_EMPTY");
     expect(source).toMatch(/catch \(error\)/);
     expect(source).toContain("if (isRedirectError(error)) throw error");
+  });
+
+  it("autosaves letter drafts without touching the photo pipeline", () => {
+    const source = readFileSync(resolve(here, "../actions/submit.ts"), "utf8");
+    const start = source.indexOf("export async function saveLetterDraft");
+    expect(start).toBeGreaterThan(-1);
+    const autosave = source.slice(start);
+    expect(autosave).toContain("nextAutosaveWrite");
+    expect(autosave).toContain('.neq("status", "submitted")');
+    expect(autosave).toContain("isUniqueConstraintError");
+    expect(autosave).not.toContain("upsert");
+    expect(autosave).not.toContain("collectPhotoFiles");
+    expect(autosave).not.toContain("keep_path");
+    expect(autosave).not.toContain("photos_touched");
+    expect(autosave).not.toContain("compressPhotoForStorage");
+    expect(autosave).not.toContain("validatePhotoList");
+    expect(autosave).not.toContain(".from(\"photos\")");
+  });
+});
+
+describe("letter autosave vs final submit", () => {
+  const now = "2026-10-05T12:00:00.000Z";
+
+  it("debounces about 2s and skips unchanged, closed, busy, or already-submitted letters", () => {
+    expect(LETTER_AUTOSAVE_MS).toBe(2_000);
+    expect(
+      shouldAutosaveLetter({
+        closed: false,
+        submitted: false,
+        explicitBusy: false,
+        currentBody: "October was loud.",
+        lastSavedBody: "",
+      }),
+    ).toBe(true);
+    expect(
+      shouldAutosaveLetter({
+        closed: false,
+        submitted: false,
+        explicitBusy: false,
+        currentBody: "October was loud.",
+        lastSavedBody: "October was loud.",
+      }),
+    ).toBe(false);
+    expect(
+      shouldAutosaveLetter({
+        closed: true,
+        submitted: false,
+        explicitBusy: false,
+        currentBody: "October was loud.",
+        lastSavedBody: "",
+      }),
+    ).toBe(false);
+    expect(
+      shouldAutosaveLetter({
+        closed: false,
+        submitted: true,
+        explicitBusy: false,
+        currentBody: "October was loud.",
+        lastSavedBody: "",
+      }),
+    ).toBe(false);
+    expect(
+      shouldAutosaveLetter({
+        closed: false,
+        submitted: false,
+        explicitBusy: true,
+        currentBody: "October was loud.",
+        lastSavedBody: "",
+      }),
+    ).toBe(false);
+  });
+
+  it("stores autosave as a draft that is Not yet and never compiled", () => {
+    const autosave = nextAutosaveWrite({
+      existing: null,
+      body: "Soup weather.",
+      now,
+    });
+    expect(autosave.skip).toBe(false);
+    if (autosave.skip) throw new Error("expected autosave write");
+    expect(autosave.status).toBe("draft");
+    expect(autosave.patch.status).toBe("draft");
+    expect(autosave.patch.body).toBe("Soup weather.");
+    expect(isSubmittedThisPeriod(autosave.patch)).toBe(false);
+    expect(isIncludedInCapsule(autosave.patch)).toBe(false);
+    expect(writtenCount([autosave.patch, { status: "submitted" }])).toBe(1);
+
+    const later = nextAutosaveWrite({
+      existing: { status: "draft" },
+      body: "Soup weather, still.",
+      now: "2026-10-05T12:00:02.000Z",
+    });
+    expect(later.skip).toBe(false);
+    if (later.skip) throw new Error("expected draft update");
+    expect(later.patch.status).toBe("draft");
+    expect(isSubmittedThisPeriod(later.patch)).toBe(false);
+    expect(isIncludedInCapsule(later.patch)).toBe(false);
+  });
+
+  it("keeps Submit as the only final action and does not demote a submitted letter", () => {
+    const submitted = nextSubmissionWrite({
+      existing: { status: "draft" },
+      body: "Soup weather.",
+      intent: "submitted",
+      now,
+    });
+    expect(submitted.status).toBe("submitted");
+    expect(isSubmittedThisPeriod(submitted)).toBe(true);
+    expect(isIncludedInCapsule(submitted)).toBe(true);
+
+    const lateAutosave = nextAutosaveWrite({
+      existing: { status: "submitted" },
+      body: "typed after submit",
+      now: "2026-10-05T12:01:00.000Z",
+    });
+    expect(lateAutosave).toEqual({ skip: true, status: "submitted" });
+    expect(isSubmittedThisPeriod({ status: lateAutosave.status })).toBe(true);
+    expect(isIncludedInCapsule({ status: lateAutosave.status })).toBe(true);
+  });
+
+  it("keeps submitted status and text when a late autosave lands after submit", () => {
+    const submitted = { status: "submitted" as const, body: "Final soup letter." };
+    const staleDraft = { status: "draft" as const, body: "stale typed in another tab" };
+
+    const afterUpdate = applyAutosaveUpdate({ current: submitted, patch: staleDraft });
+    expect(afterUpdate.applied).toBe(false);
+    expect(afterUpdate.row).toEqual(submitted);
+    expect(afterUpdate.row.body).toBe("Final soup letter.");
+    expect(isSubmittedThisPeriod(afterUpdate.row)).toBe(true);
+    expect(isIncludedInCapsule(afterUpdate.row)).toBe(true);
+
+    const afterInsert = applyAutosaveInsert({ current: submitted, insert: staleDraft });
+    expect(afterInsert.applied).toBe(false);
+    expect(afterInsert.uniqueConflict).toBe(true);
+    expect(afterInsert.row).toEqual(submitted);
+    expect(afterInsert.row.body).toBe("Final soup letter.");
+    expect(isSubmittedThisPeriod(afterInsert.row)).toBe(true);
+    expect(isIncludedInCapsule(afterInsert.row)).toBe(true);
+
+    expect(isUniqueConstraintError({ code: POSTGRES_UNIQUE_VIOLATION })).toBe(true);
+    expect(isUniqueConstraintError({ code: "23503" })).toBe(false);
+    expect(POSTGRES_UNIQUE_VIOLATION).toBe("23505");
+
+    expect(
+      applyAutosaveUpdate({
+        current: { status: "draft", body: "old draft" },
+        patch: staleDraft,
+      }).applied,
+    ).toBe(true);
+    expect(
+      applyAutosaveInsert({
+        current: null,
+        insert: staleDraft,
+      }).applied,
+    ).toBe(true);
+
+    const source = readFileSync(resolve(here, "../actions/submit.ts"), "utf8");
+    const autosave = source.slice(source.indexOf("export async function saveLetterDraft"));
+    expect(autosave).toContain('.update(write.patch)');
+    expect(autosave).toContain('.eq("id", existing.id)');
+    expect(autosave).toContain('.neq("status", "submitted")');
+    expect(autosave).toMatch(/if \(isUniqueConstraintError\(error\)\)/);
+  });
+
+  it("locks the product copy: letter autosave is a draft, photos never autosave", () => {
+    const readme = readFileSync(resolve(here, "../../README.md"), "utf8");
+    expect(readme).toContain("Photos never autosave");
+    expect(readme).toContain("Draft saved");
+    expect(readme).toContain("is the only final action");
+    expect(readme).toMatch(/draft is \*\*Not yet\*\*/);
   });
 });

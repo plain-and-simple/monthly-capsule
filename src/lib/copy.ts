@@ -113,6 +113,7 @@ export const GROUP_NEXT_CAPSULE = "Next capsule";
 export const SUBMIT_DRAFT = "Save as draft";
 export const SUBMIT_AND_SEND = "Save and submit";
 export const SUBMIT_SAVED_DRAFT = "Saved as draft";
+export const SUBMIT_DRAFT_SAVED = "Draft saved";
 export const SUBMIT_SUBMITTED = "Submitted";
 export const SUBMIT_IN_HEADING = "Your letter is in.";
 export const SUBMIT_STILL_EDITABLE = "You can keep editing until the window closes.";
