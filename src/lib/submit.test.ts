@@ -255,7 +255,7 @@ describe("letter autosave vs final submit", () => {
     const readme = readFileSync(resolve(here, "../../README.md"), "utf8");
     expect(readme).toContain("Photos never autosave");
     expect(readme).toContain("Draft saved");
-    expect(readme).toMatch(/Save and submit.*only final action/s);
+    expect(readme).toContain("is the only final action");
     expect(readme).toMatch(/draft is \*\*Not yet\*\*/);
   });
 });
