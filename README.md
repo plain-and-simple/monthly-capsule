@@ -27,7 +27,7 @@ Agents working in this repo: read `AGENTS.md` before changing product behavior.
 - Invite is the join URL plus share text. The server never returns a PIN after create/regen. Owners can make a new PIN on Invite (shown once). Anyone invited types the PIN on the join page. Any member.
 - People is any member. **preferred_name only** — no emails, no PIN hash. Roster lives on group home. For the current open submit month, current members list as **Submitted** vs **Not yet**. Submitted means a final submit this period; a draft alone is Not yet. Names only — no letter or photos. Exclude kicked or left members (`removed_at`). Status labels hide when the window is closed.
 - Settings (schedule, **Capsule theme**, group name, regen PIN) is owner only. Open early / close live on group home. Members never see force actions or the theme picker.
-- Creating a group requires a studio code from `CREATE_GROUP_CODE` (default `plainandsimple` if unset). Compared trim + case-insensitive. Server rejects a missing or wrong code. Then preferred name + email + password. The account owns the group.
+- Creating a group requires a studio code from `CREATE_GROUP_CODE` (must be set in production env). Compared trim + case-insensitive. Server rejects a missing or wrong code. Then preferred name + email + password. The account owns the group.
 - Photos: max 6 per submission. Client compresses before upload (1600px long edge, WebP if the browser can encode it else JPEG, quality ~0.8, hard cap 1 MB; retry lower quality or reject). Server re-encodes with `sharp` at the same caps, strips EXIF, and stores only that object — never the camera original. Re-encode failure is a friendly error, not keep-original.
 - Timezone is **America/Chicago** for every group. No picker.
 - Schedule fields: `submit_start_day` (default 1), `submit_end_day` (default 8), `email_day` (default 9).
@@ -93,7 +93,7 @@ See `.env.example`.
 | `COOKIE_SECRET` | ≥16 random chars; signs the session JWT |
 | `APP_URL` | Origin, no trailing slash. Local: `http://localhost:3000`. Prod: `https://capsule.plainandsimple.app` |
 | `CRON_SECRET` | Vercel Cron `Authorization: Bearer …` |
-| `CREATE_GROUP_CODE` | Studio code to create a group. Trim + case-insensitive. Default if unset: `plainandsimple`. Set on Vercel for production. |
+| `CREATE_GROUP_CODE` | Studio code to create a group. Trim + case-insensitive. **Required in production** — set it on Vercel. Do not publish the production value. Local/dev may leave it unset to use the built-in local default in code. |
 | `E2E_BASE_URL` | Playwright origin. Leave empty for `http://127.0.0.1:3000`. Never defaults to production. |
 | `E2E_EMAIL` / `E2E_PASSWORD` | Optional test account. Auth/submit/group tests skip when unset. |
 | `E2E_GROUP_PIN` / `E2E_GROUP_ID` | Optional join-path secrets. Join submit skips when unset. |
@@ -172,7 +172,7 @@ Fill the exports in your shell. Never commit real credentials. HTML report: `npx
 
 After env + **all** migrations (init, accounts, force-cycle, submission_status, capsule_archive, **month_versions**, **capsule_theme**, **capsule_pdf**). Prefer `npm run test:e2e` for the smoke; the steps below are still the manual Ready path:
 
-1. **Create (GWT B).** Sign in, then `/create` (studio code; local default `plainandsimple` if `CREATE_GROUP_CODE` is unset). Preferred name, email, password (8+). Copy the join link and PIN. Continue to the group, then Your groups. You are the owner.
+1. **Create (GWT B).** Sign in, then `/create` (studio code from `CREATE_GROUP_CODE`; local/dev may leave that env unset). Preferred name, email, password (8+). Copy the join link and PIN. Continue to the group, then Your groups. You are the owner.
 2. **Manage (GWT A).** Private window. `/` → **Sign in** with that email + password (or Create an account first). No SMS. Any number of groups → Your groups. Sign out from `/manage`. **Forgot password?** from the login card → `/forgot` → same ack whether the email exists. Open the emailed `/reset/…` link, set a new password (8+), land signed in.
 3. **Join existing (GWT C).** Sign up (or Sign in) first. **Join existing Capsule**: group ID + PIN + preferred name. Manage lists the group. There is no skip-save PIN-only seat that can submit.
 4. **Invite link (GWT D).** Private window. Open the join link while signed out: invite landing asks to create an account or sign in, then returns to the same `/join/{uuid}` for PIN + preferred name. Unknown links say the invite is not valid. A leftover seat with no `account_id` must finish the account before draft or submit.
