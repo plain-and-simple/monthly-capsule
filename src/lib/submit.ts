@@ -141,3 +141,55 @@ export function shouldAutosaveLetter(input: {
   if (input.closed || input.submitted || input.explicitBusy) return false;
   return input.currentBody !== input.lastSavedBody;
 }
+
+/** Postgres unique_violation — submissions (month_id, member_id). */
+export const POSTGRES_UNIQUE_VIOLATION = "23505";
+
+export function isUniqueConstraintError(error: { code?: string | null } | null | undefined): boolean {
+  return String(error?.code ?? "") === POSTGRES_UNIQUE_VIOLATION;
+}
+
+/**
+ * Live-row guard for an autosave UPDATE. A submitted row keeps its status and
+ * body even if the autosave started from a stale draft snapshot.
+ */
+export function applyAutosaveUpdate(input: {
+  current: { status?: string | null; body: string };
+  patch: { status: SubmitStatus; body: string };
+}): { applied: boolean; row: { status: string; body: string } } {
+  if ((input.current.status ?? null) === "submitted") {
+    return {
+      applied: false,
+      row: { status: "submitted", body: input.current.body },
+    };
+  }
+  return {
+    applied: true,
+    row: { status: input.patch.status, body: input.patch.body },
+  };
+}
+
+/**
+ * Live-row guard for an autosave INSERT. If another tab already wrote the
+ * unique (month, member) row, skip — do not overwrite submitted text.
+ */
+export function applyAutosaveInsert(input: {
+  current: { status?: string | null; body: string } | null;
+  insert: { status: SubmitStatus; body: string };
+}): { applied: boolean; uniqueConflict: boolean; row: { status: string; body: string } } {
+  if (input.current) {
+    return {
+      applied: false,
+      uniqueConflict: true,
+      row: {
+        status: input.current.status ?? "submitted",
+        body: input.current.body,
+      },
+    };
+  }
+  return {
+    applied: true,
+    uniqueConflict: false,
+    row: { status: input.insert.status, body: input.insert.body },
+  };
+}

@@ -13,6 +13,7 @@ import { findAccountById } from "@/lib/memberships";
 import { requireGroupMember } from "@/lib/session";
 import { SUBMIT_EMPTY, PHOTOS_MAX } from "@/lib/copy";
 import {
+  isUniqueConstraintError,
   nextAutosaveWrite,
   nextSubmissionWrite,
   parseSubmitIntent,
@@ -240,15 +241,29 @@ export async function saveLetterDraft(groupId: string, body: string): Promise<Su
     }
 
     if (existing) {
-      const { error } = await admin.from("submissions").update(write.patch).eq("id", existing.id);
+      const { data: updated, error } = await admin
+        .from("submissions")
+        .update(write.patch)
+        .eq("id", existing.id)
+        .neq("status", "submitted")
+        .select("id")
+        .maybeSingle();
       if (error) return { error: "Could not save." };
+      if (!updated) {
+        return { ok: true, status: "submitted" };
+      }
     } else {
       const { error } = await admin.from("submissions").insert({
         month_id: month.id,
         member_id: member.id,
         ...write.patch,
       });
-      if (error) return { error: "Could not save." };
+      if (error) {
+        if (isUniqueConstraintError(error)) {
+          return { ok: true, status: "submitted" };
+        }
+        return { error: "Could not save." };
+      }
     }
 
     revalidatePath(`/g/${groupId}`);
