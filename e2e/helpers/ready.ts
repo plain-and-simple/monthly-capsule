@@ -2,6 +2,7 @@ import { expect, type Page } from "@playwright/test";
 import {
   CONTRIBUTORS_PREFIX,
   CYCLE_CLOSE_COMPILE,
+  GROUP_FIRST_CAPSULE_HEADING,
   GROUP_PRIMARY_EDIT,
   GROUP_PRIMARY_SUBMIT,
   GROUP_PRIMARY_VIEW,
@@ -58,9 +59,15 @@ export async function signIn(page: Page, email: string, password: string) {
 }
 
 export async function openCapsuleCover(page: Page): Promise<"letters" | "empty" | "none"> {
-  const primary = page.getByRole("link", { name: /Read the capsule/i });
+  const primary = page.getByRole("link", { name: GROUP_PRIMARY_VIEW, exact: true });
+  const write = page.getByRole("link", { name: GROUP_PRIMARY_SUBMIT });
+  const edit = page.getByRole("link", { name: GROUP_PRIMARY_EDIT });
+  const resume = page.getByRole("link", { name: "Continue your draft" });
+  const first = page.getByRole("heading", { name: GROUP_FIRST_CAPSULE_HEADING });
+  // Group home streams behind loading.tsx ("Working…"). locator.count() does not wait.
+  await expect(primary.or(write).or(edit).or(resume).or(first).first()).toBeVisible();
   if ((await primary.count()) === 0) return "none";
-  await primary.first().click();
+  await primary.click();
   await expect(page).toHaveURL(/\/capsule\//);
   const empty = page.getByText("No letters this month.");
   const contributors = page.getByText(new RegExp(`^${CONTRIBUTORS_PREFIX}`));

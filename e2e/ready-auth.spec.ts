@@ -7,6 +7,7 @@ import {
   DOWNLOAD_PDF_LABEL,
   GROUP_NEXT_CAPSULE,
   GROUP_PEOPLE_HEADING,
+  GROUP_PRIMARY_VIEW,
   JOIN_PIN_LABEL,
   MANAGE_EMPTY_TITLE,
   MANAGE_TAG_NOT_OPEN,
@@ -139,6 +140,7 @@ test.describe("Ready authenticated paths", () => {
       await notNow.click();
     }
     await page.reload();
+    await expect(page.getByRole("link", { name: GROUP_PRIMARY_VIEW })).toBeVisible();
 
     const cover = await openCapsuleCover(page);
     expect(cover).toBe("letters");
