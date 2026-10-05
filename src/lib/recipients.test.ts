@@ -5,10 +5,10 @@ describe("resolveCapsuleRecipients", () => {
   it("uses members.email when present", () => {
     expect(
       resolveCapsuleRecipients([
-        { preferredName: "Chandler", memberEmail: "chanfans@gmail.com", accountEmail: null },
+        { preferredName: "Chandler", memberEmail: "member@example.com", accountEmail: null },
       ]),
     ).toEqual({
-      emails: ["chanfans@gmail.com"],
+      emails: ["member@example.com"],
       skippedNoEmail: 0,
       skippedNames: [],
     });
@@ -38,11 +38,11 @@ describe("resolveCapsuleRecipients", () => {
   it("dedupes the same address across seats and sources", () => {
     expect(
       resolveCapsuleRecipients([
-        { preferredName: "A", memberEmail: "ChanFans@gmail.com", accountEmail: "chanfans@gmail.com" },
-        { preferredName: "B", memberEmail: null, accountEmail: "chanfans@gmail.com" },
-        { preferredName: "C", memberEmail: "chanfans@gmail.com", accountEmail: null },
+        { preferredName: "A", memberEmail: "Member@example.com", accountEmail: "member@example.com" },
+        { preferredName: "B", memberEmail: null, accountEmail: "member@example.com" },
+        { preferredName: "C", memberEmail: "member@example.com", accountEmail: null },
       ]),
-    ).toEqual({ emails: ["chanfans@gmail.com"], skippedNoEmail: 0, skippedNames: [] });
+    ).toEqual({ emails: ["member@example.com"], skippedNoEmail: 0, skippedNames: [] });
   });
 
   it("lists skipped members by name instead of dropping them silently", () => {
