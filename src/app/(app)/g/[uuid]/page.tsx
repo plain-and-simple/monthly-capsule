@@ -25,7 +25,7 @@ import {
 } from "@/lib/group-status";
 import { resolveSubmitWindow } from "@/lib/cycle-store";
 import { ROSTER_SELECT, canForceCycle, toRoster } from "@/lib/manage";
-import { activeRosterMembers, periodRoster } from "@/lib/roster";
+import { activeRosterMembers, periodRoster, periodWrittenCount } from "@/lib/roster";
 import {
   capsuleHref,
   capsuleTitle,
@@ -37,7 +37,7 @@ import {
 import { monthLabel } from "@/lib/schedule";
 import { requireGroupMember } from "@/lib/session";
 import { parseFlashError } from "@/lib/session-policy";
-import { writtenCount, writtenCountPhrase } from "@/lib/submit";
+import { writtenCountPhrase } from "@/lib/submit";
 import { createAdminClient } from "@/lib/supabase";
 import type { Role, Submission } from "@/lib/types";
 
@@ -60,8 +60,7 @@ export default async function GroupHomePage({
   const admin = createAdminClient();
   const name = groupDisplayName(group.name);
 
-  const [{ count }, { data: compiledMonths }, { data: rosterRows }] = await Promise.all([
-    admin.from("members").select("id", { count: "exact", head: true }).eq("group_id", uuid).is("removed_at", null),
+  const [{ data: compiledMonths }, { data: rosterRows }] = await Promise.all([
     admin
       .from("months")
       .select("id, year_month, version")
@@ -77,7 +76,6 @@ export default async function GroupHomePage({
       .order("joined_at", { ascending: true }),
   ]);
 
-  const total = count ?? 0;
   const compiled = (compiledMonths ?? []).map((row) => ({
     yearMonth: row.year_month as string,
     version: normalizeMonthVersion(row.version),
@@ -87,7 +85,6 @@ export default async function GroupHomePage({
   const actorIsOwner = canForceCycle(member.role);
 
   let myStatus: "none" | "draft" | "submitted" = "none";
-  let written = 0;
   let periodSubmissions: Array<{ member_id: string; status?: string | null }> = [];
   if (yearMonth && version != null) {
     const { data: month } = await admin
@@ -103,7 +100,6 @@ export default async function GroupHomePage({
         .select("member_id, status")
         .eq("month_id", month.id);
       periodSubmissions = (submissions ?? []) as Array<{ member_id: string; status?: string | null }>;
-      written = writtenCount(periodSubmissions);
       const mine = periodSubmissions.find((row) => row.member_id === member.id) as
         | Pick<Submission, "status">
         | undefined;
@@ -125,6 +121,7 @@ export default async function GroupHomePage({
     ),
     periodSubmissions,
   );
+  const { written, total } = periodWrittenCount(people);
 
   const featuredMonth = open ? yearMonth : latestCapsule?.yearMonth;
   const featuredLabel = open && yearMonth

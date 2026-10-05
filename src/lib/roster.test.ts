@@ -8,6 +8,7 @@ import {
   activeRosterMembers,
   isSubmittedThisPeriod,
   periodRoster,
+  periodWrittenCount,
   rosterPeriodLabel,
   splitPeriodRoster,
 } from "./roster";
@@ -88,6 +89,11 @@ describe("open-month roster: Submitted vs Not yet", () => {
     );
     expect(split.submitted).toEqual([]);
     expect(split.notYet.map((row) => row.preferred_name)).toEqual(["Ada"]);
+    expect(periodWrittenCount(periodRoster(toRoster(current), [
+      { member_id: "ada", status: "draft" },
+      { member_id: "kicked", status: "submitted" },
+      { member_id: "left", status: "submitted" },
+    ]))).toEqual({ written: 0, total: 1 });
   });
 });
 
@@ -99,6 +105,7 @@ describe("group home roster wiring", () => {
 
     expect(home).toContain("PeopleRoster");
     expect(home).toContain("periodRoster");
+    expect(home).toContain("periodWrittenCount");
     expect(home).toContain("activeRosterMembers");
     expect(home).toContain('.is("removed_at", null)');
     expect(home).toContain('.select("member_id, status")');

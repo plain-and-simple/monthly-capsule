@@ -57,3 +57,13 @@ export function rosterPeriodLabel(submitted: boolean, open: boolean): string | n
   if (!open) return null;
   return submitted ? ROSTER_SUBMITTED : ROSTER_NOT_YET;
 }
+
+export function periodWrittenCount(people: readonly PeriodRosterPerson[]): {
+  written: number;
+  total: number;
+} {
+  return {
+    written: people.filter((person) => person.submitted).length,
+    total: people.length,
+  };
+}
