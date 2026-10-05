@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { CycleForm } from "@/components/cycle-form";
 import { GroupChrome } from "@/components/group-chrome";
-import { KickMemberForm } from "@/components/kick-member-form";
 import { PendingLink } from "@/components/pending-link";
+import { PeopleRoster } from "@/components/people-roster";
 import { SaveLoginForm } from "@/components/save-login-form";
 import { latestUnsentCapsule } from "@/lib/compile";
 import {
@@ -11,7 +11,6 @@ import {
   GROUP_INVITE_SOLO,
   GROUP_INVITE_SOLO_CTA,
   GROUP_NO_PREVIOUS_CAPSULES,
-  GROUP_PEOPLE_HEADING,
   GROUP_PRIMARY_EDIT,
   GROUP_PRIMARY_SUBMIT,
   GROUP_PRIMARY_VIEW,
@@ -19,14 +18,14 @@ import {
 import { groupDisplayName } from "@/lib/copy";
 import {
   capsuleEmailLine,
-  initials,
   nextOpenDateLabel,
   nextOpenMonthLabel,
   submitWindowCloseDay,
   windowClosesPhrase,
 } from "@/lib/group-status";
 import { resolveSubmitWindow } from "@/lib/cycle-store";
-import { ROSTER_SELECT, canForceCycle, canKickMember, toRoster } from "@/lib/manage";
+import { ROSTER_SELECT, canForceCycle, toRoster } from "@/lib/manage";
+import { activeRosterMembers, periodRoster } from "@/lib/roster";
 import {
   capsuleHref,
   capsuleTitle,
@@ -85,13 +84,11 @@ export default async function GroupHomePage({
   }));
   const latestCapsule = compiled[0];
   const earlier = earlierCapsuleRows(compiled, open);
-  const people = toRoster(
-    (rosterRows ?? []) as Array<{ id: string; preferred_name: string; role: Role }>,
-  );
   const actorIsOwner = canForceCycle(member.role);
 
   let myStatus: "none" | "draft" | "submitted" = "none";
   let written = 0;
+  let periodSubmissions: Array<{ member_id: string; status?: string | null }> = [];
   if (yearMonth && version != null) {
     const { data: month } = await admin
       .from("months")
@@ -105,14 +102,29 @@ export default async function GroupHomePage({
         .from("submissions")
         .select("member_id, status")
         .eq("month_id", month.id);
-      written = writtenCount((submissions ?? []) as Array<{ status?: string | null }>);
-      const mine = (submissions ?? []).find((row) => row.member_id === member.id) as
+      periodSubmissions = (submissions ?? []) as Array<{ member_id: string; status?: string | null }>;
+      written = writtenCount(periodSubmissions);
+      const mine = periodSubmissions.find((row) => row.member_id === member.id) as
         | Pick<Submission, "status">
         | undefined;
       if (mine?.status === "submitted") myStatus = "submitted";
       else if (mine) myStatus = "draft";
     }
   }
+
+  const people = periodRoster(
+    toRoster(
+      activeRosterMembers(
+        (rosterRows ?? []) as Array<{
+          id: string;
+          preferred_name: string;
+          role: Role;
+          removed_at?: string | null;
+        }>,
+      ),
+    ),
+    periodSubmissions,
+  );
 
   const featuredMonth = open ? yearMonth : latestCapsule?.yearMonth;
   const featuredLabel = open && yearMonth
@@ -244,37 +256,14 @@ export default async function GroupHomePage({
           />
 
           <div className="stack stack--tight">
-            <p className="eyebrow">{GROUP_PEOPLE_HEADING}</p>
-            <ul className="list">
-              {people.map((person) => {
-                const bits = [
-                  person.id === member.id ? "You" : null,
-                  person.role === "owner" ? "started the group" : null,
-                ].filter(Boolean);
-                const showKick =
-                  actorIsOwner &&
-                  canKickMember({
-                    actorRole: member.role,
-                    actorMemberId: member.id,
-                    targetRole: person.role,
-                    targetMemberId: person.id,
-                  });
-                return (
-                  <li key={person.id}>
-                    <div className="listitem listitem--actions">
-                      <span className="avatar">{initials(person.preferred_name)}</span>
-                      <span className="listitem__body">
-                        <span className="listitem__title">{person.preferred_name}</span>
-                        {bits.length > 0 ? (
-                          <span className="listitem__meta">{bits.join(" · ")}</span>
-                        ) : null}
-                      </span>
-                      {showKick ? <KickMemberForm groupId={uuid} memberId={person.id} /> : null}
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
+            <PeopleRoster
+              people={people}
+              viewerId={member.id}
+              actorRole={member.role}
+              actorMemberId={member.id}
+              groupId={uuid}
+              submitOpen={open}
+            />
             {actorIsOwner && people.length <= 1 ? (
               <p className="muted small">
                 {GROUP_INVITE_SOLO}{" "}

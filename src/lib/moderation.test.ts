@@ -87,11 +87,15 @@ describe("owner kick", () => {
     expect(people).not.toContain("KickMemberForm");
 
     const home = source("../app/(app)/g/[uuid]/page.tsx");
-    expect(home).toContain("KickMemberForm");
-    expect(home).toContain("canKickMember");
+    expect(home).toContain("PeopleRoster");
+    expect(home).toContain("activeRosterMembers");
     expect(home).toContain("actorIsOwner");
     expect(home).toContain('.is("removed_at", null)');
     expect(home).not.toContain("leaveGroup");
+
+    const roster = source("../components/people-roster.tsx");
+    expect(roster).toContain("KickMemberForm");
+    expect(roster).toContain("canKickMember");
 
     const form = source("../components/kick-member-form.tsx");
     expect(form).toContain("PEOPLE_REMOVE");
