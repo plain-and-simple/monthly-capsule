@@ -3,6 +3,7 @@ export type SubmitStatus = (typeof SUBMIT_STATUSES)[number];
 
 export const SUBMIT_INTENT_DRAFT = "draft";
 export const SUBMIT_INTENT_SUBMIT = "submit";
+export const LETTER_AUTOSAVE_MS = 2_000;
 
 export function parseSubmitIntent(value: FormDataEntryValue | null | undefined): SubmitStatus {
   return String(value ?? "") === SUBMIT_INTENT_DRAFT ? "draft" : "submitted";
@@ -102,4 +103,41 @@ export function nextSubmissionWrite(input: {
   }
 
   return patch;
+}
+
+/**
+ * Autosave is letter text only, as a draft for this account + group + period.
+ * It never promotes a letter, and it never demotes an already-submitted one.
+ */
+export function nextAutosaveWrite(input: {
+  existing: { status?: string | null } | null;
+  body: string;
+  now: string;
+}):
+  | { skip: true; status: SubmitStatus }
+  | { skip: false; status: "draft"; patch: ReturnType<typeof nextSubmissionWrite> } {
+  if ((input.existing?.status ?? null) === "submitted") {
+    return { skip: true, status: "submitted" };
+  }
+  return {
+    skip: false,
+    status: "draft",
+    patch: nextSubmissionWrite({
+      existing: input.existing,
+      body: input.body,
+      intent: "draft",
+      now: input.now,
+    }),
+  };
+}
+
+export function shouldAutosaveLetter(input: {
+  closed: boolean;
+  submitted: boolean;
+  explicitBusy: boolean;
+  currentBody: string;
+  lastSavedBody: string;
+}): boolean {
+  if (input.closed || input.submitted || input.explicitBusy) return false;
+  return input.currentBody !== input.lastSavedBody;
 }
