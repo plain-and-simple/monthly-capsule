@@ -65,6 +65,10 @@ describe("e2e suite locks", () => {
     expect(prod).toContain("secrets.E2E_PASSWORD");
     expect(prod).toContain("secrets.E2E_ALLOW_PRODUCTION");
     expect(prod).not.toMatch(/^\s+environment:\s*Production\s*$/m);
+    expect(prod).toContain(
+      "group: e2e-${{ github.event.deployment.environment || github.event.deployment_status.environment }}",
+    );
+    expect(prod).not.toMatch(/^ {2}group: e2e-production\s*$/m);
   });
 
   it("documents empty secret placeholders in README and .env.example", () => {
@@ -76,6 +80,9 @@ describe("e2e suite locks", () => {
     }
     expect(readme).toContain("E2E_ALLOW_PRODUCTION");
     expect(readme).toContain("npm run test:e2e");
+    expect(readme).toContain(
+      "Concurrency is grouped by that deployment environment so a Preview event cannot cancel an in-flight Production e2e run.",
+    );
     expect(envExample).not.toMatch(/^E2E_PASSWORD=.+/m);
   });
 
