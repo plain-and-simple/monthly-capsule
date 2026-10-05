@@ -1,8 +1,14 @@
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { MAX_PHOTO_BYTES, MAX_PHOTO_EDGE_PX } from "./constants";
 import { PHOTO_COMPRESS_FAILED, PHOTO_TOO_LARGE } from "./photo-compress";
-import { compressPhotoForStorage, ensureReadablePhotoBuffer } from "./photo-ingest";
+import { compressPhotoForStorage, decodeHeicToJpeg, ensureReadablePhotoBuffer } from "./photo-ingest";
 import { looksLikeHeic } from "./photo-files";
+
+const here = dirname(fileURLToPath(import.meta.url));
+const sampleHeic = readFileSync(resolve(here, "fixtures/sample.heic"));
 
 async function makeNoisySource(width: number, height: number, exifText?: string) {
   const sharp = (await import("sharp")).default;
@@ -117,6 +123,24 @@ describe("server photo ingest", () => {
     });
     expect(decoded).toBe(0);
     expect(readable.equals(jpeg)).toBe(true);
+  });
+
+  it("decodes a real HEIC file and stores WebP or JPEG, never the camera original", async () => {
+    expect(looksLikeHeic(sampleHeic)).toBe(true);
+    const jpeg = await decodeHeicToJpeg(sampleHeic);
+    expect(jpeg.subarray(0, 3).equals(Buffer.from([0xff, 0xd8, 0xff]))).toBe(true);
+
+    const out = await compressPhotoForStorage(sampleHeic);
+    expect(["image/webp", "image/jpeg"]).toContain(out.contentType);
+    expect(out.bytes).toBeGreaterThan(0);
+    expect(out.bytes).toBeLessThanOrEqual(MAX_PHOTO_BYTES);
+    expect(Math.max(out.width, out.height)).toBeLessThanOrEqual(MAX_PHOTO_EDGE_PX);
+    expect(out.buffer.equals(sampleHeic)).toBe(false);
+    expect(looksLikeHeic(out.buffer)).toBe(false);
+
+    const sharp = (await import("sharp")).default;
+    const meta = await sharp(out.buffer).metadata();
+    expect(["webp", "jpeg"]).toContain(meta.format);
   });
 
   it("does not keep the original when the payload is empty", async () => {

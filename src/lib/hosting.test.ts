@@ -26,6 +26,18 @@ describe("hosting lock", () => {
     expect(source).toContain("Do not lower");
   });
 
+  it("ships libheif wasm with the serverless function so iPhone HEIC can decode", () => {
+    const source = readFileSync(resolve(here, "../../next.config.ts"), "utf8");
+    expect(source).toContain("outputFileTracingIncludes");
+    expect(source).toContain("./node_modules/libheif-js/**/*");
+    expect(source).toContain("heic-convert");
+    expect(source).toContain("heic-decode");
+    const ingest = readFileSync(resolve(here, "photo-ingest.ts"), "utf8");
+    expect(ingest).toContain('import "libheif-js/wasm-bundle"');
+    expect(ingest).toContain("looksLikeHeic(input)");
+    expect(ingest.indexOf("looksLikeHeic(input)")).toBeLessThan(ingest.indexOf("decodeHeic(input)"));
+  });
+
   it("keeps the session cookie host-only (no parent Domain)", () => {
     const options = sessionCookieOptions(true);
     expect(isHostOnlyCookie(options)).toBe(true);

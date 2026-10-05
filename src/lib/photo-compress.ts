@@ -125,40 +125,71 @@ export function heicPassthroughPhoto(file: File): PreparedPhotoFile {
   };
 }
 
+async function rasterizeCanvas(
+  source: CanvasImageSource,
+  sourceWidth: number,
+  sourceHeight: number,
+  originalName: string,
+): Promise<PreparedPhotoFile> {
+  const { width, height } = scalePhotoDimensions(sourceWidth, sourceHeight);
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) {
+    throw new PhotoCompressError();
+  }
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, width, height);
+  ctx.drawImage(source, 0, 0, width, height);
+  const { blob, type } = await encodePhotoToBudget({
+    preferWebP: canvasSupportsWebP(),
+    toBlob: (encodeType, quality) =>
+      new Promise((resolve) => {
+        canvas.toBlob((value) => resolve(value), encodeType, quality);
+      }),
+  });
+  return {
+    blob,
+    name: photoOutputName(originalName, type),
+    width,
+    height,
+  };
+}
+
+/** Chrome cannot createImageBitmap HEIC. Decode in-page, then store WebP/JPEG. */
+export async function rasterizeHeicInBrowser(file: File): Promise<PreparedPhotoFile> {
+  const decode = (await import("heic-decode")).default;
+  const decoded = await decode({ buffer: new Uint8Array(await file.arrayBuffer()) });
+  const off = document.createElement("canvas");
+  off.width = decoded.width;
+  off.height = decoded.height;
+  const octx = off.getContext("2d");
+  if (!octx) {
+    throw new PhotoCompressError();
+  }
+  octx.putImageData(
+    new ImageData(new Uint8ClampedArray(decoded.data), decoded.width, decoded.height),
+    0,
+    0,
+  );
+  return rasterizeCanvas(off, decoded.width, decoded.height, file.name);
+}
+
 export async function compressPhotoFile(file: File): Promise<PreparedPhotoFile> {
   try {
     const bitmap = await createImageBitmap(file);
-    const { width, height } = scalePhotoDimensions(bitmap.width, bitmap.height);
-    const canvas = document.createElement("canvas");
-    canvas.width = width;
-    canvas.height = height;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) {
-      bitmap.close();
-      throw new PhotoCompressError();
-    }
-    ctx.fillStyle = "#ffffff";
-    ctx.fillRect(0, 0, width, height);
-    ctx.drawImage(bitmap, 0, 0, width, height);
+    const prepared = await rasterizeCanvas(bitmap, bitmap.width, bitmap.height, file.name);
     bitmap.close();
-
-    const { blob, type } = await encodePhotoToBudget({
-      preferWebP: canvasSupportsWebP(),
-      toBlob: (encodeType, quality) =>
-        new Promise((resolve) => {
-          canvas.toBlob((value) => resolve(value), encodeType, quality);
-        }),
-    });
-    return {
-      blob,
-      name: photoOutputName(file.name, type),
-      width,
-      height,
-    };
+    return prepared;
   } catch (error) {
     if (error instanceof PhotoCompressError) throw error;
     if (isHeicPhotoInput(file) && file.size > 0) {
-      return heicPassthroughPhoto(file);
+      try {
+        return await rasterizeHeicInBrowser(file);
+      } catch {
+        return heicPassthroughPhoto(file);
+      }
     }
     throw new PhotoCompressError();
   }

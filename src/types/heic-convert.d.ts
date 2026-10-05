@@ -6,3 +6,14 @@ declare module "heic-convert" {
   }): Promise<ArrayBuffer>;
   export default convert;
 }
+
+declare module "libheif-js/wasm-bundle";
+
+declare module "heic-decode" {
+  function decode(input: { buffer: ArrayBuffer | Uint8Array }): Promise<{
+    width: number;
+    height: number;
+    data: Uint8ClampedArray;
+  }>;
+  export default decode;
+}
