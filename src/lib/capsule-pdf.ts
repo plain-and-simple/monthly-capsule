@@ -24,7 +24,11 @@ import { capsulePath, capsuleTitle, DEFAULT_MONTH_VERSION } from "@/lib/month-ve
 import { monthLabel } from "@/lib/schedule";
 import { missedCountPhrase } from "@/lib/submit";
 
-export { CAPSULE_PDF_PRODUCER, capsulePdfNeedsUnicodeRerender } from "@/lib/capsule-pdf-fonts";
+export {
+  CAPSULE_PDF_PRODUCER,
+  capsulePdfNeedsUnicodeRerender,
+  selectEnsuredCapsulePdf,
+} from "@/lib/capsule-pdf-fonts";
 
 export { DOWNLOAD_PDF_LABEL };
 export const PDF_CONTENT_TYPE = "application/pdf";
@@ -150,8 +154,7 @@ export async function buildCapsulePdfBytes(input: {
   const theme = parseCapsuleTheme(input.archive.theme);
   const palette = themePdfPalette(theme);
   const doc = await PDFDocument.create();
-  doc.setProducer(CAPSULE_PDF_PRODUCER);
-  doc.setCreator(CAPSULE_PDF_PRODUCER);
+  stampCapsulePdfProducer(doc);
   const fonts = await embedCapsulePdfFonts(doc);
   const photoByPath = new Map(input.photos.map((photo) => [photo.storage_path, photo.bytes]));
 
@@ -191,7 +194,13 @@ export async function buildCapsulePdfBytes(input: {
     color: palette.muted,
   });
 
-  return doc.save();
+  return doc.save({ useObjectStreams: false });
+}
+
+function stampCapsulePdfProducer(doc: PDFDocument) {
+  doc.setProducer(CAPSULE_PDF_PRODUCER);
+  doc.setCreator(CAPSULE_PDF_PRODUCER);
+  doc.setKeywords([CAPSULE_PDF_PRODUCER]);
 }
 
 function drawCover(

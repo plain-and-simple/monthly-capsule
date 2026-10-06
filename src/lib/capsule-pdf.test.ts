@@ -12,12 +12,13 @@ import {
   capsulePdfHref,
   capsulePdfNeedsUnicodeRerender,
   capsulePdfStoragePath,
+  selectEnsuredCapsulePdf,
   detectImageKind,
   pdfContentDisposition,
   preparePdfJpeg,
   themePdfPalette,
 } from "./capsule-pdf";
-import { CAPSULE_PDF_PRODUCER } from "./capsule-pdf-fonts";
+import { CAPSULE_PDF_PRODUCER, capsulePdfHasProducerMark } from "./capsule-pdf-fonts";
 import { DOWNLOAD_PDF_LABEL } from "./copy";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -335,6 +336,41 @@ describe("themed pdf keepsake", () => {
     expect(capsulePdfNeedsUnicodeRerender(neu)).toBe(false);
     expect(pdfExtractText(neu)).toContain("it\u2019s");
   });
+
+  it("does not mark a freshly built PDF with no emoji for rebuild", async () => {
+    const archive = buildCapsuleArchive({
+      yearMonth: "2026-09",
+      groupName: "Cedar Street",
+      memberCount: 1,
+      letters: [{ preferred_name: "Wren", body: "The plum tree finally did something.", photos: [] }],
+    });
+    const bytes = await buildCapsulePdfBytes({ archive, photos: [] });
+    expect(capsulePdfHasProducerMark(bytes)).toBe(true);
+    expect(capsulePdfNeedsUnicodeRerender(bytes)).toBe(false);
+  });
+
+  it("falls back to the stored PDF when rebuild fails", async () => {
+    const oldDoc = await PDFDocument.create();
+    const times = await oldDoc.embedFont(StandardFonts.TimesRoman);
+    oldDoc.addPage().drawText("hello", { x: 72, y: 720, size: 12, font: times });
+    const oldBytes = await oldDoc.save();
+    const stored = { tag: "stored", bytes: oldBytes };
+    expect(capsulePdfNeedsUnicodeRerender(oldBytes)).toBe(true);
+    expect(selectEnsuredCapsulePdf(stored, null)?.tag).toBe("stored");
+
+    const archive = buildCapsuleArchive({
+      yearMonth: "2026-09",
+      groupName: "Cedar Street",
+      memberCount: 1,
+      letters: [{ preferred_name: "Wren", body: "it’s fine", photos: [] }],
+    });
+    const rebuilt = {
+      tag: "rebuilt",
+      bytes: await buildCapsulePdfBytes({ archive, photos: [] }),
+    };
+    expect(selectEnsuredCapsulePdf(stored, rebuilt)?.tag).toBe("rebuilt");
+    expect(selectEnsuredCapsulePdf(rebuilt, null)?.tag).toBe("rebuilt");
+  });
 });
 
 describe("pdf wiring locks", () => {
@@ -365,7 +401,12 @@ describe("pdf wiring locks", () => {
     expect(source("./capsule-pdf.ts")).not.toContain("StandardFonts");
     expect(source("./capsule-pdf.ts")).toContain("embedCapsulePdfFonts");
     expect(source("./capsule-pdf-store.ts")).toContain("capsulePdfNeedsUnicodeRerender");
+    expect(source("./capsule-pdf-store.ts")).toContain("selectEnsuredCapsulePdf");
     expect(source("./capsule-pdf-fonts.ts")).toContain(CAPSULE_PDF_PRODUCER);
+    expect(source("./capsule-pdf-fonts.ts")).toContain('join(process.cwd(), "src/lib/pdf-fonts")');
+    expect(source("./capsule-pdf-fonts.ts")).toContain("PDF_FONTS_DIR");
+    expect(source("./capsule-pdf-fonts.ts")).not.toMatch(/fileURLToPath|import\.meta\.url/);
+    expect(source("../../next.config.ts")).toContain("./src/lib/pdf-fonts/**/*");
   });
 
   it("email attaches a stored pdf and does not generate during send", () => {

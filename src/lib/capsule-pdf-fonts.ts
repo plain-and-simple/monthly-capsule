@@ -1,13 +1,13 @@
 import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import { inflateSync } from "node:zlib";
 import fontkit from "@pdf-lib/fontkit";
 import type { PDFDocument, PDFFont, PDFPage, RGB } from "pdf-lib";
 
 export const CAPSULE_PDF_PRODUCER = "monthly-capsule-unicode/1";
 
-const fontsDir = join(dirname(fileURLToPath(import.meta.url)), "pdf-fonts");
+/** Traced onto the Vercel function disk next to process.cwd(); never resolve from the bundled module URL. */
+export const PDF_FONTS_DIR = join(process.cwd(), "src/lib/pdf-fonts");
 
 const FONT_FILES = {
   serif: "LiberationSerif-Regular.ttf",
@@ -37,7 +37,7 @@ const fontBytesCache = new Map<string, Uint8Array>();
 function readPdfFontFile(filename: string): Uint8Array {
   const cached = fontBytesCache.get(filename);
   if (cached) return cached;
-  const bytes = new Uint8Array(readFileSync(join(fontsDir, filename)));
+  const bytes = new Uint8Array(readFileSync(join(PDF_FONTS_DIR, filename)));
   fontBytesCache.set(filename, bytes);
   return bytes;
 }
@@ -154,7 +154,28 @@ function pdfHaystack(bytes: Uint8Array): string {
   return parts.join("\n");
 }
 
-export function capsulePdfNeedsUnicodeRerender(bytes: Uint8Array): boolean {
+function utf16BeHex(value: string): string {
+  let hex = "FEFF";
+  for (const char of value) {
+    hex += char.charCodeAt(0).toString(16).padStart(4, "0");
+  }
+  return hex.toUpperCase();
+}
+
+export function capsulePdfHasProducerMark(bytes: Uint8Array): boolean {
   const haystack = pdfHaystack(bytes);
-  return !haystack.includes("Liberation") || !haystack.includes("NotoEmoji");
+  if (haystack.includes(CAPSULE_PDF_PRODUCER)) return true;
+  return haystack.toUpperCase().includes(utf16BeHex(CAPSULE_PDF_PRODUCER));
+}
+
+export function capsulePdfNeedsUnicodeRerender(bytes: Uint8Array): boolean {
+  return !capsulePdfHasProducerMark(bytes);
+}
+
+export function selectEnsuredCapsulePdf<T extends { bytes: Uint8Array }>(
+  stored: T | null,
+  generated: T | null,
+): T | null {
+  if (stored && !capsulePdfNeedsUnicodeRerender(stored.bytes)) return stored;
+  return generated ?? stored;
 }

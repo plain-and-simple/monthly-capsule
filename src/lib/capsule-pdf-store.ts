@@ -8,6 +8,7 @@ import {
   PDF_CONTENT_TYPE,
   type CapsulePdfPhotoBytes,
 } from "@/lib/capsule-pdf";
+import { selectEnsuredCapsulePdf } from "@/lib/capsule-pdf-fonts";
 import { PHOTO_BUCKET } from "@/lib/constants";
 import { createAdminClient } from "@/lib/supabase";
 
@@ -96,5 +97,10 @@ export async function ensureCapsulePdf(input: {
 }): Promise<{ storagePath: string; bytes: Uint8Array; filename: string } | null> {
   const stored = await loadStoredCapsulePdf(input);
   if (stored && !capsulePdfNeedsUnicodeRerender(stored.bytes)) return stored;
-  return generateAndStoreCapsulePdf(input);
+  try {
+    return selectEnsuredCapsulePdf(stored, await generateAndStoreCapsulePdf(input));
+  } catch (error) {
+    console.error("capsule pdf generate failed", error);
+    return stored;
+  }
 }
