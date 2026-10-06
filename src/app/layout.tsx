@@ -3,12 +3,12 @@ import { Geist, Newsreader } from "next/font/google";
 import "./globals.css";
 
 const geist = Geist({
-  subsets: ["latin"],
+  subsets: ["latin", "latin-ext"],
   variable: "--font-geist",
 });
 
 const newsreader = Newsreader({
-  subsets: ["latin"],
+  subsets: ["latin", "latin-ext"],
   variable: "--font-newsreader",
 });
 

@@ -3,6 +3,7 @@ import type { CapsuleArchive } from "@/lib/capsule-archive";
 import {
   buildCapsulePdfBytes,
   capsulePdfFilename,
+  capsulePdfNeedsUnicodeRerender,
   capsulePdfStoragePath,
   PDF_CONTENT_TYPE,
   type CapsulePdfPhotoBytes,
@@ -94,6 +95,6 @@ export async function ensureCapsulePdf(input: {
   pdfStoragePath?: string | null;
 }): Promise<{ storagePath: string; bytes: Uint8Array; filename: string } | null> {
   const stored = await loadStoredCapsulePdf(input);
-  if (stored) return stored;
+  if (stored && !capsulePdfNeedsUnicodeRerender(stored.bytes)) return stored;
   return generateAndStoreCapsulePdf(input);
 }

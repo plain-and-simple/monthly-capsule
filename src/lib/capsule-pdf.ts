@@ -1,6 +1,16 @@
-import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFImage, type PDFPage, type RGB } from "pdf-lib";
+import { PDFDocument, rgb, type PDFImage, type PDFPage, type RGB } from "pdf-lib";
 import sharp from "sharp";
 import type { CapsuleArchive, CapsuleArchiveLetter, CapsuleArchivePhoto } from "@/lib/capsule-archive";
+import {
+  CAPSULE_PDF_PRODUCER,
+  drawPdfRuns,
+  embedCapsulePdfFonts,
+  layoutPdfRuns,
+  widthOfPdfRuns,
+  widthOfPdfText,
+  type CapsulePdfFonts,
+  type PdfTypeFace,
+} from "@/lib/capsule-pdf-fonts";
 import {
   capsuleThemeMeta,
   layoutPersonSection,
@@ -13,6 +23,8 @@ import { contributorsLine, DOWNLOAD_PDF_LABEL, groupDisplayName } from "@/lib/co
 import { capsulePath, capsuleTitle, DEFAULT_MONTH_VERSION } from "@/lib/month-version";
 import { monthLabel } from "@/lib/schedule";
 import { missedCountPhrase } from "@/lib/submit";
+
+export { CAPSULE_PDF_PRODUCER, capsulePdfNeedsUnicodeRerender } from "@/lib/capsule-pdf-fonts";
 
 export { DOWNLOAD_PDF_LABEL };
 export const PDF_CONTENT_TYPE = "application/pdf";
@@ -138,23 +150,18 @@ export async function buildCapsulePdfBytes(input: {
   const theme = parseCapsuleTheme(input.archive.theme);
   const palette = themePdfPalette(theme);
   const doc = await PDFDocument.create();
-  const serif = await doc.embedFont(StandardFonts.TimesRoman);
-  const serifBold = await doc.embedFont(StandardFonts.TimesRomanBold);
-  const serifItalic = await doc.embedFont(StandardFonts.TimesRomanItalic);
-  const sans = await doc.embedFont(StandardFonts.Helvetica);
+  doc.setProducer(CAPSULE_PDF_PRODUCER);
+  doc.setCreator(CAPSULE_PDF_PRODUCER);
+  const fonts = await embedCapsulePdfFonts(doc);
   const photoByPath = new Map(input.photos.map((photo) => [photo.storage_path, photo.bytes]));
 
   const title =
     input.monthLabelText ??
     capsuleTitle(monthLabel(input.archive.year_month), input.archive.month_version);
   const groupName = groupDisplayName(input.archive.group_name);
-  const cursor = new PdfCursor(doc, palette, PAGE_HEIGHT - MARGIN);
+  const cursor = new PdfCursor(doc, palette, fonts.emoji, PAGE_HEIGHT - MARGIN);
 
-  drawCover(cursor, theme, {
-    serif,
-    serifBold,
-    serifItalic,
-    sans,
+  drawCover(cursor, theme, fonts, {
     groupName,
     title,
     names: input.archive.letters.map((letter) => letter.preferred_name),
@@ -162,7 +169,7 @@ export async function buildCapsulePdfBytes(input: {
 
   if (input.archive.letters.length === 0) {
     cursor.wrapped("No letters this month.", {
-      font: serifItalic,
+      font: fonts.serifItalic,
       size: 13,
       lineGap: 4,
       color: palette.muted,
@@ -171,14 +178,14 @@ export async function buildCapsulePdfBytes(input: {
     for (let i = 0; i < input.archive.letters.length; i += 1) {
       const letter = input.archive.letters[i]!;
       if (i > 0) cursor.letterRule(theme);
-      await drawPerson(doc, cursor, theme, letter, { serif, serifBold, serifItalic, sans }, photoByPath);
+      await drawPerson(doc, cursor, theme, letter, fonts, photoByPath);
     }
   }
 
   cursor.y -= 16;
   cursor.rule(10);
   cursor.wrapped(missedCountPhrase(input.archive.missed_count), {
-    font: theme === "heritage" || theme === "warm" ? serifItalic : sans,
+    font: theme === "heritage" || theme === "warm" ? fonts.serifItalic : fonts.sans,
     size: 10,
     lineGap: 3,
     color: palette.muted,
@@ -190,11 +197,8 @@ export async function buildCapsulePdfBytes(input: {
 function drawCover(
   cursor: PdfCursor,
   theme: CapsuleTheme,
+  fonts: CapsulePdfFonts,
   input: {
-    serif: PDFFont;
-    serifBold: PDFFont;
-    serifItalic: PDFFont;
-    sans: PDFFont;
     groupName: string;
     title: string;
     names: string[];
@@ -202,63 +206,63 @@ function drawCover(
 ) {
   const names = contributorsLine(input.names);
   if (theme === "warm") {
-    cursor.ribbon(winAnsi(input.title), input.sans);
-    cursor.text(winAnsi(input.groupName), {
-      font: input.serifBold,
+    cursor.ribbon(input.title, fonts.sans);
+    cursor.text(input.groupName, {
+      font: fonts.serifBold,
       size: 28,
       color: cursor.palette.ink,
       gap: 10,
     });
   } else if (theme === "minimal") {
     cursor.text("Capsule", {
-      font: input.sans,
+      font: fonts.sans,
       size: 9,
       color: cursor.palette.muted,
       gap: 8,
     });
-    cursor.text(winAnsi(input.title), {
-      font: input.serifBold,
+    cursor.text(input.title, {
+      font: fonts.serifBold,
       size: 26,
       color: cursor.palette.ink,
       gap: 8,
     });
-    cursor.text(winAnsi(input.groupName), {
-      font: input.sans,
+    cursor.text(input.groupName, {
+      font: fonts.sans,
       size: 12,
       color: cursor.palette.muted,
       gap: 8,
     });
   } else if (theme === "heritage") {
     cursor.text("A keepsake", {
-      font: input.serifItalic,
+      font: fonts.serifItalic,
       size: 11,
       color: cursor.palette.accent,
       gap: 8,
       center: true,
     });
-    cursor.text(winAnsi(input.title), {
-      font: input.serifBold,
+    cursor.text(input.title, {
+      font: fonts.serifBold,
       size: 26,
       color: cursor.palette.ink,
       gap: 8,
       center: true,
     });
-    cursor.text(winAnsi(input.groupName), {
-      font: input.serif,
+    cursor.text(input.groupName, {
+      font: fonts.serif,
       size: 12,
       color: cursor.palette.muted,
       gap: 10,
       center: true,
     });
   } else {
-    cursor.text(winAnsi(input.groupName).toUpperCase(), {
-      font: input.sans,
+    cursor.text(input.groupName.toUpperCase(), {
+      font: fonts.sans,
       size: 9,
       color: cursor.palette.muted,
       gap: 8,
     });
-    cursor.text(winAnsi(input.title), {
-      font: input.serifBold,
+    cursor.text(input.title, {
+      font: fonts.serifBold,
       size: 28,
       color: cursor.palette.ink,
       gap: 10,
@@ -266,8 +270,8 @@ function drawCover(
   }
 
   if (names) {
-    cursor.wrapped(winAnsi(names), {
-      font: input.sans,
+    cursor.wrapped(names, {
+      font: fonts.sans,
       size: 11,
       lineGap: 3,
       color: cursor.palette.muted,
@@ -284,7 +288,7 @@ async function drawPerson(
   cursor: PdfCursor,
   theme: CapsuleTheme,
   letter: CapsuleArchiveLetter,
-  fonts: { serif: PDFFont; serifBold: PDFFont; serifItalic: PDFFont; sans: PDFFont },
+  fonts: CapsulePdfFonts,
   photoByPath: Map<string, Uint8Array>,
 ) {
   const blocks = layoutPersonSection(theme, letter);
@@ -304,14 +308,14 @@ async function drawBlock(
   cursor: PdfCursor,
   theme: CapsuleTheme,
   block: LetterBlock,
-  fonts: { serif: PDFFont; serifBold: PDFFont; serifItalic: PDFFont; sans: PDFFont },
+  fonts: CapsulePdfFonts,
   photoByPath: Map<string, Uint8Array>,
   weaveBeside = false,
 ) {
   if (block.kind === "heading") {
     cursor.finishWrap();
     const center = theme === "minimal" || theme === "heritage";
-    cursor.text(winAnsi(block.name), {
+    cursor.text(block.name, {
       font: fonts.serifBold,
       size: theme === "heritage" ? 16 : 18,
       color: cursor.palette.ink,
@@ -322,7 +326,7 @@ async function drawBlock(
   }
   if (block.kind === "text") {
     for (const line of block.text.replace(/\r\n/g, "\n").split("\n")) {
-      cursor.wrapped(winAnsi(line || " "), {
+      cursor.wrapped(line || " ", {
         font: fonts.serif,
         size: 12,
         lineGap: 4,
@@ -374,6 +378,7 @@ class PdfCursor {
   constructor(
     private readonly doc: PDFDocument,
     readonly palette: PdfPalette,
+    private readonly emoji: PdfTypeFace,
     y: number,
   ) {
     this.page = this.doc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
@@ -420,7 +425,7 @@ class PdfCursor {
   text(
     value: string,
     opts: {
-      font: PDFFont;
+      font: PdfTypeFace;
       size: number;
       color: RGB;
       gap?: number;
@@ -428,22 +433,17 @@ class PdfCursor {
     },
   ) {
     this.ensure(opts.size + 6);
-    const width = opts.font.widthOfTextAtSize(value, opts.size);
+    const runs = layoutPdfRuns(value, opts.font, this.emoji);
+    const width = widthOfPdfRuns(runs, opts.size);
     const x = opts.center ? MARGIN + Math.max(0, (CONTENT_WIDTH - width) / 2) : MARGIN;
-    this.page.drawText(value, {
-      x,
-      y: this.y - opts.size,
-      size: opts.size,
-      font: opts.font,
-      color: opts.color,
-    });
+    drawPdfRuns(this.page, runs, x, this.y - opts.size, opts.size, opts.color);
     this.y -= opts.size + (opts.gap ?? 0);
   }
 
   wrapped(
     value: string,
     opts: {
-      font: PDFFont;
+      font: PdfTypeFace;
       size: number;
       lineGap: number;
       color: RGB;
@@ -456,27 +456,28 @@ class PdfCursor {
     while (remaining.length > 0) {
       this.ensure(opts.size + 6);
       const col = this.column(opts.size);
-      const taken = takeLine(remaining, opts.font, opts.size, col.width);
-      const width = opts.font.widthOfTextAtSize(taken.line, opts.size);
+      const taken = takeLine(remaining, opts.font, this.emoji, opts.size, col.width);
+      const width = widthOfPdfText(taken.line, opts.size, opts.font, this.emoji);
       const x = opts.center ? col.x + Math.max(0, (col.width - width) / 2) : col.x;
-      this.page.drawText(taken.line, {
+      drawPdfRuns(
+        this.page,
+        layoutPdfRuns(taken.line, opts.font, this.emoji),
         x,
-        y: this.y - opts.size,
-        size: opts.size,
-        font: opts.font,
-        color: opts.color,
-      });
+        this.y - opts.size,
+        opts.size,
+        opts.color,
+      );
       this.y -= opts.size + opts.lineGap;
       remaining = taken.rest;
     }
     if (opts.paragraphGap) this.y -= opts.paragraphGap;
   }
 
-  ribbon(value: string, font: PDFFont) {
+  ribbon(value: string, font: PdfTypeFace) {
     const size = 10;
     const padX = 10;
     const padY = 5;
-    const width = Math.min(CONTENT_WIDTH, font.widthOfTextAtSize(value, size) + padX * 2);
+    const width = Math.min(CONTENT_WIDTH, widthOfPdfText(value, size, font, this.emoji) + padX * 2);
     const height = size + padY * 2;
     this.ensure(height + 12);
     this.y -= height;
@@ -487,13 +488,14 @@ class PdfCursor {
       height,
       color: this.palette.accent,
     });
-    this.page.drawText(value, {
-      x: MARGIN + padX,
-      y: this.y + padY,
+    drawPdfRuns(
+      this.page,
+      layoutPdfRuns(value, font, this.emoji),
+      MARGIN + padX,
+      this.y + padY,
       size,
-      font,
-      color: this.palette.paper,
-    });
+      this.palette.paper,
+    );
     this.y -= 12;
   }
 
@@ -546,7 +548,7 @@ class PdfCursor {
     this.y -= 14;
   }
 
-  async plate(image: PDFImage, caption: string, captionFont: PDFFont) {
+  async plate(image: PDFImage, caption: string, captionFont: PdfTypeFace) {
     this.finishWrap();
     const inset = 8;
     const scale = Math.min((CONTENT_WIDTH - inset * 2) / image.width, 260 / image.height, 1);
@@ -619,7 +621,8 @@ class PdfCursor {
 
 function takeLine(
   words: string[],
-  font: PDFFont,
+  font: PdfTypeFace,
+  emoji: PdfTypeFace,
   size: number,
   maxWidth: number,
 ): { line: string; rest: string[] } {
@@ -628,7 +631,7 @@ function takeLine(
   let count = 0;
   for (const word of words) {
     const next = current ? `${current} ${word}` : word;
-    if (font.widthOfTextAtSize(next, size) <= maxWidth) {
+    if (widthOfPdfText(next, size, font, emoji) <= maxWidth) {
       current = next;
       count += 1;
       continue;
@@ -638,13 +641,13 @@ function takeLine(
   if (count > 0) return { line: current, rest: words.slice(count) };
 
   const word = words[0]!;
-  if (font.widthOfTextAtSize(word, size) <= maxWidth) {
+  if (widthOfPdfText(word, size, font, emoji) <= maxWidth) {
     return { line: word, rest: words.slice(1) };
   }
   let chunk = "";
   for (const char of word) {
     const trial = chunk + char;
-    if (font.widthOfTextAtSize(trial, size) <= maxWidth || chunk.length === 0) {
+    if (widthOfPdfText(trial, size, font, emoji) <= maxWidth || chunk.length === 0) {
       chunk = trial;
     } else {
       break;
@@ -667,6 +670,3 @@ function mixRgb(a: RGB, b: RGB, t: number): RGB {
   return rgb(a.red + (b.red - a.red) * t, a.green + (b.green - a.green) * t, a.blue + (b.blue - a.blue) * t);
 }
 
-function winAnsi(value: string): string {
-  return value.replace(/[^\u0009\u000A\u000D\u0020-\u007E\u00A0-\u00FF]/g, "?");
-}
