@@ -84,6 +84,25 @@ describe("capsule archive snapshot", () => {
     expect(view.source).toBe("live");
     expect(view.letters).toEqual([liveLetter]);
   });
+
+  it("keeps curly apostrophes, smart quotes, dashes, ellipsis, and emoji exactly as stored", () => {
+    const body = "She said “hello” — it’s … 🎉";
+    const snap = buildCapsuleArchive({
+      yearMonth: "2026-09",
+      groupName: "Cedar Street",
+      memberCount: 1,
+      letters: [{ preferred_name: "Wren", body, photos: [] }],
+    });
+    expect(snap.letters[0]?.body).toBe(body);
+    expect(snap.html).toContain("\u201c");
+    expect(snap.html).toContain("\u201d");
+    expect(snap.html).toContain("\u2014");
+    expect(snap.html).toContain("it\u2019s");
+    expect(snap.html).toContain("\u2026");
+    expect(snap.html).toContain("🎉");
+    expect(snap.html).not.toContain("it?s");
+    expect(parseCapsuleArchive(snap)?.letters[0]?.body).toBe(body);
+  });
 });
 
 describe("compile and view wire the archive", () => {

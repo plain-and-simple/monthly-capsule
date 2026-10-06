@@ -3,18 +3,22 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { PDFDocument, StandardFonts } from "pdf-lib";
 import sharp from "sharp";
 import { buildCapsuleArchive } from "./capsule-archive";
 import {
   buildCapsulePdfBytes,
   capsulePdfFilename,
   capsulePdfHref,
+  capsulePdfNeedsUnicodeRerender,
   capsulePdfStoragePath,
+  selectEnsuredCapsulePdf,
   detectImageKind,
   pdfContentDisposition,
   preparePdfJpeg,
   themePdfPalette,
 } from "./capsule-pdf";
+import { CAPSULE_PDF_PRODUCER, capsulePdfHasProducerMark } from "./capsule-pdf-fonts";
 import { DOWNLOAD_PDF_LABEL } from "./copy";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -23,22 +27,69 @@ function source(rel: string) {
   return readFileSync(resolve(here, rel), "utf8");
 }
 
-function pdfExtractText(bytes: Uint8Array): string {
+function inflatePdfStreams(bytes: Uint8Array): string[] {
   const raw = Buffer.from(bytes).toString("latin1");
-  const chunks: Buffer[] = [];
+  const streams: string[] = [];
   const re = /stream\r?\n([\s\S]*?)\r?\nendstream/g;
   let match: RegExpExecArray | null;
   while ((match = re.exec(raw))) {
     try {
-      chunks.push(inflateSync(Buffer.from(match[1], "latin1")));
+      streams.push(inflateSync(Buffer.from(match[1], "latin1")).toString("latin1"));
     } catch {
-      // JPEG / already uncompressed
+      streams.push(Buffer.from(match[1], "latin1").toString("latin1"));
     }
   }
-  const inflated = Buffer.concat(chunks).toString("latin1");
-  return [...inflated.matchAll(/<([0-9A-Fa-f]+)>/g)]
-    .map((entry) => Buffer.from(entry[1]!, "hex").toString("latin1"))
-    .join("\n");
+  return streams;
+}
+
+function utf16BeFromHex(hex: string): string {
+  const units: number[] = [];
+  for (let i = 0; i + 3 < hex.length; i += 4) {
+    units.push(parseInt(hex.slice(i, i + 4), 16));
+  }
+  return String.fromCharCode(...units);
+}
+
+function parseToUnicodeMaps(streams: readonly string[]): Array<Map<string, string>> {
+  const maps: Array<Map<string, string>> = [];
+  for (const stream of streams) {
+    if (!stream.includes("begincmap")) continue;
+    const map = new Map<string, string>();
+    for (const entry of stream.matchAll(/<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>/g)) {
+      map.set(entry[1]!.toUpperCase().padStart(4, "0"), utf16BeFromHex(entry[2]!));
+    }
+    if (map.size > 0) maps.push(map);
+  }
+  return maps;
+}
+
+function decodeHexWithCmap(hex: string, cmap: Map<string, string>): string {
+  let text = "";
+  for (let i = 0; i < hex.length; i += 4) {
+    text += cmap.get(hex.slice(i, i + 4)) ?? "";
+  }
+  return text;
+}
+
+function pdfExtractText(bytes: Uint8Array): string {
+  const streams = inflatePdfStreams(bytes);
+  const cmaps = parseToUnicodeMaps(streams);
+  const chunks: string[] = [];
+  for (const stream of streams) {
+    if (!/\sTj\b/.test(stream) && !/\sTJ\b/.test(stream)) continue;
+    for (const entry of stream.matchAll(/<([0-9A-Fa-f]+)>/g)) {
+      const hex = entry[1]!.toUpperCase();
+      if (cmaps.length === 0) {
+        chunks.push(Buffer.from(hex, "hex").toString("latin1"));
+        continue;
+      }
+      for (const cmap of cmaps) {
+        const text = decodeHexWithCmap(hex, cmap);
+        if (text) chunks.push(text);
+      }
+    }
+  }
+  return chunks.join("\n");
 }
 
 async function tinyJpeg(): Promise<Uint8Array> {
@@ -243,6 +294,83 @@ describe("themed pdf keepsake", () => {
     expect(themePdfPalette("classic").ink.red).toBeCloseTo(0x1a / 255, 5);
     expect(themePdfPalette("warm").accent.red).toBeCloseTo(0xc4 / 255, 5);
   });
+
+  it("keeps curly apostrophes, smart quotes, dashes, ellipsis, and emoji", async () => {
+    const body = "She said “hello” — it’s … 🎉";
+    const archive = buildCapsuleArchive({
+      yearMonth: "2026-09",
+      groupName: "Cedar Street",
+      memberCount: 1,
+      letters: [{ preferred_name: "Wren", body, photos: [] }],
+    });
+    const bytes = await buildCapsulePdfBytes({ archive, photos: [] });
+    const text = pdfExtractText(bytes);
+    expect(text).toContain("\u201c");
+    expect(text).toContain("hello");
+    expect(text).toContain("\u201d");
+    expect(text).toContain("\u2014");
+    expect(text).toContain("it\u2019s");
+    expect(text).toContain("\u2026");
+    expect(text).toContain("🎉");
+    expect(text).not.toContain("it?s");
+    expect(text).not.toMatch(/said \?hello\?/);
+    expect(text).not.toMatch(/ \? /);
+    expect(archive.html).toContain(body);
+    expect(archive.html).not.toContain("it?s");
+  });
+
+  it("re-renders stored WinAnsi PDFs in place and leaves unicode PDFs alone", async () => {
+    const oldDoc = await PDFDocument.create();
+    const times = await oldDoc.embedFont(StandardFonts.TimesRoman);
+    oldDoc.addPage().drawText("hello", { x: 72, y: 720, size: 12, font: times });
+    const oldBytes = await oldDoc.save();
+    expect(capsulePdfNeedsUnicodeRerender(oldBytes)).toBe(true);
+
+    const archive = buildCapsuleArchive({
+      yearMonth: "2026-09",
+      groupName: "Cedar Street",
+      memberCount: 1,
+      letters: [{ preferred_name: "Wren", body: "it’s fine", photos: [] }],
+    });
+    const neu = await buildCapsulePdfBytes({ archive, photos: [] });
+    expect(capsulePdfNeedsUnicodeRerender(neu)).toBe(false);
+    expect(pdfExtractText(neu)).toContain("it\u2019s");
+  });
+
+  it("does not mark a freshly built PDF with no emoji for rebuild", async () => {
+    const archive = buildCapsuleArchive({
+      yearMonth: "2026-09",
+      groupName: "Cedar Street",
+      memberCount: 1,
+      letters: [{ preferred_name: "Wren", body: "The plum tree finally did something.", photos: [] }],
+    });
+    const bytes = await buildCapsulePdfBytes({ archive, photos: [] });
+    expect(capsulePdfHasProducerMark(bytes)).toBe(true);
+    expect(capsulePdfNeedsUnicodeRerender(bytes)).toBe(false);
+  });
+
+  it("falls back to the stored PDF when rebuild fails", async () => {
+    const oldDoc = await PDFDocument.create();
+    const times = await oldDoc.embedFont(StandardFonts.TimesRoman);
+    oldDoc.addPage().drawText("hello", { x: 72, y: 720, size: 12, font: times });
+    const oldBytes = await oldDoc.save();
+    const stored = { tag: "stored", bytes: oldBytes };
+    expect(capsulePdfNeedsUnicodeRerender(oldBytes)).toBe(true);
+    expect(selectEnsuredCapsulePdf(stored, null)?.tag).toBe("stored");
+
+    const archive = buildCapsuleArchive({
+      yearMonth: "2026-09",
+      groupName: "Cedar Street",
+      memberCount: 1,
+      letters: [{ preferred_name: "Wren", body: "it’s fine", photos: [] }],
+    });
+    const rebuilt = {
+      tag: "rebuilt",
+      bytes: await buildCapsulePdfBytes({ archive, photos: [] }),
+    };
+    expect(selectEnsuredCapsulePdf(stored, rebuilt)?.tag).toBe("rebuilt");
+    expect(selectEnsuredCapsulePdf(rebuilt, null)?.tag).toBe("rebuilt");
+  });
 });
 
 describe("pdf wiring locks", () => {
@@ -269,6 +397,16 @@ describe("pdf wiring locks", () => {
       source("../app/(app)/g/[uuid]/capsule/[yearMonth]/[edition]/pdf/route.ts"),
     ).toContain("capsulePdfResponse");
     expect(source("./capsule-pdf-response.ts")).toContain("requireGroupMember");
+    expect(source("./capsule-pdf.ts")).not.toContain("winAnsi");
+    expect(source("./capsule-pdf.ts")).not.toContain("StandardFonts");
+    expect(source("./capsule-pdf.ts")).toContain("embedCapsulePdfFonts");
+    expect(source("./capsule-pdf-store.ts")).toContain("capsulePdfNeedsUnicodeRerender");
+    expect(source("./capsule-pdf-store.ts")).toContain("selectEnsuredCapsulePdf");
+    expect(source("./capsule-pdf-fonts.ts")).toContain(CAPSULE_PDF_PRODUCER);
+    expect(source("./capsule-pdf-fonts.ts")).toContain('join(process.cwd(), "src/lib/pdf-fonts")');
+    expect(source("./capsule-pdf-fonts.ts")).toContain("PDF_FONTS_DIR");
+    expect(source("./capsule-pdf-fonts.ts")).not.toMatch(/fileURLToPath|import\.meta\.url/);
+    expect(source("../../next.config.ts")).toContain("./src/lib/pdf-fonts/**/*");
   });
 
   it("email attaches a stored pdf and does not generate during send", () => {
