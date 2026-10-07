@@ -82,8 +82,43 @@ export function resendSendAccepted(
   return { ok: true, id };
 }
 
-export function shouldMarkCapsuleEmailed(input: { attempted: number; accepted: number }): boolean {
-  return input.attempted > 0 && input.accepted > 0;
+export function shouldMarkCapsuleEmailed(input: {
+  attempted: number;
+  accepted: number;
+  skippedTestEmail?: number;
+}): boolean {
+  if (input.attempted > 0 && input.accepted > 0) return true;
+  // Nothing deliverable left, but we skipped reserved example.* addresses Resend
+  // rejects. Stamp so cron does not retry forever on leftover E2E/test rows.
+  return input.attempted === 0 && (input.skippedTestEmail ?? 0) > 0;
+}
+
+/** RFC 2606 example domains — Resend rejects these; never attempt delivery. */
+const RESERVED_EXAMPLE_DOMAINS = new Set(["example.com", "example.net", "example.org"]);
+
+export function isReservedExampleEmail(email: string): boolean {
+  const at = email.lastIndexOf("@");
+  if (at < 0) return false;
+  const domain = email.slice(at + 1).trim().toLowerCase();
+  return RESERVED_EXAMPLE_DOMAINS.has(domain);
+}
+
+export function partitionDeliverableEmails(emails: readonly string[]): {
+  deliverable: string[];
+  skippedTestEmails: string[];
+} {
+  const deliverable: string[] = [];
+  const skippedTestEmails: string[] = [];
+  for (const email of emails) {
+    if (isReservedExampleEmail(email)) skippedTestEmails.push(email);
+    else deliverable.push(email);
+  }
+  return { deliverable, skippedTestEmails };
+}
+
+export function formatSkippedTestEmail(count: number): string | null {
+  if (count <= 0) return null;
+  return `Skipped ${count} reserved test address${count === 1 ? "" : "es"} (example.com).`;
 }
 
 export function extractResendFromEmail(value: string): string | null {
@@ -175,11 +210,14 @@ export function formatCapsuleSendResult(input: {
   sent: number;
   skippedNoEmail: number;
   skippedNames?: readonly string[];
+  skippedTestEmail?: number;
   error: string | null;
 }): string {
   const bits = [`Sent ${input.sent}.`];
   const skipped = formatSkippedNoEmail(input);
   if (skipped) bits.push(skipped);
+  const skippedTest = formatSkippedTestEmail(input.skippedTestEmail ?? 0);
+  if (skippedTest) bits.push(skippedTest);
   if (input.error) {
     bits.push(`Resend error: ${input.error}`);
   }
