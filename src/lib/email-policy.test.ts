@@ -10,9 +10,12 @@ import {
   extractResendFromEmail,
   formatCapsuleSendResult,
   formatSkippedNoEmail,
+  formatSkippedTestEmail,
   holdEmailUpdate,
+  isReservedExampleEmail,
   ownerCanEmailCapsule,
   ownerEmailFailed,
+  partitionDeliverableEmails,
   previewCapsuleSend,
   RESEND_TIMEOUT_MESSAGE,
   resendSendAccepted,
@@ -75,6 +78,45 @@ describe("Resend accept vs stamp", () => {
     expect(shouldMarkCapsuleEmailed({ attempted: 1, accepted: 1 })).toBe(true);
     expect(shouldMarkCapsuleEmailed({ attempted: 2, accepted: 1 })).toBe(true);
     expect(shouldMarkCapsuleEmailed({ attempted: 2, accepted: 0 })).toBe(false);
+  });
+
+  it("stamps when every address was a reserved example.* skip (cron stop)", () => {
+    expect(shouldMarkCapsuleEmailed({ attempted: 0, accepted: 0, skippedTestEmail: 2 })).toBe(true);
+    expect(shouldMarkCapsuleEmailed({ attempted: 0, accepted: 0, skippedTestEmail: 1 })).toBe(true);
+    // Real Resend failures still must not stamp just because a test address was also skipped.
+    expect(shouldMarkCapsuleEmailed({ attempted: 2, accepted: 0, skippedTestEmail: 1 })).toBe(false);
+    expect(shouldMarkCapsuleEmailed({ attempted: 0, accepted: 0 })).toBe(false);
+  });
+
+  it("partitions reserved example.* addresses out of the deliverable list", () => {
+    expect(isReservedExampleEmail("capsule.regression.oct5@example.com")).toBe(true);
+    expect(isReservedExampleEmail("p0capsule@Example.COM")).toBe(true);
+    expect(isReservedExampleEmail("friend@example.org")).toBe(true);
+    expect(isReservedExampleEmail("friend@example.net")).toBe(true);
+    expect(isReservedExampleEmail("real@plainandsimple.app")).toBe(false);
+    expect(isReservedExampleEmail("not-an-email")).toBe(false);
+    expect(
+      partitionDeliverableEmails([
+        "real@plainandsimple.app",
+        "capsule.regression@example.com",
+        "P0Capsule@Example.COM",
+        "other@friend.test",
+      ]),
+    ).toEqual({
+      deliverable: ["real@plainandsimple.app", "other@friend.test"],
+      skippedTestEmails: ["capsule.regression@example.com", "P0Capsule@Example.COM"],
+    });
+    expect(formatSkippedTestEmail(2)).toBe("Skipped 2 reserved test addresses (example.com).");
+    expect(formatSkippedTestEmail(1)).toBe("Skipped 1 reserved test address (example.com).");
+    expect(formatSkippedTestEmail(0)).toBeNull();
+    expect(
+      formatCapsuleSendResult({
+        sent: 0,
+        skippedNoEmail: 0,
+        skippedTestEmail: 2,
+        error: null,
+      }),
+    ).toBe("Sent 0. Skipped 2 reserved test addresses (example.com).");
   });
 
   it("shows sent / skipped names / Resend error to the owner", () => {
@@ -220,6 +262,8 @@ describe("send path must not stamp blindly", () => {
     expect(source).toContain("RESEND_TIMEOUT_MESSAGE");
     expect(source).toContain("forceResend");
     expect(source).toContain("resolveCapsuleRecipients");
+    expect(source).toContain("partitionDeliverableEmails");
+    expect(source).toContain("skipped-test-recipients");
     expect(source).toContain("resendSendAccepted");
     expect(source).toContain("shouldMarkCapsuleEmailed");
     expect(source.indexOf("shouldMarkCapsuleEmailed")).toBeLessThan(source.lastIndexOf("sentEmailUpdate"));
