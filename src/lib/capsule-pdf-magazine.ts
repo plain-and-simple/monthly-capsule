@@ -17,11 +17,12 @@ export const MAGAZINE_SHARE_PAGE_FRACTION = 1 / 3;
 export const MAGAZINE_GRID_EXTRA_MIN = 5;
 export const MAGAZINE_INLINE_MAX = 3;
 export const MAGAZINE_CROP_FACE_BIAS = 0.28;
-export const MAGAZINE_PHOTO_ROW_H = 168;
-export const MAGAZINE_PHOTO_ROW_MIN_H = 100;
-export const MAGAZINE_PHOTO_MIN_SHORT = 100;
+export const MAGAZINE_PHOTO_ROW_H = 260;
+export const MAGAZINE_PHOTO_ROW_MIN_H = 140;
+export const MAGAZINE_PHOTO_MIN_SHORT = 140;
 export const MAGAZINE_LONG_LETTER_CHARS = 520;
-export const MAGAZINE_SIDE_FRACTION = 0.38;
+export const MAGAZINE_SIDE_FRACTION = 0.45;
+export const MAGAZINE_FEATURE_MAX_H = 420;
 
 export type MagazineTemplate =
   | "hero-side-stack"
@@ -53,7 +54,14 @@ export function firstLandscapeIndex(photos: readonly { width: number; height: nu
 export function personHeroPhoto<T extends { width: number; height: number }>(photos: readonly T[]): T | null {
   const index = firstLandscapeIndex(photos);
   if (index >= 0) return photos[index]!;
-  return photos[0] ?? null;
+  return largestPhoto(photos);
+}
+
+export function largestPhoto<T extends { width: number; height: number }>(photos: readonly T[]): T | null {
+  if (photos.length === 0) return null;
+  return photos.reduce((best, photo) =>
+    photo.width * photo.height > best.width * best.height ? photo : best,
+  );
 }
 
 /** Landscape only. Never crop a portrait to 3:2. */
@@ -80,8 +88,9 @@ export function planMagazinePerson<T extends { width: number; height: number }>(
   }
   const land = firstLandscapeIndex(photos);
   if (land < 0) {
-    const columnPhoto = photos[0]!;
-    const { inline, grid } = splitInlineAndGrid(photos.slice(1));
+    const columnPhoto = largestPhoto(photos)!;
+    const rest = photos.filter((photo) => photo !== columnPhoto);
+    const { inline, grid } = splitInlineAndGrid(rest);
     return { template: "two-column", hero: null, columnPhoto, inline, grid };
   }
   const hero = photos[land]!;
@@ -113,9 +122,9 @@ export function magazineCoverPhotos(
   for (const letter of letters) {
     if (picks.length >= 4) break;
     const photos = [...letter.photos].sort((a, b) => a.sort_order - b.sort_order);
-    if (photos.length < 2) continue;
+    if (photos.length === 0) continue;
     const landscape = photos.find((photo) => isLandscapePhoto(photo));
-    picks.push(landscape ?? photos[photos.length - 1]!);
+    picks.push(landscape ?? largestPhoto(photos) ?? photos[0]!);
   }
   return picks;
 }

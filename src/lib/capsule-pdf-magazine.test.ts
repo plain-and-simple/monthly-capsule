@@ -72,7 +72,7 @@ describe("magazine template selection", () => {
       { width: 900, height: 1400, storage_path: "p1" },
     ]);
     expect(portraits.hero).toBeNull();
-    expect(portraits.columnPhoto).toMatchObject({ storage_path: "p0" });
+    expect(portraits.columnPhoto).toMatchObject({ storage_path: "p1" });
     expect(portraits.template).toBe("two-column");
   });
 
@@ -98,15 +98,15 @@ describe("magazine template selection", () => {
 });
 
 describe("magazine cover, hero crop, and text density", () => {
-  it("builds the cover from different members and skips anyone who would have no photo left inside", () => {
+  it("builds the cover from different members, preferring landscape", () => {
     expect(
       magazineCoverPhotos([
         { photos: [] },
         {
           photos: [{ storage_path: "only.jpg", width: 10, height: 10, sort_order: 0 }],
         },
-      ]),
-    ).toEqual([]);
+      ]).map((photo) => photo.storage_path),
+    ).toEqual(["only.jpg"]);
     expect(
       magazineCoverPhotos([
         {
@@ -122,12 +122,12 @@ describe("magazine cover, hero crop, and text density", () => {
         {
           photos: [
             { storage_path: "a.jpg", width: 800, height: 1200, sort_order: 1 },
-            { storage_path: "b.jpg", width: 800, height: 1200, sort_order: 0 },
+            { storage_path: "b.jpg", width: 900, height: 1400, sort_order: 0 },
             { storage_path: "c.jpg", width: 800, height: 1200, sort_order: 2 },
           ],
         },
       ]).map((photo) => photo.storage_path),
-    ).toEqual(["c.jpg"]);
+    ).toEqual(["b.jpg"]);
     const collage = magazineCoverPhotos([
       {
         photos: [
@@ -159,16 +159,16 @@ describe("magazine cover, hero crop, and text density", () => {
     ]);
     expect(collage.map((photo) => photo.storage_path)).toEqual([
       "a-land.jpg",
-      "b2.jpg",
+      "b1.jpg",
+      "c-only.jpg",
       "d-land.jpg",
-      "e2.jpg",
     ]);
     expect(magazineCoverPhotos([{ photos: [] }])).toEqual([]);
   });
 
-  it("drops a row count until every photo's short side stays at least 100pt", () => {
+  it("drops a row count until every photo's short side stays at least 140pt", () => {
     expect(magazineRowCountForMinShort([0.66, 0.66, 0.66], 504, 8, MAGAZINE_PHOTO_MIN_SHORT)).toBe(3);
-    expect(magazineRowCountForMinShort([0.66, 0.66, 0.66], 280, 8, MAGAZINE_PHOTO_MIN_SHORT)).toBe(2);
+    expect(magazineRowCountForMinShort([0.66, 0.66, 0.66], 280, 8, MAGAZINE_PHOTO_MIN_SHORT)).toBe(1);
     expect(magazineRowCountForMinShort([0.66, 0.66, 0.66], 200, 8, MAGAZINE_PHOTO_MIN_SHORT)).toBe(1);
   });
 

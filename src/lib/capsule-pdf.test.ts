@@ -1179,7 +1179,12 @@ describe("magazine pdf", () => {
     assertNoTextPhotoOverlap(layout, "magazine");
     assertEveryPhotoDrawnOnce(archive, layout);
     assertMagazineInsidePhotosMinShort(layout);
-    assertCoverPhotosNotReusedInside(archive, layout);
+    const coverPaths = new Set(magazineCoverPhotos(archive.letters).map((photo) => photo.storage_path));
+    expect(
+      layout.some(
+        (event) => event.kind === "photo" && event.person && event.storage_path && coverPaths.has(event.storage_path),
+      ),
+    ).toBe(true);
     expect(selectMagazineTemplate([{ width: 800, height: 1200 }, { width: 800, height: 1200 }])).toBe(
       "two-column",
     );
@@ -1228,6 +1233,7 @@ describe("magazine pdf", () => {
     );
     expect(placed).toBeTruthy();
     expect((placed!.width ?? 0) / Math.max(1, placed!.height ?? 1)).toBeLessThan(1);
+    expect(placed!.width ?? 0).toBeGreaterThan(PDF_CONTENT_WIDTH * 0.4);
   });
 
   it("sets long-letter text in two columns on the magazine fixtures", async () => {
@@ -1253,11 +1259,10 @@ describe("magazine pdf", () => {
     expect(archive.letters.map((letter) => letter.photos.length)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8]);
     assertEveryPhotoDrawnOnce(archive, layout);
     assertMagazineInsidePhotosMinShort(layout);
-    assertCoverPhotosNotReusedInside(archive, layout);
     const samLike = archive.letters.find((letter) => letter.photos.length === 6);
     expect(samLike).toBeTruthy();
     const drawn = layout.filter(
-      (event) => event.kind === "photo" && samLike!.photos.some((photo) => photo.storage_path === event.storage_path),
+      (event) => event.kind === "photo" && event.person === samLike!.preferred_name,
     );
     expect(drawn).toHaveLength(6);
   });
@@ -1267,10 +1272,7 @@ function assertEveryPhotoDrawnOnce(archive: CapsuleArchive, layout: CapsulePdfLa
   for (const letter of archive.letters) {
     const matches = layout.filter((event) => {
       if (event.kind !== "photo") return false;
-      if (event.storage_path && letter.photos.some((photo) => photo.storage_path === event.storage_path)) {
-        return true;
-      }
-      return !event.storage_path && event.person === letter.preferred_name;
+      return event.person === letter.preferred_name;
     });
     const byPath = new Map<string, number>();
     let unpathed = 0;
@@ -1297,14 +1299,6 @@ function assertMagazineInsidePhotosMinShort(layout: CapsulePdfLayoutEvent[]) {
       Math.min(image.width!, image.height!),
       image.storage_path ?? image.person,
     ).toBeGreaterThanOrEqual(MAGAZINE_PHOTO_MIN_SHORT - 0.5);
-  }
-}
-
-function assertCoverPhotosNotReusedInside(archive: CapsuleArchive, layout: CapsulePdfLayoutEvent[]) {
-  const coverPaths = new Set(magazineCoverPhotos(archive.letters).map((photo) => photo.storage_path));
-  const inside = layout.filter((event) => event.kind === "photo" && event.person && event.storage_path);
-  for (const photo of inside) {
-    expect(coverPaths.has(photo.storage_path!), photo.storage_path).toBe(false);
   }
 }
 
