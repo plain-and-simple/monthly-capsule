@@ -1199,6 +1199,40 @@ describe("magazine pdf", () => {
   });
 });
 
+function stableLayoutEvent(event: CapsulePdfLayoutEvent) {
+  return {
+    kind: event.kind,
+    page: event.page,
+    y: event.y,
+    name: event.name ?? null,
+    person: event.person ?? null,
+    text: event.text ?? null,
+    x: event.x ?? null,
+    width: event.width ?? null,
+    bottom: event.bottom ?? null,
+    height: event.height ?? null,
+    storage_path: event.storage_path ?? null,
+  };
+}
+
+describe("existing themes stay on the #60 layout lock", () => {
+  it("classic, warm, minimal, and heritage layout events match #60 on the shared fixtures", async () => {
+    const lock = JSON.parse(readFileSync(resolve(here, "capsule-pdf-layout-lock.json"), "utf8")) as Record<
+      string,
+      ReturnType<typeof stableLayoutEvent>[]
+    >;
+    for (const theme of ["classic", "warm", "minimal", "heritage"] as const) {
+      const { archive, photos } = await buildVisualArchive(theme);
+      const layout: CapsulePdfLayoutEvent[] = [];
+      await buildCapsulePdfBytes({ archive, photos, layout });
+      expect(layout.map(stableLayoutEvent), theme).toEqual(lock[theme]);
+    }
+    const migration = source("../../supabase/migrations/20261011120000_capsule_theme_magazine.sql");
+    expect(migration).toMatch(/^\s*begin;/m);
+    expect(migration).toMatch(/^\s*commit;/m);
+  });
+});
+
 describe("pdf wiring locks", () => {
   it("compile stores a pdf and does not fail the capsule if generation throws", () => {
     const compile = source("./compile.ts");
