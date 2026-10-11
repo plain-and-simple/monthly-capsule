@@ -4,7 +4,7 @@ import { inflateSync } from "node:zlib";
 import fontkit from "@pdf-lib/fontkit";
 import type { PDFDocument, PDFFont, PDFPage, RGB } from "pdf-lib";
 
-export const CAPSULE_PDF_PRODUCER = "monthly-capsule-unicode/1";
+export const CAPSULE_PDF_PRODUCER = "monthly-capsule-layout/2";
 
 /** Traced onto the Vercel function disk next to process.cwd(); never resolve from the bundled module URL. */
 export const PDF_FONTS_DIR = join(process.cwd(), "src/lib/pdf-fonts");
@@ -108,13 +108,80 @@ export function widthOfPdfRuns(runs: readonly PdfTextRun[], size: number): numbe
   return runs.reduce((width, run) => width + run.font.widthOfTextAtSize(run.text, size), 0);
 }
 
+const pdfWidthCache = new WeakMap<PDFFont, Map<string, number>>();
+
+function pdfWidthCacheKey(size: number, fallback: PDFFont, value: string): string {
+  const fallbackName = typeof fallback.name === "string" ? fallback.name : "fallback";
+  return `${size}\0${fallbackName}\0${value}`;
+}
+
 export function widthOfPdfText(
   value: string,
   size: number,
   primary: PdfTypeFace,
   fallback: PdfTypeFace,
 ): number {
-  return widthOfPdfRuns(layoutPdfRuns(value, primary, fallback), size);
+  let cached = pdfWidthCache.get(primary.font);
+  if (!cached) {
+    cached = new Map();
+    pdfWidthCache.set(primary.font, cached);
+  }
+  const key = pdfWidthCacheKey(size, fallback.font, value);
+  const hit = cached.get(key);
+  if (hit != null) return hit;
+  const width = widthOfPdfRuns(layoutPdfRuns(value, primary, fallback), size);
+  cached.set(key, width);
+  return width;
+}
+
+/** Greedy fill by cached word widths, then settle the wrap point with exact joined widths. */
+export function takePdfLine(
+  words: string[],
+  primary: PdfTypeFace,
+  fallback: PdfTypeFace,
+  size: number,
+  maxWidth: number,
+): { line: string; rest: string[] } {
+  if (words.length === 0) return { line: "", rest: [] };
+
+  const space = widthOfPdfText(" ", size, primary, fallback);
+  let count = 0;
+  let acc = 0;
+  for (let i = 0; i < words.length; i += 1) {
+    const wordWidth = widthOfPdfText(words[i]!, size, primary, fallback);
+    const next = i === 0 ? wordWidth : acc + space + wordWidth;
+    if (next <= maxWidth) {
+      acc = next;
+      count = i + 1;
+      continue;
+    }
+    break;
+  }
+
+  const exact = (n: number) =>
+    n <= 0 ? 0 : widthOfPdfText(words.slice(0, n).join(" "), size, primary, fallback);
+  while (count > 0 && exact(count) > maxWidth) count -= 1;
+  while (count < words.length && exact(count + 1) <= maxWidth) count += 1;
+
+  if (count > 0) return { line: words.slice(0, count).join(" "), rest: words.slice(count) };
+
+  const word = words[0]!;
+  if (widthOfPdfText(word, size, primary, fallback) <= maxWidth) {
+    return { line: word, rest: words.slice(1) };
+  }
+
+  const chars = [...word];
+  let lo = 1;
+  let hi = chars.length;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1;
+    const trial = chars.slice(0, mid).join("");
+    if (widthOfPdfText(trial, size, primary, fallback) <= maxWidth) lo = mid;
+    else hi = mid - 1;
+  }
+  const chunk = chars.slice(0, lo).join("");
+  const leftover = word.slice(chunk.length);
+  return { line: chunk, rest: leftover ? [leftover, ...words.slice(1)] : words.slice(1) };
 }
 
 export function drawPdfRuns(

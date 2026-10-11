@@ -6,6 +6,7 @@ import {
   drawPdfRuns,
   embedCapsulePdfFonts,
   layoutPdfRuns,
+  takePdfLine,
   widthOfPdfRuns,
   widthOfPdfText,
   type CapsulePdfFonts,
@@ -35,10 +36,209 @@ export const PDF_CONTENT_TYPE = "application/pdf";
 export const PDF_PHOTO_MAX_EDGE = 1200;
 export const PDF_PHOTO_JPEG_QUALITY = 70;
 
-const PAGE_WIDTH = 612;
-const PAGE_HEIGHT = 792;
-const MARGIN = 54;
-const CONTENT_WIDTH = PAGE_WIDTH - MARGIN * 2;
+export const PDF_PAGE_WIDTH = 612;
+export const PDF_PAGE_HEIGHT = 792;
+export const PDF_MARGIN = 54;
+export const PDF_CONTENT_WIDTH = PDF_PAGE_WIDTH - PDF_MARGIN * 2;
+export const PDF_BODY_SIZE = 12;
+export const PDF_BODY_LINE_GAP = 4;
+export const PDF_PARAGRAPH_GAP = 8;
+export const PDF_HEADING_GAP = 12;
+export const PDF_PAGE_CONTENT_HEIGHT = PDF_PAGE_HEIGHT - PDF_MARGIN * 2;
+export const PDF_WRAP_CLEAR_GAP = 10;
+export const PDF_SIDE_PHOTO_MIN = 110;
+export const PDF_SIDE_PHOTO_MIN_LONG = 140;
+export const PDF_SIDE_PHOTO_MAX = 210;
+export const PDF_LEFTOVER_MAX_H = 260;
+export const PDF_LEFTOVER_STRIP_MAX_H = 220;
+export const PDF_LEFTOVER_GAP = 8;
+export const PDF_SIDE_PHOTO_FRACTION = 0.42;
+export const PDF_SIDE_PHOTO_GUTTER = 14;
+export const PDF_PHOTO_SHRINK_MIN = 120;
+export const PDF_PHOTO_ENSURE_PAD = 16;
+
+const PAGE_WIDTH = PDF_PAGE_WIDTH;
+const PAGE_HEIGHT = PDF_PAGE_HEIGHT;
+const MARGIN = PDF_MARGIN;
+const CONTENT_WIDTH = PDF_CONTENT_WIDTH;
+
+export type CapsulePdfLayoutEvent = {
+  kind: "heading" | "photo" | "text" | "page";
+  page: number;
+  y: number;
+  name?: string;
+  person?: string;
+  text?: string;
+  x?: number;
+  width?: number;
+  bottom?: number;
+  height?: number;
+  storage_path?: string;
+};
+
+export function pdfLineBoxHeight(font: PdfTypeFace, size: number): number {
+  return font.font.heightAtSize(size, { descender: true });
+}
+
+export function lineBoxOverlapsWrap(
+  lineTop: number,
+  lineBoxHeight: number,
+  wrapBottom: number,
+  gap = PDF_WRAP_CLEAR_GAP,
+): boolean {
+  const lineBottom = lineTop - lineBoxHeight;
+  const clearY = wrapBottom - gap;
+  return lineTop > clearY && lineBottom < lineTop;
+}
+
+export function layoutBoxesOverlap(
+  a: { page: number; x: number; y: number; width: number; height: number },
+  b: { page: number; x: number; y: number; width: number; height: number },
+): boolean {
+  if (a.page !== b.page) return false;
+  if (a.width <= 0 || a.height <= 0 || b.width <= 0 || b.height <= 0) return false;
+  return a.x < b.x + b.width && a.x + a.width > b.x && a.y > b.y - b.height && a.y - a.height < b.y;
+}
+
+export function headingSizeForTheme(theme: CapsuleTheme): number {
+  return theme === "heritage" ? 16 : 18;
+}
+
+export function sideTextColumnWidth(): number {
+  return CONTENT_WIDTH - CONTENT_WIDTH * PDF_SIDE_PHOTO_FRACTION - PDF_SIDE_PHOTO_GUTTER;
+}
+
+export function clampSidePhotoHeight(textHeight: number): number {
+  const min = textHeight >= PDF_SIDE_PHOTO_MIN ? PDF_SIDE_PHOTO_MIN_LONG : PDF_SIDE_PHOTO_MIN;
+  return Math.min(PDF_SIDE_PHOTO_MAX, Math.max(min, textHeight));
+}
+
+export function shrinkSidePhotoToRemaining(
+  drawH: number,
+  remaining: number,
+): { height: number; pageBreak: boolean } {
+  if (remaining >= drawH + PDF_PHOTO_ENSURE_PAD) {
+    return { height: drawH, pageBreak: false };
+  }
+  if (remaining >= PDF_PHOTO_SHRINK_MIN) {
+    return { height: Math.min(drawH, Math.max(1, remaining - PDF_PHOTO_ENSURE_PAD)), pageBreak: false };
+  }
+  return { height: drawH, pageBreak: true };
+}
+
+export function headingKeepWithNextNeeded(input: {
+  headingSize: number;
+  headingGap: number;
+  firstTextHeight: number;
+  photoHeight?: number;
+  pageContentHeight?: number;
+}): number {
+  const content = Math.max(Math.max(0, input.firstTextHeight), Math.max(0, input.photoHeight ?? 0));
+  const raw = input.headingSize + input.headingGap + content;
+  const cap = input.pageContentHeight ?? PDF_PAGE_CONTENT_HEIGHT;
+  return Math.min(raw, cap);
+}
+
+export function headingKeepWithNextFits(y: number, needed: number, margin = MARGIN): boolean {
+  return y - needed >= margin;
+}
+
+export function estimateWrappedHeight(
+  text: string,
+  font: PdfTypeFace,
+  emoji: PdfTypeFace,
+  size: number,
+  lineGap: number,
+  width: number,
+): number {
+  let height = 0;
+  for (const line of text.replace(/\r\n/g, "\n").split("\n")) {
+    const words = (line || " ").split(/\s+/).filter(Boolean);
+    let remaining = words.length > 0 ? words : [""];
+    while (remaining.length > 0) {
+      const taken = takeLine(remaining, font, emoji, size, width);
+      height += size + lineGap;
+      remaining = taken.rest;
+    }
+  }
+  return height;
+}
+
+export function leftoverGalleryCols(
+  variant: "grid" | "strip",
+  photos: readonly { width: number; height: number }[],
+): number {
+  if (variant === "strip") return 3;
+  if (photos.length < 3) return 2;
+  const portraits = photos.filter((photo) => photo.height > photo.width).length;
+  return portraits >= photos.length / 2 ? 3 : 2;
+}
+
+export function packLeftoverRowCounts(count: number): number[] {
+  if (count <= 0) return [];
+  const rows: number[] = [];
+  let left = count;
+  while (left > 3) {
+    if (left === 4) {
+      rows.push(2);
+      left = 2;
+      break;
+    }
+    rows.push(3);
+    left -= 3;
+  }
+  if (left === 1 && rows.length > 0) {
+    rows[rows.length - 1] -= 1;
+    rows.push(2);
+  } else if (left > 0) {
+    rows.push(left);
+  }
+  return rows;
+}
+
+export function justifiedRowMetrics(
+  aspects: readonly number[],
+  contentWidth: number,
+  gap: number,
+  maxH: number,
+): { height: number; widths: number[]; usedWidth: number } {
+  const positive = aspects.map((aspect) => (aspect > 0 ? aspect : 1));
+  const sumA = positive.reduce((sum, aspect) => sum + aspect, 0);
+  if (positive.length === 0 || sumA <= 0) {
+    return { height: 0, widths: [], usedWidth: 0 };
+  }
+  const height = Math.min(maxH, (contentWidth - gap * (positive.length - 1)) / sumA);
+  const widths = positive.map((aspect) => aspect * height);
+  const usedWidth = widths.reduce((sum, width) => sum + width, 0) + gap * (positive.length - 1);
+  return { height, widths, usedWidth };
+}
+
+export function measureTextBesidePhoto(input: {
+  text: string;
+  font: PdfTypeFace;
+  emoji: PdfTypeFace;
+  size: number;
+  lineGap: number;
+  insetWidth: number;
+  fullWidth: number;
+  photoHeight: number;
+}): number {
+  let height = 0;
+  const boxH = pdfLineBoxHeight(input.font, input.size);
+  for (const raw of input.text.replace(/\r\n/g, "\n").split("\n")) {
+    const words = (raw || " ").split(/\s+/).filter(Boolean);
+    let remaining = words.length > 0 ? words : [""];
+    while (remaining.length > 0) {
+      const width = lineBoxOverlapsWrap(0 - height, boxH, 0 - input.photoHeight)
+        ? input.insetWidth
+        : input.fullWidth;
+      const taken = takeLine(remaining, input.font, input.emoji, input.size, width);
+      height += input.size + input.lineGap;
+      remaining = taken.rest;
+    }
+  }
+  return height;
+}
 
 export type CapsulePdfPhotoBytes = {
   storage_path: string;
@@ -150,6 +350,7 @@ export async function buildCapsulePdfBytes(input: {
   archive: CapsuleArchive;
   photos: readonly CapsulePdfPhotoBytes[];
   monthLabelText?: string;
+  layout?: CapsulePdfLayoutEvent[];
 }): Promise<Uint8Array> {
   const theme = parseCapsuleTheme(input.archive.theme);
   const palette = themePdfPalette(theme);
@@ -162,7 +363,7 @@ export async function buildCapsulePdfBytes(input: {
     input.monthLabelText ??
     capsuleTitle(monthLabel(input.archive.year_month), input.archive.month_version);
   const groupName = groupDisplayName(input.archive.group_name);
-  const cursor = new PdfCursor(doc, palette, fonts.emoji, PAGE_HEIGHT - MARGIN);
+  const cursor = new PdfCursor(doc, palette, fonts.emoji, PAGE_HEIGHT - MARGIN, input.layout);
 
   drawCover(cursor, theme, fonts, {
     groupName,
@@ -301,15 +502,203 @@ async function drawPerson(
   photoByPath: Map<string, Uint8Array>,
 ) {
   const blocks = layoutPersonSection(theme, letter);
-  for (let i = 0; i < blocks.length; i += 1) {
-    const block = blocks[i]!;
-    const weaveBeside =
-      block.kind === "photo" &&
-      block.variant === "weave" &&
-      blocks.slice(i + 1).some((entry) => entry.kind === "text");
-    await drawBlock(doc, cursor, theme, block, fonts, photoByPath, weaveBeside);
-  }
   cursor.finishWrap();
+  cursor.setPerson(letter.preferred_name);
+
+  const heading = blocks[0]?.kind === "heading" ? blocks[0] : null;
+  const rest = heading ? blocks.slice(1) : blocks;
+  if (heading) {
+    await drawPersonHeading(cursor, theme, heading.name, rest, fonts, letter.preferred_name);
+  }
+
+  const queued: Array<{
+    block: Extract<LetterBlock, { kind: "photo"; variant: "weave" }>;
+    pairedText: string;
+  }> = [];
+
+  const pairedTextAt = (from: number): string => {
+    for (let j = from + 1; j < rest.length; j += 1) {
+      const next = rest[j]!;
+      if (next.kind === "text") return next.text;
+      if (next.kind === "photo") break;
+    }
+    return "";
+  };
+
+  const remainingTextAfter = (from: number): boolean =>
+    rest.slice(from + 1).some((entry) => entry.kind === "text");
+
+  const flushLeftoverWeaves = async () => {
+    const items: Array<{ image: PDFImage; storage_path?: string }> = [];
+    while (queued.length > 0) {
+      const next = queued.shift()!;
+      const image = await embedPhoto(doc, photoByPath.get(next.block.photo.storage_path));
+      if (image) items.push({ image, storage_path: next.block.photo.storage_path });
+    }
+    if (items.length === 0) return;
+    cursor.finishWrap();
+    await cursor.leftoverJustified(items, { maxH: PDF_LEFTOVER_MAX_H, gap: PDF_LEFTOVER_GAP });
+  };
+
+  const placeQueued = async (inset: boolean) => {
+    if (!inset) {
+      await flushLeftoverWeaves();
+      return;
+    }
+    while (queued.length > 0 && !cursor.hasActiveWrap()) {
+      const next = queued.shift()!;
+      await placeWeavePhoto(doc, cursor, next.block, fonts, photoByPath, next.pairedText, true);
+    }
+  };
+
+  for (let i = 0; i < rest.length; i += 1) {
+    const block = rest[i]!;
+    if (block.kind === "photo" && block.variant === "weave") {
+      if (cursor.hasActiveWrap()) {
+        queued.push({ block, pairedText: pairedTextAt(i) });
+        continue;
+      }
+      await placeWeavePhoto(
+        doc,
+        cursor,
+        block,
+        fonts,
+        photoByPath,
+        pairedTextAt(i),
+        remainingTextAfter(i),
+      );
+      continue;
+    }
+    if (block.kind === "text") {
+      drawLetterText(cursor, fonts, block.text, letter.preferred_name);
+      await placeQueued(remainingTextAfter(i));
+      continue;
+    }
+    cursor.finishWrap();
+    await placeQueued(false);
+    cursor.finishWrap();
+    await drawBlock(doc, cursor, theme, block, fonts, photoByPath, false);
+  }
+
+  cursor.finishWrap();
+  await placeQueued(false);
+  cursor.finishWrap();
+  cursor.setPerson(null);
+}
+
+async function drawPersonHeading(
+  cursor: PdfCursor,
+  theme: CapsuleTheme,
+  name: string,
+  rest: LetterBlock[],
+  fonts: CapsulePdfFonts,
+  person: string,
+) {
+  const headingSize = headingSizeForTheme(theme);
+  const firstText = rest.find((block) => block.kind === "text");
+  const firstIsWeave = rest[0]?.kind === "photo" && rest[0].variant === "weave";
+  const hasPhoto = rest.some((block) => block.kind === "photo" || block.kind === "gallery");
+  const insetWidth = sideTextColumnWidth();
+  const narrowHeight = firstText
+    ? estimateWrappedHeight(
+        firstText.text,
+        fonts.serif,
+        fonts.emoji,
+        PDF_BODY_SIZE,
+        PDF_BODY_LINE_GAP,
+        firstIsWeave ? insetWidth : CONTENT_WIDTH,
+      )
+    : 0;
+  const photoHeight = firstIsWeave ? clampSidePhotoHeight(narrowHeight || PDF_SIDE_PHOTO_MIN) : 0;
+  const firstTextHeight = firstText
+    ? firstIsWeave
+      ? measureTextBesidePhoto({
+          text: firstText.text,
+          font: fonts.serif,
+          emoji: fonts.emoji,
+          size: PDF_BODY_SIZE,
+          lineGap: PDF_BODY_LINE_GAP,
+          insetWidth,
+          fullWidth: CONTENT_WIDTH,
+          photoHeight,
+        })
+      : estimateWrappedHeight(
+          firstText.text,
+          fonts.serif,
+          fonts.emoji,
+          PDF_BODY_SIZE,
+          PDF_BODY_LINE_GAP,
+          CONTENT_WIDTH,
+        )
+    : hasPhoto
+      ? PDF_PHOTO_SHRINK_MIN
+      : 0;
+  const needed = headingKeepWithNextNeeded({
+    headingSize,
+    headingGap: PDF_HEADING_GAP,
+    firstTextHeight,
+    photoHeight,
+  });
+  cursor.ensure(needed);
+  cursor.record({ kind: "heading", name, person, page: cursor.pageIndex, y: cursor.y });
+  cursor.text(name, {
+    font: fonts.serifBold,
+    size: headingSize,
+    color: cursor.palette.ink,
+    gap: PDF_HEADING_GAP,
+    center: theme === "minimal" || theme === "heritage",
+  });
+}
+
+function drawLetterText(
+  cursor: PdfCursor,
+  fonts: CapsulePdfFonts,
+  text: string,
+  person: string,
+) {
+  const lines = text.replace(/\r\n/g, "\n").split("\n");
+  for (const line of lines) {
+    cursor.wrapped(line || " ", {
+      font: fonts.serif,
+      size: PDF_BODY_SIZE,
+      lineGap: PDF_BODY_LINE_GAP,
+      color: cursor.palette.ink,
+      center: false,
+    });
+  }
+  cursor.advanceParagraphGap(PDF_PARAGRAPH_GAP);
+}
+
+async function placeWeavePhoto(
+  doc: PDFDocument,
+  cursor: PdfCursor,
+  block: Extract<LetterBlock, { kind: "photo"; variant: "weave" }>,
+  fonts: CapsulePdfFonts,
+  photoByPath: Map<string, Uint8Array>,
+  pairedText: string,
+  inset: boolean,
+) {
+  const image = await embedPhoto(doc, photoByPath.get(block.photo.storage_path));
+  if (!image) return;
+  const textH = pairedText
+    ? estimateWrappedHeight(
+        pairedText,
+        fonts.serif,
+        fonts.emoji,
+        PDF_BODY_SIZE,
+        PDF_BODY_LINE_GAP,
+        sideTextColumnWidth(),
+      )
+    : PDF_SIDE_PHOTO_MIN;
+  const maxH = clampSidePhotoHeight(textH);
+  if (inset) {
+    cursor.insetImage(image, block.side, maxH, block.photo.storage_path);
+    return;
+  }
+  await cursor.leftoverJustified([{ image, storage_path: block.photo.storage_path }], {
+    maxH: PDF_LEFTOVER_MAX_H,
+    gap: PDF_LEFTOVER_GAP,
+  });
 }
 
 async function drawBlock(
@@ -347,9 +736,8 @@ async function drawBlock(
     return;
   }
   if (block.kind === "gallery") {
-    const cols = block.variant === "strip" ? 3 : 2;
-    const maxH = block.variant === "strip" ? 110 : 180;
-    await cursor.gallery(doc, block.photos, photoByPath, { cols, maxH, gap: 8 });
+    const maxH = block.variant === "strip" ? PDF_LEFTOVER_STRIP_MAX_H : PDF_LEFTOVER_MAX_H;
+    await cursor.gallery(doc, block.photos, photoByPath, { maxH, gap: PDF_LEFTOVER_GAP });
     return;
   }
 
@@ -377,22 +765,43 @@ async function embedPhoto(doc: PDFDocument, bytes: Uint8Array | undefined): Prom
   }
 }
 
-type PdfWrap = { side: "left" | "right"; bottom: number; width: number };
+type PdfWrap = { side: "left" | "right"; top: number; bottom: number; width: number };
 
 class PdfCursor {
   page: PDFPage;
   y: number;
+  pageIndex = 1;
   private wrap: PdfWrap | null = null;
+  private person: string | null = null;
 
   constructor(
     private readonly doc: PDFDocument,
     readonly palette: PdfPalette,
     private readonly emoji: PdfTypeFace,
     y: number,
+    private readonly layout: CapsulePdfLayoutEvent[] | undefined = undefined,
   ) {
     this.page = this.doc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
     this.y = y;
     this.paintPage();
+    this.record({ kind: "page", page: this.pageIndex, y: this.y });
+  }
+
+  setPerson(name: string | null) {
+    this.person = name;
+  }
+
+  record(event: CapsulePdfLayoutEvent) {
+    this.layout?.push(event);
+  }
+
+  hasActiveWrap(): boolean {
+    return Boolean(this.wrap && this.y > this.wrap.bottom - PDF_WRAP_CLEAR_GAP);
+  }
+
+  advanceParagraphGap(gap: number) {
+    if (gap <= 0) return;
+    this.y -= gap;
   }
 
   ensure(needed: number) {
@@ -400,7 +809,9 @@ class PdfCursor {
     this.wrap = null;
     this.page = this.doc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
     this.paintPage();
+    this.pageIndex += 1;
     this.y = PAGE_HEIGHT - MARGIN;
+    this.record({ kind: "page", page: this.pageIndex, y: this.y });
   }
 
   finishWrap(gap = 10) {
@@ -410,11 +821,11 @@ class PdfCursor {
     this.wrap = null;
   }
 
-  column(lineSize: number): { x: number; width: number } {
-    if (!this.wrap || this.y - lineSize < this.wrap.bottom) {
+  column(lineBoxHeight: number): { x: number; width: number } {
+    if (!this.wrap || !lineBoxOverlapsWrap(this.y, lineBoxHeight, this.wrap.bottom)) {
       return { x: MARGIN, width: CONTENT_WIDTH };
     }
-    const taken = this.wrap.width + 14;
+    const taken = this.wrap.width + PDF_SIDE_PHOTO_GUTTER;
     if (this.wrap.side === "right") {
       return { x: MARGIN, width: CONTENT_WIDTH - taken };
     }
@@ -462,12 +873,24 @@ class PdfCursor {
   ) {
     const words = value.split(/\s+/).filter(Boolean);
     let remaining = words.length > 0 ? words : [""];
+    const lineBoxHeight = pdfLineBoxHeight(opts.font, opts.size);
     while (remaining.length > 0) {
-      this.ensure(opts.size + 6);
-      const col = this.column(opts.size);
+      this.ensure(lineBoxHeight + opts.lineGap);
+      const col = this.column(lineBoxHeight);
       const taken = takeLine(remaining, opts.font, this.emoji, opts.size, col.width);
       const width = widthOfPdfText(taken.line, opts.size, opts.font, this.emoji);
       const x = opts.center ? col.x + Math.max(0, (col.width - width) / 2) : col.x;
+      this.record({
+        kind: "text",
+        person: this.person ?? undefined,
+        text: taken.line,
+        page: this.pageIndex,
+        x,
+        y: this.y,
+        width,
+        height: lineBoxHeight,
+        bottom: this.y - lineBoxHeight,
+      });
       drawPdfRuns(
         this.page,
         layoutPdfRuns(taken.line, opts.font, this.emoji),
@@ -479,7 +902,7 @@ class PdfCursor {
       this.y -= opts.size + opts.lineGap;
       remaining = taken.rest;
     }
-    if (opts.paragraphGap) this.y -= opts.paragraphGap;
+    if (opts.paragraphGap) this.advanceParagraphGap(opts.paragraphGap);
   }
 
   ribbon(value: string, font: PdfTypeFace) {
@@ -525,23 +948,45 @@ class PdfCursor {
     this.rule(theme === "heritage" ? 18 : 20);
   }
 
-  insetImage(image: PDFImage, side: "left" | "right", maxH: number) {
-    this.finishWrap();
-    const maxW = CONTENT_WIDTH * 0.42;
-    const scale = Math.min(maxW / image.width, maxH / image.height, 1);
-    const drawW = image.width * scale;
-    const drawH = image.height * scale;
-    this.ensure(drawH + 16);
+  insetImage(image: PDFImage, side: "left" | "right", maxH: number, storagePath?: string) {
+    if (this.wrap && this.y <= this.wrap.bottom) this.wrap = null;
+    else if (this.wrap) this.finishWrap();
+    const maxW = CONTENT_WIDTH * PDF_SIDE_PHOTO_FRACTION;
+    const fit = (height: number) => {
+      const scale = Math.min(maxW / image.width, height / image.height, 1);
+      return { w: image.width * scale, h: image.height * scale };
+    };
+    let sized = fit(maxH);
+    const remaining = this.y - MARGIN;
+    const shrink = shrinkSidePhotoToRemaining(sized.h, remaining);
+    if (shrink.pageBreak) {
+      this.ensure(sized.h + PDF_PHOTO_ENSURE_PAD);
+    } else if (shrink.height !== sized.h) {
+      sized = fit(shrink.height);
+    }
+    if (this.y - sized.h < MARGIN) this.ensure(sized.h + PDF_PHOTO_ENSURE_PAD);
+    const x = side === "right" ? PAGE_WIDTH - MARGIN - sized.w : MARGIN;
     this.page.drawImage(image, {
-      x: side === "right" ? PAGE_WIDTH - MARGIN - drawW : MARGIN,
-      y: this.y - drawH,
-      width: drawW,
-      height: drawH,
+      x,
+      y: this.y - sized.h,
+      width: sized.w,
+      height: sized.h,
     });
-    this.wrap = { side, bottom: this.y - drawH, width: drawW };
+    this.record({
+      kind: "photo",
+      person: this.person ?? undefined,
+      storage_path: storagePath,
+      page: this.pageIndex,
+      x,
+      y: this.y,
+      width: sized.w,
+      bottom: this.y - sized.h,
+      height: sized.h,
+    });
+    this.wrap = { side, top: this.y, bottom: this.y - sized.h, width: sized.w };
   }
 
-  async image(image: PDFImage, maxH: number) {
+  async image(image: PDFImage, maxH: number, storagePath?: string) {
     this.finishWrap();
     const scale = Math.min(CONTENT_WIDTH / image.width, maxH / image.height, 1);
     const drawW = image.width * scale;
@@ -552,6 +997,17 @@ class PdfCursor {
       x: MARGIN,
       y: this.y,
       width: drawW,
+      height: drawH,
+    });
+    this.record({
+      kind: "photo",
+      person: this.person ?? undefined,
+      storage_path: storagePath,
+      page: this.pageIndex,
+      x: MARGIN,
+      y: this.y + drawH,
+      width: drawW,
+      bottom: this.y,
       height: drawH,
     });
     this.y -= 14;
@@ -583,6 +1039,16 @@ class PdfCursor {
       width: drawW,
       height: drawH,
     });
+    this.record({
+      kind: "photo",
+      person: this.person ?? undefined,
+      page: this.pageIndex,
+      x: x + inset,
+      y: this.y + inset + drawH,
+      width: drawW,
+      bottom: this.y + inset,
+      height: drawH,
+    });
     this.y -= 6;
     this.text(caption, {
       font: captionFont,
@@ -593,38 +1059,60 @@ class PdfCursor {
     });
   }
 
+  async leftoverJustified(
+    items: Array<{ image: PDFImage; storage_path?: string }>,
+    opts: { maxH: number; gap: number },
+  ) {
+    this.finishWrap();
+    if (items.length === 0) return;
+    const packs = packLeftoverRowCounts(items.length);
+    let offset = 0;
+    for (const count of packs) {
+      const slice = items.slice(offset, offset + count);
+      offset += count;
+      const aspects = slice.map((entry) => entry.image.width / Math.max(1, entry.image.height));
+      const row = justifiedRowMetrics(aspects, CONTENT_WIDTH, opts.gap, opts.maxH);
+      this.ensure(row.height + 12);
+      this.y -= row.height;
+      let x = MARGIN + Math.max(0, (CONTENT_WIDTH - row.usedWidth) / 2);
+      slice.forEach((entry, index) => {
+        const w = row.widths[index]!;
+        const h = row.height;
+        this.page.drawImage(entry.image, {
+          x,
+          y: this.y,
+          width: w,
+          height: h,
+        });
+        this.record({
+          kind: "photo",
+          person: this.person ?? undefined,
+          page: this.pageIndex,
+          x,
+          y: this.y + h,
+          width: w,
+          bottom: this.y,
+          height: h,
+          storage_path: entry.storage_path,
+        });
+        x += w + opts.gap;
+      });
+      this.y -= 12;
+    }
+  }
+
   async gallery(
     doc: PDFDocument,
     photos: readonly CapsuleArchivePhoto[],
     photoByPath: Map<string, Uint8Array>,
-    opts: { cols: number; maxH: number; gap: number },
+    opts: { maxH: number; gap: number },
   ) {
-    this.finishWrap();
-    const colW = (CONTENT_WIDTH - opts.gap * (opts.cols - 1)) / opts.cols;
-    for (let i = 0; i < photos.length; i += opts.cols) {
-      const slice = photos.slice(i, i + opts.cols);
-      const images: Array<{ image: PDFImage; w: number; h: number }> = [];
-      for (const photo of slice) {
-        const image = await embedPhoto(doc, photoByPath.get(photo.storage_path));
-        if (!image) continue;
-        const scale = Math.min(colW / image.width, opts.maxH / image.height, 1);
-        images.push({ image, w: image.width * scale, h: image.height * scale });
-      }
-      if (images.length === 0) continue;
-      const rowH = Math.max(...images.map((entry) => entry.h));
-      this.ensure(rowH + 12);
-      this.y -= rowH;
-      images.forEach((entry, index) => {
-        const x = MARGIN + index * (colW + opts.gap) + (colW - entry.w) / 2;
-        this.page.drawImage(entry.image, {
-          x,
-          y: this.y,
-          width: entry.w,
-          height: entry.h,
-        });
-      });
-      this.y -= 12;
+    const items: Array<{ image: PDFImage; storage_path?: string }> = [];
+    for (const photo of photos) {
+      const image = await embedPhoto(doc, photoByPath.get(photo.storage_path));
+      if (image) items.push({ image, storage_path: photo.storage_path });
     }
+    await this.leftoverJustified(items, opts);
   }
 }
 
@@ -635,35 +1123,7 @@ function takeLine(
   size: number,
   maxWidth: number,
 ): { line: string; rest: string[] } {
-  if (words.length === 0) return { line: "", rest: [] };
-  let current = "";
-  let count = 0;
-  for (const word of words) {
-    const next = current ? `${current} ${word}` : word;
-    if (widthOfPdfText(next, size, font, emoji) <= maxWidth) {
-      current = next;
-      count += 1;
-      continue;
-    }
-    break;
-  }
-  if (count > 0) return { line: current, rest: words.slice(count) };
-
-  const word = words[0]!;
-  if (widthOfPdfText(word, size, font, emoji) <= maxWidth) {
-    return { line: word, rest: words.slice(1) };
-  }
-  let chunk = "";
-  for (const char of word) {
-    const trial = chunk + char;
-    if (widthOfPdfText(trial, size, font, emoji) <= maxWidth || chunk.length === 0) {
-      chunk = trial;
-    } else {
-      break;
-    }
-  }
-  const leftover = word.slice(chunk.length);
-  return { line: chunk, rest: leftover ? [leftover, ...words.slice(1)] : words.slice(1) };
+  return takePdfLine(words, font, emoji, size, maxWidth);
 }
 
 function hexRgb(hex: string): RGB {

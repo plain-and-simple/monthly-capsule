@@ -1,5 +1,14 @@
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { buildCapsuleArchive, renderArchiveHtml } from "./capsule-archive";
+
+const here = dirname(fileURLToPath(import.meta.url));
+
+function source(rel: string) {
+  return readFileSync(resolve(here, rel), "utf8");
+}
 import {
   CAPSULE_THEME_CATALOG,
   layoutCapsuleSections,
@@ -12,6 +21,7 @@ import {
   weaveLetterBlocks,
   weavePhotoSide,
   groupWovenRuns,
+  letterParagraphs,
 } from "./capsule-theme";
 
 const ada = {
@@ -190,6 +200,67 @@ describe("theme-owned photo vs text layout", () => {
     expect(snapshot.theme).toBe("heritage");
     expect(snapshot.html).toContain('data-theme="heritage"');
     expect(snapshot.html).toContain("capsule--heritage");
+  });
+});
+
+describe("short-line pairing", () => {
+  it("merges consecutive single-line bullets into one block when there are no blank lines", () => {
+    const bullets = [
+      "- rye bread from the Saturday stall",
+      "- two slightly soft pears",
+      "- a small jar of honey",
+      "- leftover mint in a jam jar",
+    ].join("\n");
+    expect(letterParagraphs(bullets)).toEqual([bullets]);
+    const kinds = layoutPersonSection("classic", {
+      preferred_name: "Alex Rivera",
+      body: bullets,
+      photos: [
+        { storage_path: "g/a1.jpg", width: 800, height: 600, sort_order: 0 },
+        { storage_path: "g/a2.jpg", width: 800, height: 600, sort_order: 1 },
+        { storage_path: "g/a3.jpg", width: 800, height: 600, sort_order: 2 },
+      ],
+    }).map((block) =>
+      block.kind === "gallery" ? `gallery:${block.variant}` : block.kind === "photo" ? block.variant : block.kind,
+    );
+    expect(kinds.join(" ")).toBe("heading weave text gallery:grid");
+  });
+
+  it("keeps blank-line paragraphs separate even when they are short", () => {
+    expect(letterParagraphs("One.\n\nTwo.\n\nThree.")).toEqual(["One.", "Two.", "Three."]);
+  });
+
+  it("keeps a long line from merging into the following bullets", () => {
+    const long =
+      "The river path stayed muddy after the storm, so we took the long way around the school and talked about the porch light.";
+    const body = `${long}\n- rye bread\n- two pears`;
+    expect(letterParagraphs(body)).toEqual([long, "- rye bread\n- two pears"]);
+  });
+
+  it("html keeps merged bullets inside one letter run so the photo still wraps", () => {
+    const bullets = "- rye bread\n- two pears\n- leftover mint";
+    expect(letterParagraphs(bullets)[0]).toContain("\n");
+    const html = renderArchiveHtml({
+      year_month: "2026-10",
+      group_name: "Kitchen",
+      theme: "classic",
+      letters: [
+        {
+          preferred_name: "Alex Rivera",
+          body: bullets,
+          photos: [{ storage_path: "g/a1.jpg", width: 800, height: 600, sort_order: 0 }],
+        },
+      ],
+    });
+    expect(html).toContain("letter__run");
+    expect(html).toContain("rye bread<br />");
+    expect(html).toContain("two pears<br />");
+    expect(html).toContain("leftover mint");
+    expect(html.match(/letter__run/g)).toHaveLength(1);
+    expect(html.match(/<p class="letter__text">/g)).toHaveLength(1);
+    expect(source("../components/capsule-document.tsx")).toContain("function LetterText");
+    expect(source("../components/capsule-document.tsx")).toContain("<br />");
+    expect(source("../app/globals.css")).toContain("white-space: pre-wrap");
   });
 });
 

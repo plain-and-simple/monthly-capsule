@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import {
   groupWovenRuns,
   layoutPersonSection,
@@ -149,7 +150,7 @@ function LetterBlockView({
     return (
       <div className="letter__run">
         <LetterBlockView theme={theme} block={block.photo} photoByPath={photoByPath} />
-        <p className="letter__text">{block.text}</p>
+        <LetterText text={block.text} />
       </div>
     );
   }
@@ -165,7 +166,7 @@ function LetterBlockView({
     );
   }
   if (block.kind === "text") {
-    return <p className="letter__text">{block.text}</p>;
+    return <LetterText text={block.text} />;
   }
   if (block.kind === "gallery") {
     return (
@@ -189,6 +190,20 @@ function LetterBlockView({
     <figure className={`letter__photo letter__photo--weave letter__photo--${block.side}`}>
       <ThemePhoto photo={photo} />
     </figure>
+  );
+}
+
+function LetterText({ text }: { text: string }) {
+  const lines = text.split("\n");
+  return (
+    <p className="letter__text">
+      {lines.map((line, index) => (
+        <Fragment key={index}>
+          {index > 0 ? <br /> : null}
+          {line}
+        </Fragment>
+      ))}
+    </p>
   );
 }
 

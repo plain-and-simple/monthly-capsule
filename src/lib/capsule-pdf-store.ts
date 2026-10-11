@@ -42,6 +42,7 @@ export async function uploadCapsulePdf(storagePath: string, bytes: Uint8Array): 
   return !error;
 }
 
+/** Overwrite the stored PDF for this edition. Never mints a new month / ·vN row. */
 export async function generateAndStoreCapsulePdf(input: {
   capsuleId: string;
   groupId: string;
@@ -86,6 +87,10 @@ export async function loadStoredCapsulePdf(input: {
   };
 }
 
+/**
+ * Rebuilds a stale stored PDF in place (same version, same archive/theme).
+ * Does not create a new edition or change letter bodies.
+ */
 export async function ensureCapsulePdf(input: {
   capsuleId: string;
   groupId: string;
