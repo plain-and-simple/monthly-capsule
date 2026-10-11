@@ -6,6 +6,7 @@ import {
   drawPdfRuns,
   embedCapsulePdfFonts,
   layoutPdfRuns,
+  takePdfLine,
   widthOfPdfRuns,
   widthOfPdfText,
   type CapsulePdfFonts,
@@ -1122,35 +1123,7 @@ function takeLine(
   size: number,
   maxWidth: number,
 ): { line: string; rest: string[] } {
-  if (words.length === 0) return { line: "", rest: [] };
-  let current = "";
-  let count = 0;
-  for (const word of words) {
-    const next = current ? `${current} ${word}` : word;
-    if (widthOfPdfText(next, size, font, emoji) <= maxWidth) {
-      current = next;
-      count += 1;
-      continue;
-    }
-    break;
-  }
-  if (count > 0) return { line: current, rest: words.slice(count) };
-
-  const word = words[0]!;
-  if (widthOfPdfText(word, size, font, emoji) <= maxWidth) {
-    return { line: word, rest: words.slice(1) };
-  }
-  let chunk = "";
-  for (const char of word) {
-    const trial = chunk + char;
-    if (widthOfPdfText(trial, size, font, emoji) <= maxWidth || chunk.length === 0) {
-      chunk = trial;
-    } else {
-      break;
-    }
-  }
-  const leftover = word.slice(chunk.length);
-  return { line: chunk, rest: leftover ? [leftover, ...words.slice(1)] : words.slice(1) };
+  return takePdfLine(words, font, emoji, size, maxWidth);
 }
 
 function hexRgb(hex: string): RGB {
