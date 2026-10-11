@@ -156,6 +156,8 @@ describe("submit action error handling", () => {
     expect(source).toContain("runDroppedPhotoCleanup");
     expect(source).toContain("requireNotSubmitted");
     expect(source).toContain('.neq("status", "submitted")');
+    expect(source).toContain("const query");
+    expect(source).not.toMatch(/\blet query\b/);
     expect(source).toContain("upsert: false");
     expect(source).not.toContain("upsert: true");
     const cleanup = source.slice(source.indexOf("deleteDroppedPhotos"));

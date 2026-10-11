@@ -138,7 +138,7 @@ export async function submitLetter(
         },
         writeSubmission: async ({ existingId, patch, requireNotSubmitted }) => {
           if (existingId) {
-            let query = admin.from("submissions").update(patch).eq("id", existingId);
+            const query = admin.from("submissions").update(patch).eq("id", existingId);
             if (requireNotSubmitted) {
               const { data: updated, error } = await query
                 .neq("status", "submitted")
