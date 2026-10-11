@@ -48,6 +48,8 @@ import {
   CAPSULE_PDF_PRODUCER,
   capsulePdfHasProducerMark,
   embedCapsulePdfFonts,
+  takePdfLine,
+  widthOfPdfText,
 } from "./capsule-pdf-fonts";
 import { MAGAZINE_CONTENT_BOTTOM, selectMagazineTemplate } from "./capsule-pdf-magazine";
 import { DOWNLOAD_PDF_LABEL } from "./copy";
@@ -465,6 +467,55 @@ describe("pdf layout locks", () => {
     expect(lineBoxOverlapsWrap(wrapBottom - PDF_WRAP_CLEAR_GAP, box, wrapBottom)).toBe(false);
     expect(lineBoxOverlapsWrap(wrapBottom + 1, box, wrapBottom)).toBe(true);
     expect(lineBoxOverlapsWrap(391, 12, wrapBottom)).toBe(true);
+  });
+
+  it("wraps lines with cached word widths the same way as remesuring the growing string", async () => {
+    const fonts = await embedCapsulePdfFonts(await PDFDocument.create());
+    const naive = (words: string[], maxWidth: number) => {
+      let current = "";
+      let count = 0;
+      for (const word of words) {
+        const next = current ? `${current} ${word}` : word;
+        if (widthOfPdfText(next, PDF_BODY_SIZE, fonts.serif, fonts.emoji) <= maxWidth) {
+          current = next;
+          count += 1;
+          continue;
+        }
+        break;
+      }
+      if (count > 0) return { line: current, rest: words.slice(count) };
+      const word = words[0] ?? "";
+      let chunk = "";
+      for (const char of word) {
+        const trial = chunk + char;
+        if (
+          widthOfPdfText(trial, PDF_BODY_SIZE, fonts.serif, fonts.emoji) <= maxWidth ||
+          chunk.length === 0
+        ) {
+          chunk = trial;
+        } else {
+          break;
+        }
+      }
+      return { line: chunk, rest: word.slice(chunk.length) ? [word.slice(chunk.length), ...words.slice(1)] : words.slice(1) };
+    };
+    const samples = [
+      LONG_RUNON_BODY.split(/\s+/).filter(Boolean),
+      TEN_LINE_OPENING.replace(/\n/g, " ").split(/\s+/).filter(Boolean),
+      ["She", "said", "“hello”", "—", "it’s", "…", "🎉"],
+      ["supercalifragilisticexpialidocious"],
+    ];
+    for (const width of [80, 180, 260, 504]) {
+      for (const words of samples) {
+        let remaining = words;
+        while (remaining.length > 0) {
+          const fast = takePdfLine(remaining, fonts.serif, fonts.emoji, PDF_BODY_SIZE, width);
+          const slow = naive(remaining, width);
+          expect(fast).toEqual(slow);
+          remaining = fast.rest;
+        }
+      }
+    }
   });
 
   it("estimates wrapped height from the column width", async () => {
