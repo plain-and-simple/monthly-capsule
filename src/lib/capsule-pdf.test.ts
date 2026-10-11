@@ -19,6 +19,13 @@ import {
   headingKeepWithNextNeeded,
   layoutBoxesOverlap,
   leftoverGalleryCols,
+  packLeftoverRowCounts,
+  justifiedRowMetrics,
+  measureTextBesidePhoto,
+  PDF_CONTENT_WIDTH,
+  PDF_LEFTOVER_GAP,
+  PDF_LEFTOVER_MAX_H,
+  PDF_SIDE_PHOTO_MIN_LONG,
   lineBoxOverlapsWrap,
   PDF_BODY_LINE_GAP,
   PDF_BODY_SIZE,
@@ -47,6 +54,7 @@ import {
   buildVisualArchive,
   fillerBody,
   KEEP_TARGET_BODY,
+  LONG_RUNON_BODY,
   TEN_LINE_OPENING,
 } from "./capsule-pdf-fixtures";
 import { CAPSULE_THEMES } from "./capsule-theme";
@@ -408,6 +416,7 @@ describe("pdf layout locks", () => {
   it("sizes side photos to paired text and shrinks before a page break", () => {
     expect(clampSidePhotoHeight(40)).toBe(PDF_SIDE_PHOTO_MIN);
     expect(clampSidePhotoHeight(400)).toBe(PDF_SIDE_PHOTO_MAX);
+    expect(clampSidePhotoHeight(120)).toBe(PDF_SIDE_PHOTO_MIN_LONG);
     expect(clampSidePhotoHeight(160)).toBe(160);
     expect(shrinkSidePhotoToRemaining(210, 400)).toEqual({ height: 210, pageBreak: false });
     expect(shrinkSidePhotoToRemaining(210, 90)).toEqual({ height: 210, pageBreak: true });
@@ -480,6 +489,191 @@ describe("pdf layout locks", () => {
     expect(many).toBeGreaterThan(one);
   });
 
+  it("estimates a long first paragraph beside a photo using inset only while the photo overlaps", async () => {
+    const fonts = await embedCapsulePdfFonts(await PDFDocument.create());
+    const insetWidth = PDF_CONTENT_WIDTH * (1 - 0.42) - 14;
+    const allNarrow = estimateWrappedHeight(
+      LONG_RUNON_BODY,
+      fonts.serif,
+      fonts.emoji,
+      PDF_BODY_SIZE,
+      PDF_BODY_LINE_GAP,
+      insetWidth,
+    );
+    const photoHeight = clampSidePhotoHeight(allNarrow);
+    const mixed = measureTextBesidePhoto({
+      text: LONG_RUNON_BODY,
+      font: fonts.serif,
+      emoji: fonts.emoji,
+      size: PDF_BODY_SIZE,
+      lineGap: PDF_BODY_LINE_GAP,
+      insetWidth,
+      fullWidth: PDF_CONTENT_WIDTH,
+      photoHeight,
+    });
+    expect(photoHeight).toBe(PDF_SIDE_PHOTO_MAX);
+    expect(allNarrow).toBeGreaterThan(photoHeight + 80);
+    expect(mixed).toBeLessThan(allNarrow);
+    expect(mixed).toBeGreaterThan(photoHeight);
+    expect(allNarrow - mixed).toBeGreaterThan(40);
+    const oldNeeded = headingKeepWithNextNeeded({
+      headingSize: 18,
+      headingGap: PDF_HEADING_GAP,
+      firstTextHeight: allNarrow,
+      photoHeight,
+    });
+    const newNeeded = headingKeepWithNextNeeded({
+      headingSize: 18,
+      headingGap: PDF_HEADING_GAP,
+      firstTextHeight: mixed,
+      photoHeight,
+    });
+    expect(newNeeded).toBeLessThan(oldNeeded);
+  });
+
+  it("keeps a long run-on paragraph with a side photo on the same page when it fits", async () => {
+    const jpeg = await sharp({
+      create: { width: 1400, height: 900, channels: 3, background: "#1a1712" },
+    })
+      .jpeg({ quality: 70 })
+      .toBuffer();
+    const fonts = await embedCapsulePdfFonts(await PDFDocument.create());
+    const insetWidth = PDF_CONTENT_WIDTH * (1 - 0.42) - 14;
+    const allNarrow = estimateWrappedHeight(
+      LONG_RUNON_BODY,
+      fonts.serif,
+      fonts.emoji,
+      PDF_BODY_SIZE,
+      PDF_BODY_LINE_GAP,
+      insetWidth,
+    );
+    const photoHeight = clampSidePhotoHeight(allNarrow);
+    const mixed = measureTextBesidePhoto({
+      text: LONG_RUNON_BODY,
+      font: fonts.serif,
+      emoji: fonts.emoji,
+      size: PDF_BODY_SIZE,
+      lineGap: PDF_BODY_LINE_GAP,
+      insetWidth,
+      fullWidth: PDF_CONTENT_WIDTH,
+      photoHeight,
+    });
+    const oldNeeded = headingKeepWithNextNeeded({
+      headingSize: 18,
+      headingGap: PDF_HEADING_GAP,
+      firstTextHeight: allNarrow,
+      photoHeight,
+    });
+    const newNeeded = headingKeepWithNextNeeded({
+      headingSize: 18,
+      headingGap: PDF_HEADING_GAP,
+      firstTextHeight: mixed,
+      photoHeight,
+    });
+    expect(oldNeeded).toBeGreaterThan(newNeeded);
+
+    let proof:
+      | { caseyEnd: CapsulePdfLayoutEvent; morgan: CapsulePdfLayoutEvent }
+      | null = null;
+    for (let n = 8; n <= 40; n += 1) {
+      const layout: CapsulePdfLayoutEvent[] = [];
+      await buildCapsulePdfBytes({
+        archive: buildCapsuleArchive({
+          yearMonth: "2026-10",
+          groupName: "Regression Kitchen",
+          memberCount: 2,
+          letters: [
+            { preferred_name: "Casey Nguyen", body: fillerBody(n), photos: [] },
+            {
+              preferred_name: "Morgan Blake",
+              body: LONG_RUNON_BODY,
+              photos: [{ storage_path: "g/m0.jpg", width: 1400, height: 900, sort_order: 0 }],
+            },
+          ],
+        }),
+        photos: [{ storage_path: "g/m0.jpg", bytes: jpeg }],
+        layout,
+      });
+      const caseyEnd = [...layout]
+        .reverse()
+        .find((event) => event.person === "Casey Nguyen" && event.kind === "text");
+      const morgan = layout.find((event) => event.kind === "heading" && event.name === "Morgan Blake");
+      const firstText = layout.find(
+        (event) => event.kind === "text" && event.person === "Morgan Blake",
+      );
+      if (!caseyEnd || !morgan || !firstText) continue;
+      const remainingAfterCasey = caseyEnd.y - 26;
+      const remaining = remainingAfterCasey - PDF_MARGIN;
+      if (remaining >= newNeeded && remaining < oldNeeded) {
+        expect(morgan.page).toBe(caseyEnd.page);
+        expect(firstText.page).toBe(caseyEnd.page);
+        proof = { caseyEnd, morgan };
+        break;
+      }
+    }
+    expect(proof).not.toBeNull();
+  });
+
+  it("lays leftover photos in justified rows inside the person's section", async () => {
+    const jpeg = await sharp({
+      create: { width: 800, height: 1200, channels: 3, background: "#2f5b4c" },
+    })
+      .jpeg({ quality: 70 })
+      .toBuffer();
+    const layout: CapsulePdfLayoutEvent[] = [];
+    await buildCapsulePdfBytes({
+      archive: buildCapsuleArchive({
+        yearMonth: "2026-10",
+        groupName: "Regression Kitchen",
+        memberCount: 2,
+        letters: [
+          {
+            preferred_name: "Sam Patel",
+            body: "One short note.",
+            photos: [0, 1, 2, 3, 4].map((index) => ({
+              storage_path: `g/s${index}.jpg`,
+              width: 800,
+              height: 1200,
+              sort_order: index,
+            })),
+          },
+          { preferred_name: "Jordan Lee", body: "Next person.", photos: [] },
+        ],
+      }),
+      photos: [0, 1, 2, 3, 4].map((index) => ({
+        storage_path: `g/s${index}.jpg`,
+        bytes: jpeg,
+      })),
+      layout,
+    });
+    const samPhotos = layout.filter(
+      (event) => event.kind === "photo" && event.person === "Sam Patel" && event.x != null,
+    );
+    const jordan = layout.find((event) => event.kind === "heading" && event.name === "Jordan Lee");
+    expect(samPhotos.length).toBe(5);
+    expect(jordan).toBeTruthy();
+    const leftover = samPhotos.slice(1);
+    expect(leftover).toHaveLength(4);
+    const rows = new Map<string, CapsulePdfLayoutEvent[]>();
+    for (const photo of leftover) {
+      const key = `${photo.page}:${Math.round(photo.y)}`;
+      const row = rows.get(key) ?? [];
+      row.push(photo);
+      rows.set(key, row);
+    }
+    expect([...rows.values()].every((row) => row.length === 2)).toBe(true);
+    for (const row of rows.values()) {
+      const used = row.reduce((sum, photo) => sum + (photo.width ?? 0), 0) + PDF_LEFTOVER_GAP;
+      expect(used).toBeGreaterThan(PDF_CONTENT_WIDTH * 0.7);
+      expect(row.every((photo) => (photo.width ?? 0) > 80)).toBe(true);
+    }
+    for (const photo of samPhotos) {
+      expect(
+        photo.page < jordan!.page || (photo.page === jordan!.page && photo.bottom! > jordan!.y),
+      ).toBe(true);
+    }
+  });
+
   it("uses three leftover columns for portrait-heavy grids", () => {
     const portraits = [
       { width: 800, height: 1200 },
@@ -489,6 +683,19 @@ describe("pdf layout locks", () => {
     expect(leftoverGalleryCols("grid", portraits)).toBe(3);
     expect(leftoverGalleryCols("grid", [{ width: 1200, height: 800 }])).toBe(2);
     expect(leftoverGalleryCols("strip", portraits)).toBe(3);
+  });
+
+  it("packs leftover photos into justified rows of 2–3 and avoids a trailing single", () => {
+    expect(packLeftoverRowCounts(1)).toEqual([1]);
+    expect(packLeftoverRowCounts(2)).toEqual([2]);
+    expect(packLeftoverRowCounts(3)).toEqual([3]);
+    expect(packLeftoverRowCounts(4)).toEqual([2, 2]);
+    expect(packLeftoverRowCounts(5)).toEqual([3, 2]);
+    expect(packLeftoverRowCounts(7)).toEqual([3, 2, 2]);
+    const row = justifiedRowMetrics([1.5, 1.5, 1.5], PDF_CONTENT_WIDTH, PDF_LEFTOVER_GAP, PDF_LEFTOVER_MAX_H);
+    expect(row.widths).toHaveLength(3);
+    expect(row.usedWidth).toBeCloseTo(PDF_CONTENT_WIDTH, 5);
+    expect(row.height).toBeLessThanOrEqual(PDF_LEFTOVER_MAX_H);
   });
 
   it("keeps later paragraphs beside a photo instead of jumping to its bottom", async () => {

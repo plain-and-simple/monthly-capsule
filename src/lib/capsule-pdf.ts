@@ -46,7 +46,11 @@ export const PDF_HEADING_GAP = 12;
 export const PDF_PAGE_CONTENT_HEIGHT = PDF_PAGE_HEIGHT - PDF_MARGIN * 2;
 export const PDF_WRAP_CLEAR_GAP = 10;
 export const PDF_SIDE_PHOTO_MIN = 110;
+export const PDF_SIDE_PHOTO_MIN_LONG = 140;
 export const PDF_SIDE_PHOTO_MAX = 210;
+export const PDF_LEFTOVER_MAX_H = 260;
+export const PDF_LEFTOVER_STRIP_MAX_H = 220;
+export const PDF_LEFTOVER_GAP = 8;
 export const PDF_SIDE_PHOTO_FRACTION = 0.42;
 export const PDF_SIDE_PHOTO_GUTTER = 14;
 export const PDF_PHOTO_SHRINK_MIN = 120;
@@ -104,7 +108,8 @@ export function sideTextColumnWidth(): number {
 }
 
 export function clampSidePhotoHeight(textHeight: number): number {
-  return Math.min(PDF_SIDE_PHOTO_MAX, Math.max(PDF_SIDE_PHOTO_MIN, textHeight));
+  const min = textHeight >= PDF_SIDE_PHOTO_MIN ? PDF_SIDE_PHOTO_MIN_LONG : PDF_SIDE_PHOTO_MIN;
+  return Math.min(PDF_SIDE_PHOTO_MAX, Math.max(min, textHeight));
 }
 
 export function shrinkSidePhotoToRemaining(
@@ -166,6 +171,72 @@ export function leftoverGalleryCols(
   if (photos.length < 3) return 2;
   const portraits = photos.filter((photo) => photo.height > photo.width).length;
   return portraits >= photos.length / 2 ? 3 : 2;
+}
+
+export function packLeftoverRowCounts(count: number): number[] {
+  if (count <= 0) return [];
+  const rows: number[] = [];
+  let left = count;
+  while (left > 3) {
+    if (left === 4) {
+      rows.push(2);
+      left = 2;
+      break;
+    }
+    rows.push(3);
+    left -= 3;
+  }
+  if (left === 1 && rows.length > 0) {
+    rows[rows.length - 1] -= 1;
+    rows.push(2);
+  } else if (left > 0) {
+    rows.push(left);
+  }
+  return rows;
+}
+
+export function justifiedRowMetrics(
+  aspects: readonly number[],
+  contentWidth: number,
+  gap: number,
+  maxH: number,
+): { height: number; widths: number[]; usedWidth: number } {
+  const positive = aspects.map((aspect) => (aspect > 0 ? aspect : 1));
+  const sumA = positive.reduce((sum, aspect) => sum + aspect, 0);
+  if (positive.length === 0 || sumA <= 0) {
+    return { height: 0, widths: [], usedWidth: 0 };
+  }
+  const height = Math.min(maxH, (contentWidth - gap * (positive.length - 1)) / sumA);
+  const widths = positive.map((aspect) => aspect * height);
+  const usedWidth = widths.reduce((sum, width) => sum + width, 0) + gap * (positive.length - 1);
+  return { height, widths, usedWidth };
+}
+
+export function measureTextBesidePhoto(input: {
+  text: string;
+  font: PdfTypeFace;
+  emoji: PdfTypeFace;
+  size: number;
+  lineGap: number;
+  insetWidth: number;
+  fullWidth: number;
+  photoHeight: number;
+}): number {
+  let height = 0;
+  const boxH = pdfLineBoxHeight(input.font, input.size);
+  for (const raw of input.text.replace(/\r\n/g, "\n").split("\n")) {
+    const words = (raw || " ").split(/\s+/).filter(Boolean);
+    let remaining = words.length > 0 ? words : [""];
+    while (remaining.length > 0) {
+      const width = lineBoxOverlapsWrap(0 - height, boxH, 0 - input.photoHeight)
+        ? input.insetWidth
+        : input.fullWidth;
+      const taken = takeLine(remaining, input.font, input.emoji, input.size, width);
+      height += input.size + input.lineGap;
+      remaining = taken.rest;
+    }
+  }
+  return height;
 }
 
 export type CapsulePdfPhotoBytes = {
@@ -456,10 +527,26 @@ async function drawPerson(
   const remainingTextAfter = (from: number): boolean =>
     rest.slice(from + 1).some((entry) => entry.kind === "text");
 
+  const flushLeftoverWeaves = async () => {
+    const items: Array<{ image: PDFImage; storage_path?: string }> = [];
+    while (queued.length > 0) {
+      const next = queued.shift()!;
+      const image = await embedPhoto(doc, photoByPath.get(next.block.photo.storage_path));
+      if (image) items.push({ image, storage_path: next.block.photo.storage_path });
+    }
+    if (items.length === 0) return;
+    cursor.finishWrap();
+    await cursor.leftoverJustified(items, { maxH: PDF_LEFTOVER_MAX_H, gap: PDF_LEFTOVER_GAP });
+  };
+
   const placeQueued = async (inset: boolean) => {
+    if (!inset) {
+      await flushLeftoverWeaves();
+      return;
+    }
     while (queued.length > 0 && !cursor.hasActiveWrap()) {
       const next = queued.shift()!;
-      await placeWeavePhoto(doc, cursor, next.block, fonts, photoByPath, next.pairedText, inset);
+      await placeWeavePhoto(doc, cursor, next.block, fonts, photoByPath, next.pairedText, true);
     }
   };
 
@@ -510,20 +597,41 @@ async function drawPersonHeading(
   const firstText = rest.find((block) => block.kind === "text");
   const firstIsWeave = rest[0]?.kind === "photo" && rest[0].variant === "weave";
   const hasPhoto = rest.some((block) => block.kind === "photo" || block.kind === "gallery");
-  const width = firstIsWeave ? sideTextColumnWidth() : CONTENT_WIDTH;
-  const firstTextHeight = firstText
+  const insetWidth = sideTextColumnWidth();
+  const narrowHeight = firstText
     ? estimateWrappedHeight(
         firstText.text,
         fonts.serif,
         fonts.emoji,
         PDF_BODY_SIZE,
         PDF_BODY_LINE_GAP,
-        width,
+        firstIsWeave ? insetWidth : CONTENT_WIDTH,
       )
+    : 0;
+  const photoHeight = firstIsWeave ? clampSidePhotoHeight(narrowHeight || PDF_SIDE_PHOTO_MIN) : 0;
+  const firstTextHeight = firstText
+    ? firstIsWeave
+      ? measureTextBesidePhoto({
+          text: firstText.text,
+          font: fonts.serif,
+          emoji: fonts.emoji,
+          size: PDF_BODY_SIZE,
+          lineGap: PDF_BODY_LINE_GAP,
+          insetWidth,
+          fullWidth: CONTENT_WIDTH,
+          photoHeight,
+        })
+      : estimateWrappedHeight(
+          firstText.text,
+          fonts.serif,
+          fonts.emoji,
+          PDF_BODY_SIZE,
+          PDF_BODY_LINE_GAP,
+          CONTENT_WIDTH,
+        )
     : hasPhoto
       ? PDF_PHOTO_SHRINK_MIN
       : 0;
-  const photoHeight = firstIsWeave ? clampSidePhotoHeight(firstTextHeight || PDF_SIDE_PHOTO_MIN) : 0;
   const needed = headingKeepWithNextNeeded({
     headingSize,
     headingGap: PDF_HEADING_GAP,
@@ -584,9 +692,12 @@ async function placeWeavePhoto(
   const maxH = clampSidePhotoHeight(textH);
   if (inset) {
     cursor.insetImage(image, block.side, maxH, block.photo.storage_path);
-  } else {
-    await cursor.image(image, maxH, block.photo.storage_path);
+    return;
   }
+  await cursor.leftoverJustified([{ image, storage_path: block.photo.storage_path }], {
+    maxH: PDF_LEFTOVER_MAX_H,
+    gap: PDF_LEFTOVER_GAP,
+  });
 }
 
 async function drawBlock(
@@ -624,9 +735,8 @@ async function drawBlock(
     return;
   }
   if (block.kind === "gallery") {
-    const cols = leftoverGalleryCols(block.variant, block.photos);
-    const maxH = block.variant === "strip" ? 110 : 180;
-    await cursor.gallery(doc, block.photos, photoByPath, { cols, maxH, gap: 8 });
+    const maxH = block.variant === "strip" ? PDF_LEFTOVER_STRIP_MAX_H : PDF_LEFTOVER_MAX_H;
+    await cursor.gallery(doc, block.photos, photoByPath, { maxH, gap: PDF_LEFTOVER_GAP });
     return;
   }
 
@@ -948,57 +1058,60 @@ class PdfCursor {
     });
   }
 
-  async gallery(
-    doc: PDFDocument,
-    photos: readonly CapsuleArchivePhoto[],
-    photoByPath: Map<string, Uint8Array>,
-    opts: { cols: number; maxH: number; gap: number },
+  async leftoverJustified(
+    items: Array<{ image: PDFImage; storage_path?: string }>,
+    opts: { maxH: number; gap: number },
   ) {
     this.finishWrap();
-    for (let i = 0; i < photos.length; i += opts.cols) {
-      const slice = photos.slice(i, i + opts.cols);
-      const preview: Array<{ image: PDFImage; storage_path: string }> = [];
-      for (const photo of slice) {
-        const image = await embedPhoto(doc, photoByPath.get(photo.storage_path));
-        if (image) preview.push({ image, storage_path: photo.storage_path });
-      }
-      if (preview.length === 0) continue;
-      const cols = preview.length;
-      const colW = (CONTENT_WIDTH - opts.gap * (cols - 1)) / cols;
-      const images = preview.map((entry) => {
-        const scale = Math.min(colW / entry.image.width, opts.maxH / entry.image.height, 1);
-        return {
-          image: entry.image,
-          storage_path: entry.storage_path,
-          w: entry.image.width * scale,
-          h: entry.image.height * scale,
-        };
-      });
-      const rowH = Math.max(...images.map((entry) => entry.h));
-      this.ensure(rowH + 12);
-      this.y -= rowH;
-      images.forEach((entry, index) => {
-        const x = MARGIN + index * (colW + opts.gap) + (colW - entry.w) / 2;
+    if (items.length === 0) return;
+    const packs = packLeftoverRowCounts(items.length);
+    let offset = 0;
+    for (const count of packs) {
+      const slice = items.slice(offset, offset + count);
+      offset += count;
+      const aspects = slice.map((entry) => entry.image.width / Math.max(1, entry.image.height));
+      const row = justifiedRowMetrics(aspects, CONTENT_WIDTH, opts.gap, opts.maxH);
+      this.ensure(row.height + 12);
+      this.y -= row.height;
+      let x = MARGIN + Math.max(0, (CONTENT_WIDTH - row.usedWidth) / 2);
+      slice.forEach((entry, index) => {
+        const w = row.widths[index]!;
+        const h = row.height;
         this.page.drawImage(entry.image, {
           x,
           y: this.y,
-          width: entry.w,
-          height: entry.h,
+          width: w,
+          height: h,
         });
         this.record({
           kind: "photo",
           person: this.person ?? undefined,
           page: this.pageIndex,
           x,
-          y: this.y + entry.h,
-          width: entry.w,
+          y: this.y + h,
+          width: w,
           bottom: this.y,
-          height: entry.h,
+          height: h,
           storage_path: entry.storage_path,
         });
+        x += w + opts.gap;
       });
       this.y -= 12;
     }
+  }
+
+  async gallery(
+    doc: PDFDocument,
+    photos: readonly CapsuleArchivePhoto[],
+    photoByPath: Map<string, Uint8Array>,
+    opts: { maxH: number; gap: number },
+  ) {
+    const items: Array<{ image: PDFImage; storage_path?: string }> = [];
+    for (const photo of photos) {
+      const image = await embedPhoto(doc, photoByPath.get(photo.storage_path));
+      if (image) items.push({ image, storage_path: photo.storage_path });
+    }
+    await this.leftoverJustified(items, opts);
   }
 }
 

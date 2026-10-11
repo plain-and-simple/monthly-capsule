@@ -22,6 +22,12 @@ export const LONG_BODY = [
 
 export const GALLERY_BODY = "One short note about the porch light and the extra pictures from the walk.";
 
+export const LONG_RUNON_BODY = [
+  "The river path stayed muddy after the storm so we took the long way around the school and talked about the porch light that has been blinking since August and the chair someone left out with a dark oval of rainwater on the seat and the maple that dropped one leaf at a time onto the wet sidewalk while we stood there longer than we meant to just watching October settle in around the houses and the back door that never quite latches unless you lean on it and the radio that kept losing the station while the beans simmered and the kitchen windows fogged",
+  "and later we walked the same loop again because the puddles had turned the color of tea and the schoolyard fence had a mitten stuck on it and someone had written a grocery list on the back of an envelope that kept unfolding in the wind and we talked about the extra chair on the porch and the way the maple kept dropping leaves onto the wet sidewalk one at a time as if it were counting October out loud",
+  "and by the time we got back the kitchen windows had fogged again and the pot lid was clicking and the back door still needed a shoulder to stay shut so I kept writing it down in one long breath so the page would have to decide whether that first stretch of the letter could sit beside a photo without pretending every line was still squeezed into the narrow column",
+].join(" ");
+
 export const TEN_LINE_OPENING = Array.from({ length: 10 }, (_, index) => {
   return `Line ${index + 1} stays with the name heading.`;
 }).join("\n");
