@@ -4,7 +4,7 @@ import { inflateSync } from "node:zlib";
 import fontkit from "@pdf-lib/fontkit";
 import type { PDFDocument, PDFFont, PDFPage, RGB } from "pdf-lib";
 
-export const CAPSULE_PDF_PRODUCER = "monthly-capsule-layout/2";
+export const CAPSULE_PDF_PRODUCER = "monthly-capsule-layout/3";
 
 /** Traced onto the Vercel function disk next to process.cwd(); never resolve from the bundled module URL. */
 export const PDF_FONTS_DIR = join(process.cwd(), "src/lib/pdf-fonts");
@@ -14,7 +14,7 @@ const FONT_FILES = {
   serifBold: "LiberationSerif-Bold.ttf",
   serifItalic: "LiberationSerif-Italic.ttf",
   sans: "LiberationSans-Regular.ttf",
-  emoji: "NotoEmoji-Variable.ttf",
+  emoji: "NotoEmoji-Regular.ttf",
 } as const;
 
 export type PdfTypeFace = {
@@ -53,7 +53,8 @@ export async function embedCapsulePdfFonts(doc: PDFDocument): Promise<CapsulePdf
     doc.embedFont(readPdfFontFile(FONT_FILES.serifBold), { subset: true }),
     doc.embedFont(readPdfFontFile(FONT_FILES.serifItalic), { subset: true }),
     doc.embedFont(readPdfFontFile(FONT_FILES.sans), { subset: true }),
-    doc.embedFont(readPdfFontFile(FONT_FILES.emoji), { subset: true }),
+    // fontkit's subsetter corrupts Noto Emoji glyf outlines even on a static instance.
+    doc.embedFont(readPdfFontFile(FONT_FILES.emoji), { subset: false }),
   ]);
   return {
     serif: asTypeFace(serif),
@@ -64,23 +65,25 @@ export async function embedCapsulePdfFonts(doc: PDFDocument): Promise<CapsulePdf
   };
 }
 
-function isIgnorableCodePoint(codePoint: number): boolean {
+export function isIgnorablePdfCodePoint(codePoint: number): boolean {
   return (
     codePoint === 0xfe0e ||
     codePoint === 0xfe0f ||
     codePoint === 0x200b ||
     codePoint === 0x200c ||
     codePoint === 0x200d ||
-    codePoint === 0x2060
+    codePoint === 0x2060 ||
+    (codePoint >= 0x1f3fb && codePoint <= 0x1f3ff)
   );
 }
 
 export function pickPdfFont(char: string, primary: PdfTypeFace, fallback: PdfTypeFace): PDFFont | null {
   const codePoint = char.codePointAt(0);
   if (codePoint == null) return null;
+  // Skip VS16 / ZWJ / skin-tone even when a face maps them, so they never draw a box.
+  if (isIgnorablePdfCodePoint(codePoint)) return null;
   if (primary.glyphs.has(codePoint)) return primary.font;
   if (fallback.glyphs.has(codePoint)) return fallback.font;
-  if (isIgnorableCodePoint(codePoint)) return null;
   return primary.font;
 }
 

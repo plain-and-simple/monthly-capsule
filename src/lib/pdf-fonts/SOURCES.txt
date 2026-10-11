@@ -1,5 +1,8 @@
 Liberation Serif / Sans 2.1.5 — SIL Open Font License 1.1 (LICENSE)
 https://github.com/liberationfonts/liberation-fonts/releases/tag/2.1.5
 
-Noto Emoji (variable, OFL) — SIL Open Font License 1.1 (NotoEmoji-OFL.txt)
+Noto Emoji Regular (static instance, OFL) — SIL Open Font License 1.1 (NotoEmoji-OFL.txt)
 https://github.com/google/fonts/tree/main/ofl/notoemoji
+Instanced from Noto Emoji variable at wght=400 with fonttools varLib.instancer
+(no fvar/gvar). Embedded without subsetting: pdf-lib/fontkit's subsetter still
+drops or corrupts Noto Emoji outlines.
