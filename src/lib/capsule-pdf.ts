@@ -43,7 +43,8 @@ export const PDF_BODY_SIZE = 12;
 export const PDF_BODY_LINE_GAP = 4;
 export const PDF_PARAGRAPH_GAP = 8;
 export const PDF_HEADING_GAP = 12;
-export const PDF_KEEP_WITH_NEXT_LINES = 4;
+export const PDF_PAGE_CONTENT_HEIGHT = PDF_PAGE_HEIGHT - PDF_MARGIN * 2;
+export const PDF_WRAP_CLEAR_GAP = 10;
 export const PDF_SIDE_PHOTO_MIN = 110;
 export const PDF_SIDE_PHOTO_MAX = 210;
 export const PDF_SIDE_PHOTO_FRACTION = 0.42;
@@ -63,10 +64,36 @@ export type CapsulePdfLayoutEvent = {
   name?: string;
   person?: string;
   text?: string;
+  x?: number;
+  width?: number;
   bottom?: number;
   height?: number;
   storage_path?: string;
 };
+
+export function pdfLineBoxHeight(font: PdfTypeFace, size: number): number {
+  return font.font.heightAtSize(size, { descender: true });
+}
+
+export function lineBoxOverlapsWrap(
+  lineTop: number,
+  lineBoxHeight: number,
+  wrapBottom: number,
+  gap = PDF_WRAP_CLEAR_GAP,
+): boolean {
+  const lineBottom = lineTop - lineBoxHeight;
+  const clearY = wrapBottom - gap;
+  return lineTop > clearY && lineBottom < lineTop;
+}
+
+export function layoutBoxesOverlap(
+  a: { page: number; x: number; y: number; width: number; height: number },
+  b: { page: number; x: number; y: number; width: number; height: number },
+): boolean {
+  if (a.page !== b.page) return false;
+  if (a.width <= 0 || a.height <= 0 || b.width <= 0 || b.height <= 0) return false;
+  return a.x < b.x + b.width && a.x + a.width > b.x && a.y > b.y - b.height && a.y - a.height < b.y;
+}
 
 export function headingSizeForTheme(theme: CapsuleTheme): number {
   return theme === "heritage" ? 16 : 18;
@@ -97,13 +124,13 @@ export function headingKeepWithNextNeeded(input: {
   headingSize: number;
   headingGap: number;
   firstTextHeight: number;
-  lineHeight: number;
-  keepLines?: number;
+  photoHeight?: number;
+  pageContentHeight?: number;
 }): number {
-  const keepLines = input.keepLines ?? PDF_KEEP_WITH_NEXT_LINES;
-  const cap = keepLines * input.lineHeight;
-  const keepText = input.firstTextHeight <= 0 ? 0 : Math.min(input.firstTextHeight, cap);
-  return input.headingSize + input.headingGap + keepText;
+  const content = Math.max(Math.max(0, input.firstTextHeight), Math.max(0, input.photoHeight ?? 0));
+  const raw = input.headingSize + input.headingGap + content;
+  const cap = input.pageContentHeight ?? PDF_PAGE_CONTENT_HEIGHT;
+  return Math.min(raw, cap);
 }
 
 export function headingKeepWithNextFits(y: number, needed: number, margin = MARGIN): boolean {
@@ -496,11 +523,12 @@ async function drawPersonHeading(
     : hasPhoto
       ? PDF_PHOTO_SHRINK_MIN
       : 0;
+  const photoHeight = firstIsWeave ? clampSidePhotoHeight(firstTextHeight || PDF_SIDE_PHOTO_MIN) : 0;
   const needed = headingKeepWithNextNeeded({
     headingSize,
     headingGap: PDF_HEADING_GAP,
     firstTextHeight,
-    lineHeight: PDF_BODY_SIZE + PDF_BODY_LINE_GAP,
+    photoHeight,
   });
   cursor.ensure(needed);
   cursor.record({ kind: "heading", name, person, page: cursor.pageIndex, y: cursor.y });
@@ -520,10 +548,7 @@ function drawLetterText(
   person: string,
 ) {
   const lines = text.replace(/\r\n/g, "\n").split("\n");
-  lines.forEach((line, index) => {
-    if (index === 0) {
-      cursor.record({ kind: "text", person, text: line, page: cursor.pageIndex, y: cursor.y });
-    }
+  for (const line of lines) {
     cursor.wrapped(line || " ", {
       font: fonts.serif,
       size: PDF_BODY_SIZE,
@@ -531,8 +556,8 @@ function drawLetterText(
       color: cursor.palette.ink,
       center: false,
     });
-  });
-  cursor.y -= PDF_PARAGRAPH_GAP;
+  }
+  cursor.advanceParagraphGap(PDF_PARAGRAPH_GAP);
 }
 
 async function placeWeavePhoto(
@@ -629,7 +654,7 @@ async function embedPhoto(doc: PDFDocument, bytes: Uint8Array | undefined): Prom
   }
 }
 
-type PdfWrap = { side: "left" | "right"; bottom: number; width: number };
+type PdfWrap = { side: "left" | "right"; top: number; bottom: number; width: number };
 
 class PdfCursor {
   page: PDFPage;
@@ -659,8 +684,13 @@ class PdfCursor {
     this.layout?.push(event);
   }
 
-  hasActiveWrap(lineSize = 0): boolean {
-    return Boolean(this.wrap && this.y - lineSize > this.wrap.bottom);
+  hasActiveWrap(): boolean {
+    return Boolean(this.wrap && this.y > this.wrap.bottom - PDF_WRAP_CLEAR_GAP);
+  }
+
+  advanceParagraphGap(gap: number) {
+    if (gap <= 0) return;
+    this.y -= gap;
   }
 
   ensure(needed: number) {
@@ -680,11 +710,11 @@ class PdfCursor {
     this.wrap = null;
   }
 
-  column(lineSize: number): { x: number; width: number } {
-    if (!this.wrap || this.y - lineSize < this.wrap.bottom) {
+  column(lineBoxHeight: number): { x: number; width: number } {
+    if (!this.wrap || !lineBoxOverlapsWrap(this.y, lineBoxHeight, this.wrap.bottom)) {
       return { x: MARGIN, width: CONTENT_WIDTH };
     }
-    const taken = this.wrap.width + 14;
+    const taken = this.wrap.width + PDF_SIDE_PHOTO_GUTTER;
     if (this.wrap.side === "right") {
       return { x: MARGIN, width: CONTENT_WIDTH - taken };
     }
@@ -732,12 +762,24 @@ class PdfCursor {
   ) {
     const words = value.split(/\s+/).filter(Boolean);
     let remaining = words.length > 0 ? words : [""];
+    const lineBoxHeight = pdfLineBoxHeight(opts.font, opts.size);
     while (remaining.length > 0) {
-      this.ensure(opts.size + 6);
-      const col = this.column(opts.size);
+      this.ensure(lineBoxHeight + opts.lineGap);
+      const col = this.column(lineBoxHeight);
       const taken = takeLine(remaining, opts.font, this.emoji, opts.size, col.width);
       const width = widthOfPdfText(taken.line, opts.size, opts.font, this.emoji);
       const x = opts.center ? col.x + Math.max(0, (col.width - width) / 2) : col.x;
+      this.record({
+        kind: "text",
+        person: this.person ?? undefined,
+        text: taken.line,
+        page: this.pageIndex,
+        x,
+        y: this.y,
+        width,
+        height: lineBoxHeight,
+        bottom: this.y - lineBoxHeight,
+      });
       drawPdfRuns(
         this.page,
         layoutPdfRuns(taken.line, opts.font, this.emoji),
@@ -749,7 +791,7 @@ class PdfCursor {
       this.y -= opts.size + opts.lineGap;
       remaining = taken.rest;
     }
-    if (opts.paragraphGap) this.y -= opts.paragraphGap;
+    if (opts.paragraphGap) this.advanceParagraphGap(opts.paragraphGap);
   }
 
   ribbon(value: string, font: PdfTypeFace) {
@@ -812,8 +854,9 @@ class PdfCursor {
       sized = fit(shrink.height);
     }
     if (this.y - sized.h < MARGIN) this.ensure(sized.h + PDF_PHOTO_ENSURE_PAD);
+    const x = side === "right" ? PAGE_WIDTH - MARGIN - sized.w : MARGIN;
     this.page.drawImage(image, {
-      x: side === "right" ? PAGE_WIDTH - MARGIN - sized.w : MARGIN,
+      x,
       y: this.y - sized.h,
       width: sized.w,
       height: sized.h,
@@ -823,11 +866,13 @@ class PdfCursor {
       person: this.person ?? undefined,
       storage_path: storagePath,
       page: this.pageIndex,
+      x,
       y: this.y,
+      width: sized.w,
       bottom: this.y - sized.h,
       height: sized.h,
     });
-    this.wrap = { side, bottom: this.y - sized.h, width: sized.w };
+    this.wrap = { side, top: this.y, bottom: this.y - sized.h, width: sized.w };
   }
 
   async image(image: PDFImage, maxH: number, storagePath?: string) {
@@ -848,7 +893,9 @@ class PdfCursor {
       person: this.person ?? undefined,
       storage_path: storagePath,
       page: this.pageIndex,
+      x: MARGIN,
       y: this.y + drawH,
+      width: drawW,
       bottom: this.y,
       height: drawH,
     });
@@ -885,8 +932,10 @@ class PdfCursor {
       kind: "photo",
       person: this.person ?? undefined,
       page: this.pageIndex,
-      y: this.y + drawH,
-      bottom: this.y,
+      x: x + inset,
+      y: this.y + inset + drawH,
+      width: drawW,
+      bottom: this.y + inset,
       height: drawH,
     });
     this.y -= 6;
@@ -940,7 +989,9 @@ class PdfCursor {
           kind: "photo",
           person: this.person ?? undefined,
           page: this.pageIndex,
+          x,
           y: this.y + entry.h,
+          width: entry.w,
           bottom: this.y,
           height: entry.h,
           storage_path: entry.storage_path,

@@ -17,16 +17,19 @@ import {
   estimateWrappedHeight,
   headingKeepWithNextFits,
   headingKeepWithNextNeeded,
+  layoutBoxesOverlap,
   leftoverGalleryCols,
+  lineBoxOverlapsWrap,
   PDF_BODY_LINE_GAP,
   PDF_BODY_SIZE,
   PDF_HEADING_GAP,
-  PDF_KEEP_WITH_NEXT_LINES,
   PDF_MARGIN,
+  PDF_PAGE_CONTENT_HEIGHT,
   PDF_PAGE_HEIGHT,
   PDF_PHOTO_SHRINK_MIN,
   PDF_SIDE_PHOTO_MAX,
   PDF_SIDE_PHOTO_MIN,
+  PDF_WRAP_CLEAR_GAP,
   pdfContentDisposition,
   preparePdfJpeg,
   selectEnsuredCapsulePdf,
@@ -40,7 +43,13 @@ import {
   embedCapsulePdfFonts,
 } from "./capsule-pdf-fonts";
 import { DOWNLOAD_PDF_LABEL } from "./copy";
-import { fillerBody, KEEP_TARGET_BODY } from "./capsule-pdf-fixtures";
+import {
+  buildVisualArchive,
+  fillerBody,
+  KEEP_TARGET_BODY,
+  TEN_LINE_OPENING,
+} from "./capsule-pdf-fixtures";
+import { CAPSULE_THEMES } from "./capsule-theme";
 import { capsuleTitle } from "./month-version";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -408,23 +417,44 @@ describe("pdf layout locks", () => {
     expect(shrink.height).toBeLessThan(210);
   });
 
-  it("keep-with-next uses the first paragraph, or four lines when that paragraph is long", () => {
+  it("keep-with-next reserves the full first paragraph, and an inset photo if one sits beside it", () => {
     const short = headingKeepWithNextNeeded({
       headingSize: 18,
       headingGap: PDF_HEADING_GAP,
       firstTextHeight: 32,
-      lineHeight: 16,
     });
     expect(short).toBe(18 + PDF_HEADING_GAP + 32);
-    const long = headingKeepWithNextNeeded({
+    const tenLines = headingKeepWithNextNeeded({
       headingSize: 18,
       headingGap: PDF_HEADING_GAP,
-      firstTextHeight: 20 * 16,
-      lineHeight: 16,
+      firstTextHeight: 10 * 16,
     });
-    expect(long).toBe(18 + PDF_HEADING_GAP + PDF_KEEP_WITH_NEXT_LINES * 16);
+    expect(tenLines).toBe(18 + PDF_HEADING_GAP + 10 * 16);
+    const withPhoto = headingKeepWithNextNeeded({
+      headingSize: 18,
+      headingGap: PDF_HEADING_GAP,
+      firstTextHeight: 80,
+      photoHeight: 160,
+    });
+    expect(withPhoto).toBe(18 + PDF_HEADING_GAP + 160);
+    const tallerThanPage = headingKeepWithNextNeeded({
+      headingSize: 18,
+      headingGap: PDF_HEADING_GAP,
+      firstTextHeight: PDF_PAGE_CONTENT_HEIGHT * 3,
+    });
+    expect(tallerThanPage).toBe(PDF_PAGE_CONTENT_HEIGHT);
+    expect(source("./capsule-pdf.ts")).not.toContain("PDF_KEEP_WITH_NEXT_LINES");
     expect(headingKeepWithNextFits(PDF_MARGIN + short, short)).toBe(true);
     expect(headingKeepWithNextFits(PDF_MARGIN + short - 1, short)).toBe(false);
+  });
+
+  it("keeps the wrap column for any line box that still overlaps the photo, including after a paragraph gap", () => {
+    const wrapBottom = 400;
+    const box = 16;
+    expect(lineBoxOverlapsWrap(400 + 8, box, wrapBottom)).toBe(true);
+    expect(lineBoxOverlapsWrap(wrapBottom - PDF_WRAP_CLEAR_GAP, box, wrapBottom)).toBe(false);
+    expect(lineBoxOverlapsWrap(wrapBottom + 1, box, wrapBottom)).toBe(true);
+    expect(lineBoxOverlapsWrap(391, 12, wrapBottom)).toBe(true);
   });
 
   it("estimates wrapped height from the column width", async () => {
@@ -509,8 +539,8 @@ describe("pdf layout locks", () => {
           firstText: CapsulePdfLayoutEvent;
         }
       | null = null;
-    const firstLine = KEEP_TARGET_BODY.split("\n\n")[0]!;
-    for (let n = 10; n <= 40; n += 1) {
+      const firstLine = TEN_LINE_OPENING.split("\n")[0]!;
+      for (let n = 10; n <= 40; n += 1) {
       const layout: CapsulePdfLayoutEvent[] = [];
       await buildCapsulePdfBytes({
         archive: buildCapsuleArchive({
@@ -538,12 +568,12 @@ describe("pdf layout locks", () => {
       );
       if (!caseyEnd || !riley || !firstText) continue;
       expect(firstText.page).toBe(riley.page);
-      expect(firstText.text).toContain("first paragraph");
+      expect(firstText.text).toContain("Line 1");
       const needed = headingKeepWithNextNeeded({
         headingSize: 18,
         headingGap: PDF_HEADING_GAP,
-        firstTextHeight: 16 * 4,
-        lineHeight: 16,
+        firstTextHeight: 10 * 16,
+        photoHeight: 110,
       });
       const remainingAfterCasey = caseyEnd.y - 26;
       if (remainingAfterCasey - PDF_MARGIN < needed && remainingAfterCasey > PDF_MARGIN) {
@@ -555,6 +585,117 @@ describe("pdf layout locks", () => {
     }
     expect(proof).not.toBeNull();
     expect(proof?.firstText.text).toContain(firstLine.slice(0, 20));
+  });
+
+  it("moves a name with a 10-line opening paragraph near the page bottom", async () => {
+    const jpeg = await tinyJpeg();
+    const fonts = await embedCapsulePdfFonts(await PDFDocument.create());
+    const firstHeight = estimateWrappedHeight(
+      TEN_LINE_OPENING,
+      fonts.serif,
+      fonts.emoji,
+      PDF_BODY_SIZE,
+      PDF_BODY_LINE_GAP,
+      504 * (1 - 0.42) - 14,
+    );
+    expect(firstHeight).toBeGreaterThan(8 * (PDF_BODY_SIZE + PDF_BODY_LINE_GAP));
+    const needed = headingKeepWithNextNeeded({
+      headingSize: 18,
+      headingGap: PDF_HEADING_GAP,
+      firstTextHeight: firstHeight,
+      photoHeight: 110,
+    });
+    expect(needed).toBeGreaterThan(18 + PDF_HEADING_GAP + 8 * 16);
+    expect(needed).toBeLessThanOrEqual(PDF_PAGE_CONTENT_HEIGHT);
+
+    let proof: { riley: CapsulePdfLayoutEvent; lines: CapsulePdfLayoutEvent[] } | null = null;
+    for (let n = 10; n <= 45; n += 1) {
+      const layout: CapsulePdfLayoutEvent[] = [];
+      await buildCapsulePdfBytes({
+        archive: buildCapsuleArchive({
+          yearMonth: "2026-10",
+          groupName: "Regression Kitchen",
+          memberCount: 2,
+          letters: [
+            { preferred_name: "Casey Nguyen", body: fillerBody(n), photos: [] },
+            {
+              preferred_name: "Riley Chen",
+              body: KEEP_TARGET_BODY,
+              photos: [{ storage_path: "g/r0.jpg", width: 12, height: 8, sort_order: 0 }],
+            },
+          ],
+        }),
+        photos: [{ storage_path: "g/r0.jpg", bytes: jpeg }],
+        layout,
+      });
+      const caseyEnd = [...layout]
+        .reverse()
+        .find((event) => event.person === "Casey Nguyen" && event.kind === "text");
+      const riley = layout.find((event) => event.kind === "heading" && event.name === "Riley Chen");
+      const opening = layout.filter(
+        (event) =>
+          event.kind === "text" &&
+          event.person === "Riley Chen" &&
+          /^Line \d+ stays with the name heading/.test(event.text ?? ""),
+      );
+      if (!caseyEnd || !riley || opening.length < 10) continue;
+      expect(new Set(opening.map((event) => event.page))).toEqual(new Set([riley.page]));
+      const remainingAfterCasey = caseyEnd.y - 26;
+      if (remainingAfterCasey - PDF_MARGIN < needed && remainingAfterCasey > PDF_MARGIN) {
+        expect(riley.page).toBeGreaterThan(caseyEnd.page);
+        expect(opening).toHaveLength(10);
+        expect(opening.every((event) => event.page === riley.page)).toBe(true);
+        proof = { riley, lines: opening };
+        break;
+      }
+    }
+    expect(proof).not.toBeNull();
+    expect(proof?.lines.map((event) => event.text).join("\n")).toContain("Line 10");
+  });
+
+  it("never lets a text line box intersect a photo on any theme fixture", async () => {
+    for (const theme of CAPSULE_THEMES) {
+      const { archive, photos } = await buildVisualArchive(theme);
+      const layout: CapsulePdfLayoutEvent[] = [];
+      await buildCapsulePdfBytes({ archive, photos, layout });
+      const texts = layout.filter(
+        (event) =>
+          event.kind === "text" &&
+          event.x != null &&
+          event.width != null &&
+          event.height != null &&
+          event.person,
+      );
+      const images = layout.filter(
+        (event) =>
+          event.kind === "photo" && event.x != null && event.width != null && event.height != null,
+      );
+      expect(texts.length).toBeGreaterThan(0);
+      expect(images.length).toBeGreaterThan(0);
+      for (const line of texts) {
+        for (const image of images) {
+          expect(
+            layoutBoxesOverlap(
+              {
+                page: line.page,
+                x: line.x!,
+                y: line.y,
+                width: line.width!,
+                height: line.height!,
+              },
+              {
+                page: image.page,
+                x: image.x!,
+                y: image.y,
+                width: image.width!,
+                height: image.height!,
+              },
+            ),
+            `${theme} "${line.text}" overlaps a photo on page ${line.page}`,
+          ).toBe(false);
+        }
+      }
+    }
   });
 
   it("finishes one person's photos before the next name heading", async () => {

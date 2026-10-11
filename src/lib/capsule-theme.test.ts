@@ -1,5 +1,14 @@
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { buildCapsuleArchive, renderArchiveHtml } from "./capsule-archive";
+
+const here = dirname(fileURLToPath(import.meta.url));
+
+function source(rel: string) {
+  return readFileSync(resolve(here, rel), "utf8");
+}
 import {
   CAPSULE_THEME_CATALOG,
   layoutCapsuleSections,
@@ -230,6 +239,7 @@ describe("short-line pairing", () => {
 
   it("html keeps merged bullets inside one letter run so the photo still wraps", () => {
     const bullets = "- rye bread\n- two pears\n- leftover mint";
+    expect(letterParagraphs(bullets)[0]).toContain("\n");
     const html = renderArchiveHtml({
       year_month: "2026-10",
       group_name: "Kitchen",
@@ -245,7 +255,12 @@ describe("short-line pairing", () => {
     expect(html).toContain("letter__run");
     expect(html).toContain("rye bread<br />");
     expect(html).toContain("two pears<br />");
+    expect(html).toContain("leftover mint");
     expect(html.match(/letter__run/g)).toHaveLength(1);
+    expect(html.match(/<p class="letter__text">/g)).toHaveLength(1);
+    expect(source("../components/capsule-document.tsx")).toContain("function LetterText");
+    expect(source("../components/capsule-document.tsx")).toContain("<br />");
+    expect(source("../app/globals.css")).toContain("white-space: pre-wrap");
   });
 });
 

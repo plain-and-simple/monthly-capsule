@@ -22,8 +22,12 @@ export const LONG_BODY = [
 
 export const GALLERY_BODY = "One short note about the porch light and the extra pictures from the walk.";
 
+export const TEN_LINE_OPENING = Array.from({ length: 10 }, (_, index) => {
+  return `Line ${index + 1} stays with the name heading.`;
+}).join("\n");
+
 export const KEEP_TARGET_BODY = [
-  "This first paragraph has to travel with the name heading. If the heading is left alone at the bottom of a page, the keep-with-next rule failed.",
+  TEN_LINE_OPENING,
   "A second thought after the heading is already safe on the next page.",
 ].join("\n\n");
 
