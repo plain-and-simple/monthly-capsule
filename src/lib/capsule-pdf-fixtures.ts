@@ -50,6 +50,66 @@ export type VisualLetterSpec = {
   photos: Array<{ color: string; width: number; height: number }>;
 };
 
+export const MAGAZINE_VISUAL_LETTERS: VisualLetterSpec[] = [
+  {
+    preferred_name: "Alex Rivera",
+    body: BULLET_BODY,
+    photos: [
+      { color: "#2f5b4c", width: 1200, height: 800 },
+      { color: "#c47a3a", width: 900, height: 1400 },
+      { color: "#8a6a32", width: 1100, height: 700 },
+      { color: "#6b2e1f", width: 800, height: 1200 },
+    ],
+  },
+  {
+    preferred_name: "Jordan Lee",
+    body: LONG_BODY,
+    photos: [
+      { color: "#1a1712", width: 1400, height: 900 },
+      { color: "#2f5b4c", width: 900, height: 1300 },
+    ],
+  },
+  {
+    preferred_name: "Morgan Blake",
+    body: LONG_RUNON_BODY,
+    photos: [
+      { color: "#6b2e1f", width: 800, height: 1300 },
+      { color: "#c43b2e", width: 900, height: 1400 },
+    ],
+  },
+  {
+    preferred_name: "Sam Patel",
+    body: GALLERY_BODY,
+    photos: [
+      { color: "#b5b5b0", width: 1200, height: 800 },
+      { color: "#c47a3a", width: 700, height: 1100 },
+      { color: "#8a6a32", width: 900, height: 1400 },
+      { color: "#2f5b4c", width: 1200, height: 800 },
+      { color: "#6b2e1f", width: 850, height: 1250 },
+      { color: "#1a1712", width: 1100, height: 720 },
+    ],
+  },
+  {
+    preferred_name: "Casey Nguyen",
+    body: "The kitchen was quiet except for the pot lid.\n\nI wrote this down so the page would have a name and no photos at all.",
+    photos: [],
+  },
+  {
+    preferred_name: "Riley Chen",
+    body: KEEP_TARGET_BODY,
+    photos: [{ color: "#2f5b4c", width: 1000, height: 750 }],
+  },
+  {
+    preferred_name: "Quinn Brooks",
+    body: LONG_BODY,
+    photos: [
+      { color: "#c43b2e", width: 1400, height: 900 },
+      { color: "#8a6a32", width: 1100, height: 700 },
+      { color: "#2f5b4c", width: 900, height: 1300 },
+    ],
+  },
+];
+
 export const VISUAL_LETTERS: VisualLetterSpec[] = [
   {
     preferred_name: "Alex Rivera",
@@ -140,7 +200,8 @@ export async function buildVisualArchive(theme: CapsuleTheme): Promise<{
 }> {
   const photos: CapsulePdfPhotoBytes[] = [];
   const letters = [];
-  for (const [letterIndex, spec] of VISUAL_LETTERS.entries()) {
+  const specs = theme === "magazine" ? MAGAZINE_VISUAL_LETTERS : VISUAL_LETTERS;
+  for (const [letterIndex, spec] of specs.entries()) {
     const letterPhotos = [];
     for (const [photoIndex, swatch] of spec.photos.entries()) {
       const storage_path = `visual/${theme}/${letterIndex}/${photoIndex}.jpg`;
@@ -165,7 +226,7 @@ export async function buildVisualArchive(theme: CapsuleTheme): Promise<{
     archive: buildCapsuleArchive({
       yearMonth: PDF_VISUAL_YEAR_MONTH,
       groupName: PDF_VISUAL_GROUP,
-      memberCount: VISUAL_LETTERS.length,
+      memberCount: specs.length,
       theme,
       letters,
     }),

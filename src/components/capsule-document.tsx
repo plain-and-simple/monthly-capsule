@@ -105,6 +105,15 @@ function CapsuleCover({
       </header>
     );
   }
+  if (theme === "magazine") {
+    return (
+      <header className="capsule__cover">
+        <p className="capsule__kicker">{title}</p>
+        <h1 className="capsule__title">{groupName}</h1>
+        {contents}
+      </header>
+    );
+  }
 
   return (
     <header className="capsule__cover">
@@ -155,7 +164,7 @@ function LetterBlockView({
     );
   }
   if (block.kind === "heading") {
-    if (theme === "minimal" || theme === "heritage") {
+    if (theme === "minimal" || theme === "heritage" || theme === "magazine") {
       return <h2 className="letter__name">{block.name}</h2>;
     }
     return (

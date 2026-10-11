@@ -3,3 +3,7 @@ https://github.com/liberationfonts/liberation-fonts/releases/tag/2.1.5
 
 Noto Emoji (variable, OFL) — SIL Open Font License 1.1 (NotoEmoji-OFL.txt)
 https://github.com/google/fonts/tree/main/ofl/notoemoji
+
+Oswald Bold — SIL Open Font License 1.1 (Oswald-OFL.txt)
+https://github.com/googlefonts/OswaldFont
+Magazine display headers only; other themes still use Liberation.

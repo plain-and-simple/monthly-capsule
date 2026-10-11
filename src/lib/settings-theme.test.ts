@@ -30,6 +30,8 @@ describe("owner theme picker persistence", () => {
     expect(form).toContain('type="radio"');
     expect(form).toContain("CAPSULE_THEME_CATALOG");
     expect(form).not.toMatch(/<select[^>]*capsule_theme/);
+    expect(source("./capsule-theme.ts")).toContain('id: "magazine"');
+    expect(source("./capsule-theme.ts")).toMatch(/"classic", "warm", "minimal", "heritage", "magazine"/);
     expect(form).toContain("updateCapsuleTheme");
     expect(CAPSULE_THEME_SECTION).toBe("Capsule theme");
     expect(CAPSULE_THEME_SAVE).toBe("Save theme");

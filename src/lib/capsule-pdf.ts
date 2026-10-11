@@ -5,6 +5,7 @@ import {
   CAPSULE_PDF_PRODUCER,
   drawPdfRuns,
   embedCapsulePdfFonts,
+  embedMagazineDisplayFont,
   layoutPdfRuns,
   widthOfPdfRuns,
   widthOfPdfText,
@@ -12,8 +13,21 @@ import {
   type PdfTypeFace,
 } from "@/lib/capsule-pdf-fonts";
 import {
+  cropJpegToAspect,
+  MAGAZINE_CONTENT_BOTTOM,
+  MAGAZINE_COVER_SIZE,
+  MAGAZINE_FOOTER_HEIGHT,
+  MAGAZINE_NAME_SIZE,
+  magazineCoverHero,
+  magazineHeroAspect,
+  magazinePullQuote,
+  selectMagazineTemplate,
+  sortedLetterPhotos,
+} from "@/lib/capsule-pdf-magazine";
+import {
   capsuleThemeMeta,
   layoutPersonSection,
+  letterParagraphs,
   parseCapsuleTheme,
   plateLabel,
   type CapsuleTheme,
@@ -62,7 +76,7 @@ const MARGIN = PDF_MARGIN;
 const CONTENT_WIDTH = PDF_CONTENT_WIDTH;
 
 export type CapsulePdfLayoutEvent = {
-  kind: "heading" | "photo" | "text" | "page";
+  kind: "heading" | "photo" | "text" | "page" | "footer";
   page: number;
   y: number;
   name?: string;
@@ -100,6 +114,7 @@ export function layoutBoxesOverlap(
 }
 
 export function headingSizeForTheme(theme: CapsuleTheme): number {
+  if (theme === "magazine") return MAGAZINE_NAME_SIZE;
   return theme === "heritage" ? 16 : 18;
 }
 
@@ -362,6 +377,18 @@ export async function buildCapsulePdfBytes(input: {
     input.monthLabelText ??
     capsuleTitle(monthLabel(input.archive.year_month), input.archive.month_version);
   const groupName = groupDisplayName(input.archive.group_name);
+  if (theme === "magazine") {
+    await drawMagazineIssue(doc, {
+      archive: input.archive,
+      fonts,
+      palette,
+      photoByPath,
+      title,
+      groupName,
+      layout: input.layout,
+    });
+    return doc.save({ useObjectStreams: false });
+  }
   const cursor = new PdfCursor(doc, palette, fonts.emoji, PAGE_HEIGHT - MARGIN, input.layout);
 
   drawCover(cursor, theme, fonts, {
@@ -753,6 +780,396 @@ async function drawBlock(
   await cursor.image(image, 300);
 }
 
+async function drawMagazineIssue(
+  doc: PDFDocument,
+  input: {
+    archive: CapsuleArchive;
+    fonts: CapsulePdfFonts;
+    palette: PdfPalette;
+    photoByPath: Map<string, Uint8Array>;
+    title: string;
+    groupName: string;
+    layout?: CapsulePdfLayoutEvent[];
+  },
+) {
+  const display = await embedMagazineDisplayFont(doc);
+  const cursor = new PdfCursor(
+    doc,
+    input.palette,
+    input.fonts.emoji,
+    PAGE_HEIGHT - MARGIN,
+    input.layout,
+    {
+      footerTitle: input.groupName,
+      footerFont: input.fonts.sans,
+      contentBottom: MAGAZINE_CONTENT_BOTTOM,
+    },
+  );
+  await drawMagazineCover(doc, cursor, input.fonts, display, {
+    groupName: input.groupName,
+    title: input.title,
+    letters: input.archive.letters,
+    photoByPath: input.photoByPath,
+  });
+
+  if (input.archive.letters.length === 0) {
+    cursor.wrapped("No letters this month.", {
+      font: input.fonts.serifItalic,
+      size: 13,
+      lineGap: 4,
+      color: input.palette.muted,
+    });
+  } else {
+    for (const letter of input.archive.letters) {
+      cursor.forceNewPage();
+      await drawMagazinePerson(doc, cursor, letter, input.fonts, display, input.photoByPath);
+    }
+  }
+
+  cursor.finishWrap();
+  cursor.y -= 16;
+  cursor.wrapped(missedCountPhrase(input.archive.missed_count), {
+    font: input.fonts.sans,
+    size: 10,
+    lineGap: 3,
+    color: input.palette.muted,
+  });
+}
+
+async function drawMagazineCover(
+  doc: PDFDocument,
+  cursor: PdfCursor,
+  fonts: CapsulePdfFonts,
+  display: PdfTypeFace,
+  input: {
+    groupName: string;
+    title: string;
+    letters: readonly CapsuleArchiveLetter[];
+    photoByPath: Map<string, Uint8Array>;
+  },
+) {
+  cursor.text(input.groupName.toUpperCase(), {
+    font: display,
+    size: MAGAZINE_COVER_SIZE,
+    color: cursor.palette.ink,
+    gap: 8,
+  });
+  cursor.text(input.title, {
+    font: fonts.sans,
+    size: 12,
+    color: cursor.palette.muted,
+    gap: 16,
+  });
+
+  const hero = magazineCoverHero(input.letters);
+  if (!hero) return;
+
+  await drawMagazineHero(doc, cursor, hero, input.photoByPath);
+  const names = contributorsLine(input.letters.map((letter) => letter.preferred_name));
+  if (names) {
+    cursor.wrapped(names, {
+      font: fonts.sans,
+      size: 11,
+      lineGap: 3,
+      color: cursor.palette.muted,
+      paragraphGap: 6,
+    });
+  }
+}
+
+async function drawMagazinePerson(
+  doc: PDFDocument,
+  cursor: PdfCursor,
+  letter: CapsuleArchiveLetter,
+  fonts: CapsulePdfFonts,
+  display: PdfTypeFace,
+  photoByPath: Map<string, Uint8Array>,
+) {
+  const photos = sortedLetterPhotos(letter);
+  const paragraphs = letterParagraphs(letter.body);
+  const template = selectMagazineTemplate(photos);
+  cursor.finishWrap();
+  cursor.setPerson(letter.preferred_name);
+
+  const first = photos[0];
+  const rest = photos.slice(1);
+
+  if (template === "two-column" && first) {
+    const image = await embedPhoto(doc, photoByPath.get(first.storage_path));
+    const colW = CONTENT_WIDTH * 0.46;
+    if (image && cursor.remaining() < 120) cursor.ensure(Math.min(cursor.remaining() + 1, 160));
+    const photoH = image
+      ? Math.min(Math.max(0, cursor.remaining() - 24), colW * (image.height / image.width))
+      : 0;
+    const firstText = paragraphs[0] ?? "";
+    const insetWidth = CONTENT_WIDTH - colW - PDF_SIDE_PHOTO_GUTTER;
+    const firstTextHeight = firstText
+      ? measureTextBesidePhoto({
+          text: firstText,
+          font: fonts.serif,
+          emoji: fonts.emoji,
+          size: PDF_BODY_SIZE,
+          lineGap: PDF_BODY_LINE_GAP,
+          insetWidth,
+          fullWidth: CONTENT_WIDTH,
+          photoHeight: photoH || PDF_SIDE_PHOTO_MIN,
+        })
+      : 0;
+    drawMagazineName(cursor, letter.preferred_name, display, firstTextHeight, photoH);
+    if (image && photoH > 16) {
+      const drawH = Math.min(photoH, Math.max(16, cursor.remaining() - 16));
+      const drawW = drawH * (image.width / image.height);
+      cursor.drawPlacedImage(image, MARGIN, cursor.y, drawW, drawH, first.storage_path);
+      cursor.startWrapRegion("left", drawW, drawH);
+    }
+    drawMagazineParagraphs(cursor, fonts, paragraphs, letter.preferred_name, true);
+    cursor.finishWrap();
+    await drawMagazineLeftovers(doc, cursor, rest, photoByPath);
+    cursor.setPerson(null);
+    return;
+  }
+
+  if (first && template !== "single-or-text") {
+    await drawMagazineHero(doc, cursor, first, photoByPath);
+  } else if (first) {
+    await drawMagazineHero(doc, cursor, first, photoByPath);
+  }
+
+  const firstText = paragraphs[0] ?? "";
+  const stack = template === "hero-side-stack" && rest.length > 0;
+  const insetWidth = stack
+    ? CONTENT_WIDTH - CONTENT_WIDTH * 0.4 - PDF_SIDE_PHOTO_GUTTER
+    : CONTENT_WIDTH;
+  const firstTextHeight = firstText
+    ? estimateWrappedHeight(
+        firstText,
+        fonts.serif,
+        fonts.emoji,
+        PDF_BODY_SIZE,
+        PDF_BODY_LINE_GAP,
+        stack ? insetWidth : CONTENT_WIDTH,
+      )
+    : 0;
+  drawMagazineName(cursor, letter.preferred_name, display, firstTextHeight);
+
+  if (stack) {
+    await drawMagazineSideStack(doc, cursor, rest, photoByPath, paragraphs, fonts, letter.preferred_name);
+  } else {
+    drawMagazineParagraphs(cursor, fonts, paragraphs, letter.preferred_name, true);
+    cursor.finishWrap();
+    if (template === "hero-text-grid") {
+      await drawMagazineLeftovers(doc, cursor, rest, photoByPath);
+    }
+  }
+
+  cursor.setPerson(null);
+}
+
+function drawMagazineName(
+  cursor: PdfCursor,
+  name: string,
+  display: PdfTypeFace,
+  firstTextHeight: number,
+  photoHeight = 0,
+) {
+  const needed = headingKeepWithNextNeeded({
+    headingSize: MAGAZINE_NAME_SIZE,
+    headingGap: PDF_HEADING_GAP,
+    firstTextHeight,
+    photoHeight,
+    pageContentHeight: PDF_PAGE_HEIGHT - MARGIN - MAGAZINE_CONTENT_BOTTOM,
+  });
+  cursor.ensure(needed);
+  cursor.record({ kind: "heading", name, person: name, page: cursor.pageIndex, y: cursor.y });
+  cursor.text(name.toUpperCase(), {
+    font: display,
+    size: MAGAZINE_NAME_SIZE,
+    color: cursor.palette.accent,
+    gap: PDF_HEADING_GAP,
+  });
+}
+
+function drawMagazineParagraphs(
+  cursor: PdfCursor,
+  fonts: CapsulePdfFonts,
+  paragraphs: string[],
+  person: string,
+  withQuote: boolean,
+) {
+  paragraphs.forEach((text, index) => {
+    drawLetterText(cursor, fonts, text, person);
+    if (index === 0 && withQuote) maybeDrawMagazinePullQuote(cursor, fonts, text);
+  });
+}
+
+function maybeDrawMagazinePullQuote(cursor: PdfCursor, fonts: CapsulePdfFonts, firstParagraph: string) {
+  const quote = magazinePullQuote(firstParagraph);
+  if (!quote || cursor.hasActiveWrap()) return;
+  const size = 11;
+  const pad = 10;
+  const bar = 4;
+  const lineH = size + 3;
+  const width = CONTENT_WIDTH - bar - pad * 2;
+  const lines: string[] = [];
+  let remaining = quote.split(/\s+/).filter(Boolean);
+  while (remaining.length > 0) {
+    const taken = takeLine(remaining, fonts.serifItalic, fonts.emoji, size, width);
+    lines.push(taken.line);
+    remaining = taken.rest;
+  }
+  const boxH = pad * 2 + lines.length * lineH;
+  if (cursor.y - boxH < cursor.contentBottom() + 36) return;
+  cursor.ensure(boxH + 12);
+  cursor.y -= boxH;
+  cursor.page.drawRectangle({
+    x: MARGIN,
+    y: cursor.y,
+    width: CONTENT_WIDTH,
+    height: boxH,
+    color: mixRgb(cursor.palette.accent, cursor.palette.paper, 0.88),
+  });
+  cursor.page.drawRectangle({
+    x: MARGIN,
+    y: cursor.y,
+    width: bar,
+    height: boxH,
+    color: cursor.palette.accent,
+  });
+  let textY = cursor.y + boxH - pad - size;
+  for (const line of lines) {
+    cursor.record({
+      kind: "text",
+      person: cursor.currentPerson() ?? undefined,
+      text: line,
+      page: cursor.pageIndex,
+      x: MARGIN + bar + pad,
+      y: textY + size,
+      width: widthOfPdfText(line, size, fonts.serifItalic, fonts.emoji),
+      height: pdfLineBoxHeight(fonts.serifItalic, size),
+      bottom: textY + size - pdfLineBoxHeight(fonts.serifItalic, size),
+    });
+    drawPdfRuns(
+      cursor.page,
+      layoutPdfRuns(line, fonts.serifItalic, fonts.emoji),
+      MARGIN + bar + pad,
+      textY,
+      size,
+      cursor.palette.ink,
+    );
+    textY -= lineH;
+  }
+  cursor.y -= 12;
+}
+
+async function drawMagazineHero(
+  doc: PDFDocument,
+  cursor: PdfCursor,
+  photo: CapsuleArchivePhoto,
+  photoByPath: Map<string, Uint8Array>,
+) {
+  const bytes = photoByPath.get(photo.storage_path);
+  if (!bytes) return;
+  const cropped = await cropJpegToAspect(bytes, magazineHeroAspect(photo.width, photo.height));
+  if (!cropped) return;
+  try {
+    const image = await doc.embedJpg(cropped);
+    const drawW = CONTENT_WIDTH;
+    const drawH = drawW * (image.height / Math.max(1, image.width));
+    cursor.ensure(drawH + 16);
+    cursor.y -= drawH;
+    cursor.page.drawImage(image, {
+      x: MARGIN,
+      y: cursor.y,
+      width: drawW,
+      height: drawH,
+    });
+    cursor.record({
+      kind: "photo",
+      person: cursor.currentPerson() ?? undefined,
+      storage_path: photo.storage_path,
+      page: cursor.pageIndex,
+      x: MARGIN,
+      y: cursor.y + drawH,
+      width: drawW,
+      bottom: cursor.y,
+      height: drawH,
+    });
+    cursor.y -= 14;
+  } catch {
+    // skip a broken hero rather than leave an empty box
+  }
+}
+
+async function drawMagazineSideStack(
+  doc: PDFDocument,
+  cursor: PdfCursor,
+  photos: CapsuleArchivePhoto[],
+  photoByPath: Map<string, Uint8Array>,
+  paragraphs: string[],
+  fonts: CapsulePdfFonts,
+  person: string,
+) {
+  const items: Array<{ image: PDFImage; storage_path: string; w: number; h: number }> = [];
+  const colW = CONTENT_WIDTH * 0.4;
+  for (const photo of photos) {
+    const image = await embedPhoto(doc, photoByPath.get(photo.storage_path));
+    if (!image) continue;
+    const w = colW;
+    const h = w * (image.height / Math.max(1, image.width));
+    items.push({ image, storage_path: photo.storage_path, w, h });
+  }
+  const gap = PDF_LEFTOVER_GAP;
+  const onPage: typeof items = [];
+  const leftover: typeof items = [];
+  let usedH = 0;
+  const budget = Math.max(0, cursor.remaining() - 20);
+  for (const item of items) {
+    const next = usedH + item.h + (onPage.length > 0 ? gap : 0);
+    if (next <= budget) {
+      onPage.push(item);
+      usedH = next;
+      continue;
+    }
+    if (onPage.length === 0 && budget >= 80) {
+      const h = budget;
+      const w = h * (item.w / item.h);
+      onPage.push({ ...item, w, h });
+      usedH = h;
+      continue;
+    }
+    leftover.push(item);
+  }
+  if (onPage.length > 0) {
+    const stackH = onPage.reduce((sum, item) => sum + item.h, 0) + gap * (onPage.length - 1);
+    const x = PAGE_WIDTH - MARGIN - colW;
+    let top = cursor.y;
+    for (const item of onPage) {
+      cursor.drawPlacedImage(item.image, x, top, item.w, item.h, item.storage_path);
+      top -= item.h + gap;
+    }
+    cursor.startWrapRegion("right", colW, stackH);
+  }
+  drawMagazineParagraphs(cursor, fonts, paragraphs, person, true);
+  cursor.finishWrap();
+  if (leftover.length > 0) {
+    await cursor.leftoverJustified(
+      leftover.map((item) => ({ image: item.image, storage_path: item.storage_path })),
+      { maxH: PDF_LEFTOVER_MAX_H, gap: PDF_LEFTOVER_GAP },
+    );
+  }
+}
+
+async function drawMagazineLeftovers(
+  doc: PDFDocument,
+  cursor: PdfCursor,
+  photos: CapsuleArchivePhoto[],
+  photoByPath: Map<string, Uint8Array>,
+) {
+  if (photos.length === 0) return;
+  cursor.finishWrap();
+  await cursor.gallery(doc, photos, photoByPath, { maxH: PDF_LEFTOVER_MAX_H, gap: PDF_LEFTOVER_GAP });
+}
+
 async function embedPhoto(doc: PDFDocument, bytes: Uint8Array | undefined): Promise<PDFImage | null> {
   if (!bytes) return null;
   const jpeg = await preparePdfJpeg(bytes);
@@ -765,6 +1182,12 @@ async function embedPhoto(doc: PDFDocument, bytes: Uint8Array | undefined): Prom
 }
 
 type PdfWrap = { side: "left" | "right"; top: number; bottom: number; width: number };
+
+type PdfCursorChrome = {
+  footerTitle?: string;
+  footerFont?: PdfTypeFace;
+  contentBottom?: number;
+};
 
 class PdfCursor {
   page: PDFPage;
@@ -779,6 +1202,7 @@ class PdfCursor {
     private readonly emoji: PdfTypeFace,
     y: number,
     private readonly layout: CapsulePdfLayoutEvent[] | undefined = undefined,
+    private readonly chrome: PdfCursorChrome | undefined = undefined,
   ) {
     this.page = this.doc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
     this.y = y;
@@ -788,6 +1212,18 @@ class PdfCursor {
 
   setPerson(name: string | null) {
     this.person = name;
+  }
+
+  currentPerson(): string | null {
+    return this.person;
+  }
+
+  contentBottom(): number {
+    return this.chrome?.contentBottom ?? MARGIN;
+  }
+
+  remaining(): number {
+    return this.y - this.contentBottom();
   }
 
   record(event: CapsulePdfLayoutEvent) {
@@ -804,13 +1240,49 @@ class PdfCursor {
   }
 
   ensure(needed: number) {
-    if (this.y - needed >= MARGIN) return;
+    if (this.y - needed >= this.contentBottom()) return;
+    this.forceNewPage();
+  }
+
+  forceNewPage() {
     this.wrap = null;
     this.page = this.doc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
-    this.paintPage();
     this.pageIndex += 1;
+    this.paintPage();
     this.y = PAGE_HEIGHT - MARGIN;
     this.record({ kind: "page", page: this.pageIndex, y: this.y });
+  }
+
+  startWrapRegion(side: "left" | "right", width: number, height: number) {
+    this.finishWrap();
+    this.wrap = { side, top: this.y, bottom: this.y - height, width };
+  }
+
+  drawPlacedImage(
+    image: PDFImage,
+    x: number,
+    top: number,
+    width: number,
+    height: number,
+    storagePath?: string,
+  ) {
+    this.page.drawImage(image, {
+      x,
+      y: top - height,
+      width,
+      height,
+    });
+    this.record({
+      kind: "photo",
+      person: this.person ?? undefined,
+      storage_path: storagePath,
+      page: this.pageIndex,
+      x,
+      y: top,
+      width,
+      bottom: top - height,
+      height,
+    });
   }
 
   finishWrap(gap = 10) {
@@ -838,6 +1310,51 @@ class PdfCursor {
       width: PAGE_WIDTH,
       height: PAGE_HEIGHT,
       color: this.palette.paper,
+    });
+    this.drawMagazineFooter();
+  }
+
+  private drawMagazineFooter() {
+    const title = this.chrome?.footerTitle;
+    const font = this.chrome?.footerFont;
+    if (!title || !font) return;
+    const height = MAGAZINE_FOOTER_HEIGHT;
+    this.page.drawRectangle({
+      x: 0,
+      y: 0,
+      width: PAGE_WIDTH,
+      height,
+      color: this.palette.accent,
+    });
+    const size = 9;
+    const padX = 18;
+    const textY = (height - size) / 2 + 1;
+    const pageLabel = String(this.pageIndex);
+    const pageWidth = widthOfPdfText(pageLabel, size, font, this.emoji);
+    const titleMax = PAGE_WIDTH - padX * 2 - pageWidth - 16;
+    const fitted = fitPdfLabel(title, size, font, this.emoji, titleMax);
+    drawPdfRuns(
+      this.page,
+      layoutPdfRuns(fitted, font, this.emoji),
+      padX,
+      textY,
+      size,
+      this.palette.paper,
+    );
+    drawPdfRuns(
+      this.page,
+      layoutPdfRuns(pageLabel, font, this.emoji),
+      PAGE_WIDTH - padX - pageWidth,
+      textY,
+      size,
+      this.palette.paper,
+    );
+    this.record({
+      kind: "footer",
+      page: this.pageIndex,
+      y: height,
+      text: title,
+      name: pageLabel,
     });
   }
 
@@ -956,14 +1473,14 @@ class PdfCursor {
       return { w: image.width * scale, h: image.height * scale };
     };
     let sized = fit(maxH);
-    const remaining = this.y - MARGIN;
+    const remaining = this.remaining();
     const shrink = shrinkSidePhotoToRemaining(sized.h, remaining);
     if (shrink.pageBreak) {
       this.ensure(sized.h + PDF_PHOTO_ENSURE_PAD);
     } else if (shrink.height !== sized.h) {
       sized = fit(shrink.height);
     }
-    if (this.y - sized.h < MARGIN) this.ensure(sized.h + PDF_PHOTO_ENSURE_PAD);
+    if (this.y - sized.h < this.contentBottom()) this.ensure(sized.h + PDF_PHOTO_ENSURE_PAD);
     const x = side === "right" ? PAGE_WIDTH - MARGIN - sized.w : MARGIN;
     this.page.drawImage(image, {
       x,
@@ -1113,6 +1630,21 @@ class PdfCursor {
     }
     await this.leftoverJustified(items, opts);
   }
+}
+
+function fitPdfLabel(
+  value: string,
+  size: number,
+  font: PdfTypeFace,
+  emoji: PdfTypeFace,
+  maxWidth: number,
+): string {
+  if (widthOfPdfText(value, size, font, emoji) <= maxWidth) return value;
+  let current = value;
+  while (current.length > 1 && widthOfPdfText(`${current}…`, size, font, emoji) > maxWidth) {
+    current = current.slice(0, -1);
+  }
+  return current.length > 0 ? `${current}…` : value;
 }
 
 function takeLine(

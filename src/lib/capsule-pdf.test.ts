@@ -49,6 +49,7 @@ import {
   capsulePdfHasProducerMark,
   embedCapsulePdfFonts,
 } from "./capsule-pdf-fonts";
+import { MAGAZINE_CONTENT_BOTTOM, selectMagazineTemplate } from "./capsule-pdf-magazine";
 import { DOWNLOAD_PDF_LABEL } from "./copy";
 import {
   buildVisualArchive,
@@ -989,6 +990,163 @@ describe("pdf layout locks", () => {
 
 const LONG_BODY_SNIP =
   "The river path stayed muddy after the storm, so we took the long way around the school and talked about the porch light that has been blinking since August.";
+
+describe("magazine pdf", () => {
+  it("puts a footer with the group name and page number on every page", async () => {
+    const { archive, photos } = await buildVisualArchive("magazine");
+    const layout: CapsulePdfLayoutEvent[] = [];
+    const bytes = await buildCapsulePdfBytes({ archive, photos, layout });
+    const text = pdfExtractText(bytes);
+    const pages = layout.filter((event) => event.kind === "page");
+    const footers = layout.filter((event) => event.kind === "footer");
+    expect(pages.length).toBeGreaterThan(1);
+    expect(footers).toHaveLength(pages.length);
+    expect(footers.every((event) => event.text === "Regression Kitchen")).toBe(true);
+    expect(footers.map((event) => event.name)).toEqual(pages.map((event) => String(event.page)));
+    expect(text).toContain("REGRESSION KITCHEN");
+    expect(text).toContain("October 2026");
+  });
+
+  it("starts each member on a new page and keeps leftover photos in their section", async () => {
+    const jpeg = await tinyJpeg();
+    const layout: CapsulePdfLayoutEvent[] = [];
+    await buildCapsulePdfBytes({
+      archive: buildCapsuleArchive({
+        yearMonth: "2026-10",
+        groupName: "Regression Kitchen",
+        memberCount: 2,
+        theme: "magazine",
+        letters: [
+          {
+            preferred_name: "Alex Rivera",
+            body: "- rye bread\n- two pears\n- leftover mint",
+            photos: [0, 1, 2, 3].map((index) => ({
+              storage_path: `g/a${index}.jpg`,
+              width: index % 2 === 0 ? 1200 : 800,
+              height: index % 2 === 0 ? 800 : 1200,
+              sort_order: index,
+            })),
+          },
+          {
+            preferred_name: "Jordan Lee",
+            body: "Next person starts clean.",
+            photos: [],
+          },
+        ],
+      }),
+      photos: [0, 1, 2, 3].map((index) => ({
+        storage_path: `g/a${index}.jpg`,
+        bytes: jpeg,
+      })),
+      layout,
+    });
+    const alex = layout.find((event) => event.kind === "heading" && event.name === "Alex Rivera");
+    const jordan = layout.find((event) => event.kind === "heading" && event.name === "Jordan Lee");
+    const alexPhotos = layout.filter(
+      (event) => event.kind === "photo" && event.person === "Alex Rivera",
+    );
+    expect(alex).toBeTruthy();
+    expect(jordan).toBeTruthy();
+    expect(jordan!.page).toBeGreaterThan(alex!.page);
+    expect(alexPhotos.length).toBeGreaterThan(0);
+    for (const photo of alexPhotos) {
+      expect(photo.page).toBeLessThan(jordan!.page);
+    }
+    expect(layout.some((event) => event.kind === "photo" && event.person === "Jordan Lee")).toBe(
+      false,
+    );
+  });
+
+  it("keeps the name with its first full paragraph", async () => {
+    const layout: CapsulePdfLayoutEvent[] = [];
+    await buildCapsulePdfBytes({
+      archive: buildCapsuleArchive({
+        yearMonth: "2026-10",
+        groupName: "Regression Kitchen",
+        memberCount: 2,
+        theme: "magazine",
+        letters: [
+          { preferred_name: "Casey Nguyen", body: fillerBody(4), photos: [] },
+          {
+            preferred_name: "Riley Chen",
+            body: KEEP_TARGET_BODY,
+            photos: [],
+          },
+        ],
+      }),
+      photos: [],
+      layout,
+    });
+    const riley = layout.find((event) => event.kind === "heading" && event.name === "Riley Chen");
+    const opening = layout.filter(
+      (event) =>
+        event.kind === "text" &&
+        event.person === "Riley Chen" &&
+        /^Line \d+ stays with the name heading/.test(event.text ?? ""),
+    );
+    expect(riley).toBeTruthy();
+    expect(opening.length).toBeGreaterThanOrEqual(10);
+    expect(opening.every((event) => event.page === riley!.page)).toBe(true);
+    expect(riley!.y).toBeGreaterThan(PDF_PAGE_HEIGHT - 90);
+    expect(source("./capsule-pdf.ts")).toContain("headingKeepWithNextNeeded");
+    expect(source("./capsule-pdf.ts")).toContain("forceNewPage");
+  });
+
+  it("cover without photos is only the group name and month", async () => {
+    const bytes = await buildCapsulePdfBytes({
+      archive: buildCapsuleArchive({
+        yearMonth: "2026-10",
+        groupName: "Regression Kitchen",
+        memberCount: 1,
+        theme: "magazine",
+        letters: [{ preferred_name: "Casey Nguyen", body: "Just words.", photos: [] }],
+      }),
+      photos: [],
+    });
+    const text = pdfExtractText(bytes);
+    expect(text).toContain("REGRESSION KITCHEN");
+    expect(text).toContain("October 2026");
+    expect(text).not.toContain("Contributors:");
+  });
+
+  it("renders curly quotes and does not leave an empty hero box", async () => {
+    const layout: CapsulePdfLayoutEvent[] = [];
+    const bytes = await buildCapsulePdfBytes({
+      archive: buildCapsuleArchive({
+        yearMonth: "2026-10",
+        groupName: "Regression Kitchen",
+        memberCount: 1,
+        theme: "magazine",
+        letters: [{ preferred_name: "Casey Nguyen", body: "She said “hello” — it’s fine.", photos: [] }],
+      }),
+      photos: [],
+      layout,
+    });
+    const text = pdfExtractText(bytes);
+    expect(text).toContain("\u201c");
+    expect(text).toContain("hello");
+    expect(text).toContain("\u2019");
+    expect(layout.filter((event) => event.kind === "photo" && event.person === "Casey Nguyen")).toEqual(
+      [],
+    );
+    expect(source("./capsule-pdf.ts")).toContain("embedMagazineDisplayFont");
+    expect(source("./capsule-pdf-fonts.ts")).toContain("Oswald-Bold.ttf");
+  });
+
+  it("uses the magazine fixtures for no-overlap and records content above the footer", async () => {
+    const { archive, photos } = await buildVisualArchive("magazine");
+    const layout: CapsulePdfLayoutEvent[] = [];
+    await buildCapsulePdfBytes({ archive, photos, layout });
+    const images = layout.filter((event) => event.kind === "photo" && event.height);
+    expect(images.length).toBeGreaterThan(0);
+    for (const image of images) {
+      expect(image.bottom ?? 0).toBeGreaterThanOrEqual(MAGAZINE_CONTENT_BOTTOM - 1);
+    }
+    expect(selectMagazineTemplate([{ width: 800, height: 1200 }, { width: 800, height: 1200 }])).toBe(
+      "two-column",
+    );
+  });
+});
 
 describe("pdf wiring locks", () => {
   it("compile stores a pdf and does not fail the capsule if generation throws", () => {

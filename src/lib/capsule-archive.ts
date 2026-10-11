@@ -195,6 +195,9 @@ function renderCoverHtml(input: {
   if (input.theme === "heritage") {
     return `<header class="capsule__cover"><div class="capsule__ornament" aria-hidden="true">❧</div><p class="capsule__kicker">A keepsake</p><h1>${escapeHtml(input.monthLabel)}</h1><p class="capsule__cover-note">${escapeHtml(input.groupName)}</p>${contents}<div class="capsule__ornament" aria-hidden="true">❧</div></header>`;
   }
+  if (input.theme === "magazine") {
+    return `<header class="capsule__cover"><p class="capsule__kicker">${escapeHtml(input.monthLabel)}</p><h1>${escapeHtml(input.groupName)}</h1>${contents}</header>`;
+  }
   return `<header class="capsule__cover"><p class="eyebrow">${escapeHtml(input.groupName)}</p><h1>${escapeHtml(input.monthLabel)}</h1>${contents}</header>`;
 }
 
