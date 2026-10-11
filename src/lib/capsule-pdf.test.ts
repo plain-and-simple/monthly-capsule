@@ -469,7 +469,10 @@ describe("pdf layout locks", () => {
   });
 
   it("wraps lines with cached word widths the same way as remesuring the growing string", async () => {
-    const fonts = await embedCapsulePdfFonts(await PDFDocument.create());
+    const fonts = await embedCapsulePdfFonts(
+      await PDFDocument.create(),
+      ["She said “hello” — it’s … 🎉", LONG_RUNON_BODY, TEN_LINE_OPENING].join(" "),
+    );
     const naive = (words: string[], maxWidth: number) => {
       let current = "";
       let count = 0;
@@ -1073,10 +1076,15 @@ describe("pdf wiring locks", () => {
     expect(source("./capsule-pdf-fonts.ts")).toContain(CAPSULE_PDF_PRODUCER);
     expect(source("./capsule-pdf-fonts.ts")).toContain("NotoEmoji-Regular.ttf");
     expect(source("./capsule-pdf-fonts.ts")).not.toContain("NotoEmoji-Variable.ttf");
+    expect(source("./capsule-pdf-fonts.ts")).toContain("subset-font");
+    expect(source("./capsule-pdf-fonts.ts")).toContain("capsulePdfHaystack");
+    expect(source("../../next.config.ts")).toContain("harfbuzzjs");
+    expect(source("../../next.config.ts")).toContain("subset-font");
     expect(source("./capsule-pdf-fonts.ts")).toContain('join(process.cwd(), "src/lib/pdf-fonts")');
     expect(source("./capsule-pdf-fonts.ts")).toContain("PDF_FONTS_DIR");
     expect(source("./capsule-pdf-fonts.ts")).not.toMatch(/fileURLToPath|import\.meta\.url/);
     expect(source("../../next.config.ts")).toContain("./src/lib/pdf-fonts/**/*");
+    expect(source("../../next.config.ts")).toContain("./node_modules/harfbuzzjs/**/*");
   });
 
   it("email attaches a stored pdf and does not generate during send", () => {

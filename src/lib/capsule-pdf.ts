@@ -4,6 +4,7 @@ import type { CapsuleArchive, CapsuleArchiveLetter, CapsuleArchivePhoto } from "
 import {
   CAPSULE_PDF_PRODUCER,
   drawPdfRuns,
+  capsulePdfHaystack,
   embedCapsulePdfFonts,
   layoutPdfRuns,
   takePdfLine,
@@ -356,7 +357,10 @@ export async function buildCapsulePdfBytes(input: {
   const palette = themePdfPalette(theme);
   const doc = await PDFDocument.create();
   stampCapsulePdfProducer(doc);
-  const fonts = await embedCapsulePdfFonts(doc);
+  const fonts = await embedCapsulePdfFonts(
+    doc,
+    capsulePdfHaystack(input.archive, [input.monthLabelText ?? ""]),
+  );
   const photoByPath = new Map(input.photos.map((photo) => [photo.storage_path, photo.bytes]));
 
   const title =

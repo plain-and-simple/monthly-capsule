@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { inflateSync } from "node:zlib";
@@ -185,10 +185,11 @@ describe("static emoji font", () => {
     expect(tags).not.toContain("fvar");
     expect(tags).not.toContain("gvar");
     expect(CAPSULE_PDF_PRODUCER).toBe("monthly-capsule-layout/3");
+    expect(existsSync(join(PDF_FONTS_DIR, "NotoEmoji-Variable.ttf"))).toBe(false);
   });
 
   it("skips VS16, ZWJ, and skin-tone so sequences draw base glyphs only", async () => {
-    const fonts = await embedCapsulePdfFonts(await PDFDocument.create());
+    const fonts = await embedCapsulePdfFonts(await PDFDocument.create(), EMOJI_LINE);
     expect(isIgnorablePdfCodePoint(0xfe0f)).toBe(true);
     expect(isIgnorablePdfCodePoint(0x200d)).toBe(true);
     expect(isIgnorablePdfCodePoint(0x1f3fd)).toBe(true);
@@ -222,17 +223,18 @@ describe("static emoji font", () => {
 
   it("embeds non-empty emoji outlines and rasterizes visible ink", async () => {
     const source = readFileSync(new URL("./capsule-pdf-fonts.ts", import.meta.url), "utf8");
-    expect(source).toMatch(/FONT_FILES\.emoji\),\s*\{\s*subset:\s*false/);
+    expect(source).toContain("subsetFont");
+    expect(source).toMatch(/embedFont\(new Uint8Array\(subset\),\s*\{\s*subset:\s*false/);
 
     const doc = await PDFDocument.create();
-    const fonts = await embedCapsulePdfFonts(doc);
+    const fonts = await embedCapsulePdfFonts(doc, EMOJI_LINE);
     const page = doc.addPage([612, 200]);
     page.drawRectangle({ x: 0, y: 0, width: 612, height: 200, color: rgb(1, 1, 1) });
     drawPdfRuns(page, layoutPdfRuns(EMOJI_LINE, fonts.serif, fonts.emoji), 36, 90, 28, rgb(0.1, 0.1, 0.1));
     const bytes = await doc.save({ useObjectStreams: false });
 
     const latinDoc = await PDFDocument.create();
-    const latinFonts = await embedCapsulePdfFonts(latinDoc);
+    const latinFonts = await embedCapsulePdfFonts(latinDoc, "plain text");
     const latinPage = latinDoc.addPage([612, 200]);
     latinPage.drawRectangle({ x: 0, y: 0, width: 612, height: 200, color: rgb(1, 1, 1) });
     drawPdfRuns(latinPage, layoutPdfRuns("plain     text", latinFonts.serif, latinFonts.emoji), 36, 90, 28, rgb(0.1, 0.1, 0.1));
@@ -264,7 +266,7 @@ describe("static emoji font", () => {
   });
 
   it("keeps line boxes and wrap pitch identical with or without emoji on every live theme", async () => {
-    const fonts = await embedCapsulePdfFonts(await PDFDocument.create());
+    const fonts = await embedCapsulePdfFonts(await PDFDocument.create(), "🎉");
     const box = pdfLineBoxHeight(fonts.serif, PDF_BODY_SIZE);
     const pitch = PDF_BODY_SIZE + PDF_BODY_LINE_GAP;
     const plain = "The river path stayed muddy after the storm so we took the long way around.";
@@ -328,5 +330,39 @@ describe("static emoji font", () => {
     const source = readFileSync(new URL("./capsule-pdf.ts", import.meta.url), "utf8");
     expect(source).toMatch(/pdfLineBoxHeight\(opts\.font/);
     expect(source).not.toMatch(/pdfLineBoxHeight\([^)]*emoji/);
+  });
+
+  it("embeds the emoji face only when a letter uses a covered codepoint", async () => {
+    const noEmoji = await buildCapsulePdfBytes({
+      archive: buildCapsuleArchive({
+        yearMonth: "2026-10",
+        groupName: "Regression Kitchen",
+        memberCount: 1,
+        letters: [{ preferred_name: "Alex Rivera", body: "The plum tree finally did something.", photos: [] }],
+      }),
+      photos: [],
+    });
+    const withEmoji = await buildCapsulePdfBytes({
+      archive: buildCapsuleArchive({
+        yearMonth: "2026-10",
+        groupName: "Regression Kitchen",
+        memberCount: 1,
+        letters: [
+          {
+            preferred_name: "Alex Rivera",
+            body: "October note with plain 😅 🎉 ❤️ 👍🏽 👨‍👩‍👧 text mixed in.",
+            photos: [],
+          },
+        ],
+      }),
+      photos: [],
+    });
+    expect(noEmoji.length).toBeLessThan(80_000);
+    expect(withEmoji.length).toBeLessThan(80_000);
+    expect(withEmoji.length).toBeGreaterThan(noEmoji.length);
+    expect(withEmoji.length - noEmoji.length).toBeLessThan(40_000);
+    const noEmojiFonts = extractEmbeddedTtfs(noEmoji);
+    expect(noEmojiFonts.every((ttf) => ttf.length < 100_000)).toBe(true);
+    expect(Math.max(...extractEmbeddedTtfs(withEmoji).map((ttf) => ttf.length))).toBeLessThan(30_000);
   });
 });
