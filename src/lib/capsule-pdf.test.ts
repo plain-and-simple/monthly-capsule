@@ -913,47 +913,11 @@ describe("pdf layout locks", () => {
   });
 
   it("never lets a text line box intersect a photo on any theme fixture", async () => {
-    for (const theme of CAPSULE_THEMES) {
+    for (const theme of ["classic", "warm", "minimal", "heritage"] as const) {
       const { archive, photos } = await buildVisualArchive(theme);
       const layout: CapsulePdfLayoutEvent[] = [];
       await buildCapsulePdfBytes({ archive, photos, layout });
-      const texts = layout.filter(
-        (event) =>
-          event.kind === "text" &&
-          event.x != null &&
-          event.width != null &&
-          event.height != null &&
-          event.person,
-      );
-      const images = layout.filter(
-        (event) =>
-          event.kind === "photo" && event.x != null && event.width != null && event.height != null,
-      );
-      expect(texts.length).toBeGreaterThan(0);
-      expect(images.length).toBeGreaterThan(0);
-      for (const line of texts) {
-        for (const image of images) {
-          expect(
-            layoutBoxesOverlap(
-              {
-                page: line.page,
-                x: line.x!,
-                y: line.y,
-                width: line.width!,
-                height: line.height!,
-              },
-              {
-                page: image.page,
-                x: image.x!,
-                y: image.y,
-                width: image.width!,
-                height: image.height!,
-              },
-            ),
-            `${theme} "${line.text}" overlaps a photo on page ${line.page}`,
-          ).toBe(false);
-        }
-      }
+      assertNoTextPhotoOverlap(layout, theme);
     }
   });
 
@@ -1206,6 +1170,7 @@ describe("magazine pdf", () => {
     for (const image of images) {
       expect(image.bottom ?? 0).toBeGreaterThanOrEqual(MAGAZINE_CONTENT_BOTTOM - 1);
     }
+    assertNoTextPhotoOverlap(layout, "magazine");
     expect(selectMagazineTemplate([{ width: 800, height: 1200 }, { width: 800, height: 1200 }])).toBe(
       "two-column",
     );
@@ -1272,6 +1237,51 @@ describe("magazine pdf", () => {
     expect(xs.size).toBeGreaterThanOrEqual(2);
   });
 });
+
+function assertNoTextPhotoOverlap(layout: CapsulePdfLayoutEvent[], theme: string) {
+  const texts = layout.filter(
+    (event) =>
+      event.kind === "text" &&
+      event.x != null &&
+      event.width != null &&
+      event.height != null &&
+      event.person,
+  );
+  const images = layout.filter(
+    (event) => event.kind === "photo" && event.x != null && event.width != null && event.height != null,
+  );
+  expect(texts.length).toBeGreaterThan(0);
+  expect(images.length).toBeGreaterThan(0);
+  const imagesByPage = new Map<number, typeof images>();
+  for (const image of images) {
+    const list = imagesByPage.get(image.page) ?? [];
+    list.push(image);
+    imagesByPage.set(image.page, list);
+  }
+  for (const line of texts) {
+    for (const image of imagesByPage.get(line.page) ?? []) {
+      expect(
+        layoutBoxesOverlap(
+          {
+            page: line.page,
+            x: line.x!,
+            y: line.y,
+            width: line.width!,
+            height: line.height!,
+          },
+          {
+            page: image.page,
+            x: image.x!,
+            y: image.y,
+            width: image.width!,
+            height: image.height!,
+          },
+        ),
+        `${theme} "${line.text}" overlaps a photo on page ${line.page}`,
+      ).toBe(false);
+    }
+  }
+}
 
 function stableLayoutEvent(event: CapsulePdfLayoutEvent) {
   return {

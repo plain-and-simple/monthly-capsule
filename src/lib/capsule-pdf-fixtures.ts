@@ -165,9 +165,17 @@ export async function makeSwatchJpeg(
   color: string,
   width: number,
   height: number,
+  maxEdge?: number,
 ): Promise<Uint8Array> {
+  let w = width;
+  let h = height;
+  if (maxEdge && Math.max(width, height) > maxEdge) {
+    const scale = maxEdge / Math.max(width, height);
+    w = Math.max(8, Math.round(width * scale));
+    h = Math.max(8, Math.round(height * scale));
+  }
   return sharp({
-    create: { width, height, channels: 3, background: color },
+    create: { width: w, height: h, channels: 3, background: color },
   })
     .jpeg({ quality: 70 })
     .toBuffer();
@@ -216,7 +224,12 @@ export async function buildVisualArchive(theme: CapsuleTheme): Promise<{
       const storage_path = `visual/${theme}/${letterIndex}/${photoIndex}.jpg`;
       photos.push({
         storage_path,
-        bytes: await makeSwatchJpeg(swatch.color, swatch.width, swatch.height),
+        bytes: await makeSwatchJpeg(
+          swatch.color,
+          swatch.width,
+          swatch.height,
+          theme === "magazine" ? 240 : undefined,
+        ),
       });
       letterPhotos.push({
         storage_path,
