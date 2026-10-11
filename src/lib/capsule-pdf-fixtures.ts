@@ -22,6 +22,8 @@ export const LONG_BODY = [
 
 export const GALLERY_BODY = "One short note about the porch light and the extra pictures from the walk.";
 
+export const ONE_LINE_BODY = "The kitchen was quiet except for the pot lid.";
+
 export const LONG_RUNON_BODY = [
   "The river path stayed muddy after the storm so we took the long way around the school and talked about the porch light that has been blinking since August and the chair someone left out with a dark oval of rainwater on the seat and the maple that dropped one leaf at a time onto the wet sidewalk while we stood there longer than we meant to just watching October settle in around the houses and the back door that never quite latches unless you lean on it and the radio that kept losing the station while the beans simmered and the kitchen windows fogged",
   "and later we walked the same loop again because the puddles had turned the color of tea and the schoolyard fence had a mitten stuck on it and someone had written a grocery list on the back of an envelope that kept unfolding in the wind and we talked about the extra chair on the porch and the way the maple kept dropping leaves onto the wet sidewalk one at a time as if it were counting October out loud",
@@ -57,55 +59,62 @@ export const MAGAZINE_VISUAL_LETTERS: VisualLetterSpec[] = [
     photos: [
       { color: "#2f5b4c", width: 1200, height: 800 },
       { color: "#c47a3a", width: 900, height: 1400 },
-      { color: "#8a6a32", width: 1100, height: 700 },
-      { color: "#6b2e1f", width: 800, height: 1200 },
+      { color: "#8a6a32", width: 800, height: 1200 },
     ],
   },
   {
     preferred_name: "Jordan Lee",
     body: LONG_BODY,
     photos: [
-      { color: "#1a1712", width: 1400, height: 900 },
-      { color: "#2f5b4c", width: 900, height: 1300 },
+      { color: "#1a1712", width: 900, height: 1400 },
+      { color: "#2f5b4c", width: 800, height: 1300 },
+      { color: "#6b2e1f", width: 850, height: 1250 },
     ],
   },
   {
     preferred_name: "Morgan Blake",
-    body: LONG_RUNON_BODY,
+    body: ONE_LINE_BODY,
     photos: [
-      { color: "#6b2e1f", width: 800, height: 1300 },
-      { color: "#c43b2e", width: 900, height: 1400 },
+      { color: "#c43b2e", width: 800, height: 1300 },
+      { color: "#8a6a32", width: 900, height: 1400 },
+    ],
+  },
+  {
+    preferred_name: "Casey Nguyen",
+    body: "I wrote this down so October would still have the smell of that pot.",
+    photos: [
+      { color: "#2f5b4c", width: 900, height: 1350 },
+      { color: "#c47a3a", width: 800, height: 1200 },
     ],
   },
   {
     preferred_name: "Sam Patel",
     body: GALLERY_BODY,
     photos: [
-      { color: "#b5b5b0", width: 1200, height: 800 },
+      { color: "#b5b5b0", width: 800, height: 1200 },
       { color: "#c47a3a", width: 700, height: 1100 },
       { color: "#8a6a32", width: 900, height: 1400 },
-      { color: "#2f5b4c", width: 1200, height: 800 },
+      { color: "#2f5b4c", width: 750, height: 1200 },
       { color: "#6b2e1f", width: 850, height: 1250 },
-      { color: "#1a1712", width: 1100, height: 720 },
+      { color: "#1a1712", width: 820, height: 1280 },
     ],
-  },
-  {
-    preferred_name: "Casey Nguyen",
-    body: "The kitchen was quiet except for the pot lid.\n\nI wrote this down so the page would have a name and no photos at all.",
-    photos: [],
   },
   {
     preferred_name: "Riley Chen",
     body: KEEP_TARGET_BODY,
-    photos: [{ color: "#2f5b4c", width: 1000, height: 750 }],
+    photos: [
+      { color: "#2f5b4c", width: 900, height: 1400 },
+      { color: "#8a6a32", width: 850, height: 1250 },
+    ],
   },
   {
     preferred_name: "Quinn Brooks",
     body: LONG_BODY,
     photos: [
-      { color: "#c43b2e", width: 1400, height: 900 },
-      { color: "#8a6a32", width: 1100, height: 700 },
+      { color: "#c43b2e", width: 800, height: 1200 },
+      { color: "#8a6a32", width: 1400, height: 900 },
       { color: "#2f5b4c", width: 900, height: 1300 },
+      { color: "#6b2e1f", width: 850, height: 1280 },
     ],
   },
 ];

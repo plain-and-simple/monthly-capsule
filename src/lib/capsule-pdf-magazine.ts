@@ -6,61 +6,158 @@ export const MAGAZINE_FOOTER_GAP = 14;
 export const MAGAZINE_CONTENT_BOTTOM = MAGAZINE_FOOTER_HEIGHT + MAGAZINE_FOOTER_GAP;
 export const MAGAZINE_NAME_SIZE = 26;
 export const MAGAZINE_COVER_SIZE = 34;
-export const MAGAZINE_PULL_QUOTE_MAX = 120;
+export const MAGAZINE_COVER_KICKER = "newsletter";
 export const MAGAZINE_HERO_16_9 = 16 / 9;
 export const MAGAZINE_HERO_3_2 = 3 / 2;
+export const MAGAZINE_BODY_SIZE = 11;
+export const MAGAZINE_BODY_SIZE_DENSE = 10.5;
+export const MAGAZINE_BODY_LINE_GAP = 3.5;
+export const MAGAZINE_TWO_COL_GUTTER = 14;
+export const MAGAZINE_SHARE_PAGE_FRACTION = 1 / 3;
+export const MAGAZINE_GRID_EXTRA_MIN = 5;
+export const MAGAZINE_INLINE_MAX = 3;
+export const MAGAZINE_CROP_FACE_BIAS = 0.28;
+export const MAGAZINE_PHOTO_ROW_H = 168;
+export const MAGAZINE_PHOTO_ROW_MIN_H = 72;
+export const MAGAZINE_LONG_LETTER_CHARS = 520;
+export const MAGAZINE_SIDE_FRACTION = 0.38;
 
-export type MagazineTemplate = "hero-side-stack" | "hero-text-grid" | "two-column" | "single-or-text";
+export type MagazineTemplate =
+  | "hero-side-stack"
+  | "hero-inline"
+  | "hero-text-grid"
+  | "two-column"
+  | "single-or-text";
+
+export type MagazinePersonPlan<T extends { width: number; height: number } = { width: number; height: number }> = {
+  template: MagazineTemplate;
+  hero: T | null;
+  columnPhoto: T | null;
+  inline: T[];
+  grid: T[];
+};
 
 export function isPortraitPhoto(photo: { width: number; height: number }): boolean {
   return photo.height > photo.width;
 }
 
-export function magazineHeroAspect(width: number, height: number): number {
+export function isLandscapePhoto(photo: { width: number; height: number }): boolean {
+  return photo.width >= photo.height;
+}
+
+export function firstLandscapeIndex(photos: readonly { width: number; height: number }[]): number {
+  return photos.findIndex((photo) => isLandscapePhoto(photo));
+}
+
+export function personHeroPhoto<T extends { width: number; height: number }>(photos: readonly T[]): T | null {
+  const index = firstLandscapeIndex(photos);
+  if (index >= 0) return photos[index]!;
+  return photos[0] ?? null;
+}
+
+/** Landscape only. Never crop a portrait to 3:2. */
+export function magazineHeroAspect(width: number, height: number): number | null {
+  if (height > width) return null;
   const native = width / Math.max(1, height);
   const closerToSixteenNine =
     Math.abs(native - MAGAZINE_HERO_16_9) <= Math.abs(native - MAGAZINE_HERO_3_2);
   return closerToSixteenNine ? MAGAZINE_HERO_16_9 : MAGAZINE_HERO_3_2;
 }
 
+function splitInlineAndGrid<T>(rest: T[]): { inline: T[]; grid: T[] } {
+  if (rest.length > MAGAZINE_GRID_EXTRA_MIN) {
+    return { inline: rest.slice(0, MAGAZINE_INLINE_MAX), grid: rest.slice(MAGAZINE_INLINE_MAX) };
+  }
+  return { inline: [...rest], grid: [] };
+}
+
+export function planMagazinePerson<T extends { width: number; height: number }>(
+  photos: readonly T[],
+): MagazinePersonPlan<T> {
+  if (photos.length === 0) {
+    return { template: "single-or-text", hero: null, columnPhoto: null, inline: [], grid: [] };
+  }
+  const land = firstLandscapeIndex(photos);
+  if (land < 0) {
+    const columnPhoto = photos[0]!;
+    const { inline, grid } = splitInlineAndGrid(photos.slice(1));
+    return { template: "two-column", hero: null, columnPhoto, inline, grid };
+  }
+  const hero = photos[land]!;
+  const rest = photos.filter((_, index) => index !== land);
+  if (rest.length === 0) {
+    return { template: "single-or-text", hero, columnPhoto: null, inline: [], grid: [] };
+  }
+  const { inline, grid } = splitInlineAndGrid(rest);
+  if (grid.length > 0) {
+    return { template: "hero-text-grid", hero, columnPhoto: null, inline, grid };
+  }
+  const portraitRest = rest.filter(isPortraitPhoto).length;
+  if (portraitRest >= Math.ceil(rest.length / 2)) {
+    return { template: "hero-side-stack", hero, columnPhoto: null, inline, grid: [] };
+  }
+  return { template: "hero-inline", hero, columnPhoto: null, inline, grid: [] };
+}
+
 export function selectMagazineTemplate(
   photos: readonly { width: number; height: number }[],
 ): MagazineTemplate {
-  const count = photos.length;
-  if (count <= 1) return "single-or-text";
-  const firstPortrait = isPortraitPhoto(photos[0]!);
-  if (count === 2 && firstPortrait) return "two-column";
-  if (count === 2) return "hero-side-stack";
-  const rest = photos.slice(1);
-  const portraitRest = rest.filter(isPortraitPhoto).length;
-  if (count <= 4 && portraitRest >= Math.ceil(rest.length / 2)) return "hero-side-stack";
-  return "hero-text-grid";
+  return planMagazinePerson(photos).template;
 }
 
-export function magazineCoverHero(
+export function magazineCoverPhotos(
   letters: readonly { photos: readonly CapsuleArchivePhoto[] }[],
-): CapsuleArchivePhoto | null {
+): CapsuleArchivePhoto[] {
+  const heroPaths = new Set<string>();
+  const unused: CapsuleArchivePhoto[] = [];
+  const all: CapsuleArchivePhoto[] = [];
   for (const letter of letters) {
     const photos = [...letter.photos].sort((a, b) => a.sort_order - b.sort_order);
-    if (photos[0]) return photos[0];
+    const hero = personHeroPhoto(photos);
+    if (hero) heroPaths.add(hero.storage_path);
+    all.push(...photos);
   }
-  return null;
+  for (const photo of all) {
+    if (!heroPaths.has(photo.storage_path)) unused.push(photo);
+  }
+  if (unused.length >= 3) return unused.slice(0, 4);
+  if (unused.length >= 1) return unused.slice(0, 1);
+  if (all.length >= 3) return all.slice(0, 4);
+  return all.slice(0, 1);
 }
 
-export function magazinePullQuote(body: string): string | null {
-  const normalized = body.replace(/\r\n/g, "\n").replace(/\s+/g, " ").trim();
-  if (!normalized) return null;
-  const match = normalized.match(/^(.+?[.!?])(?:\s|$)/);
-  const sentence = (match?.[1] ?? "").trim();
-  if (!sentence || sentence.length > MAGAZINE_PULL_QUOTE_MAX) return null;
-  return sentence;
+export function magazineUsesTwoTextColumns(body: string): boolean {
+  return body.replace(/\s+/g, " ").trim().length >= MAGAZINE_LONG_LETTER_CHARS;
 }
 
 export function sortedLetterPhotos(letter: CapsuleArchiveLetter): CapsuleArchivePhoto[] {
   return [...letter.photos].sort((a, b) => a.sort_order - b.sort_order);
 }
 
-/** Center-crop to aspect, then fit inside the PDF photo budget. Never stretches. */
+export function cropRectForAspect(
+  width: number,
+  height: number,
+  aspect: number,
+): { left: number; top: number; width: number; height: number } {
+  const current = width / Math.max(1, height);
+  let left = 0;
+  let top = 0;
+  let cropW = width;
+  let cropH = height;
+  if (current > aspect + 0.001) {
+    cropW = Math.max(1, Math.round(height * aspect));
+    left = Math.max(0, Math.round((width - cropW) / 2));
+  } else if (current < aspect - 0.001) {
+    cropH = Math.max(1, Math.round(width / aspect));
+    const slack = Math.max(0, height - cropH);
+    top = Math.max(0, Math.round(slack * MAGAZINE_CROP_FACE_BIAS));
+  }
+  cropW = Math.min(cropW, width - left);
+  cropH = Math.min(cropH, height - top);
+  return { left, top, width: cropW, height: cropH };
+}
+
+/** Crop to aspect, biased toward the upper-middle (faces). Never stretches. */
 export async function cropJpegToAspect(
   bytes: Uint8Array,
   aspect: number,
@@ -74,24 +171,11 @@ export async function cropJpegToAspect(
     const width = meta.width ?? 0;
     const height = meta.height ?? 0;
     if (width < 2 || height < 2) return null;
-    const current = width / height;
-    let left = 0;
-    let top = 0;
-    let cropW = width;
-    let cropH = height;
-    if (current > aspect + 0.001) {
-      cropW = Math.max(1, Math.round(height * aspect));
-      left = Math.max(0, Math.round((width - cropW) / 2));
-    } else if (current < aspect - 0.001) {
-      cropH = Math.max(1, Math.round(width / aspect));
-      top = Math.max(0, Math.round((height - cropH) / 2));
-    }
-    cropW = Math.min(cropW, width - left);
-    cropH = Math.min(cropH, height - top);
+    const rect = cropRectForAspect(width, height, aspect);
     const out = await sharp(bytes, { failOn: "none", sequentialRead: true })
       .rotate()
       .flatten({ background: "#ffffff" })
-      .extract({ left, top, width: cropW, height: cropH })
+      .extract({ left: rect.left, top: rect.top, width: rect.width, height: rect.height })
       .resize({
         width: 1200,
         height: 1200,
@@ -104,4 +188,44 @@ export async function cropJpegToAspect(
   } catch {
     return null;
   }
+}
+
+export type MagazineCoverCell = { x: number; y: number; w: number; h: number };
+
+export function magazineCoverCells(
+  count: number,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+): MagazineCoverCell[] {
+  const gap = 5;
+  if (count >= 4) {
+    const cw = (w - gap) / 2;
+    const ch = (h - gap) / 2;
+    return [
+      { x, y: y + ch + gap, w: cw, h: ch },
+      { x: x + cw + gap, y: y + ch + gap, w: cw, h: ch },
+      { x, y, w: cw, h: ch },
+      { x: x + cw + gap, y, w: cw, h: ch },
+    ];
+  }
+  if (count === 3) {
+    const leftW = w * 0.58;
+    const rightW = w - leftW - gap;
+    const rh = (h - gap) / 2;
+    return [
+      { x, y, w: leftW, h },
+      { x: x + leftW + gap, y: y + rh + gap, w: rightW, h: rh },
+      { x: x + leftW + gap, y, w: rightW, h: rh },
+    ];
+  }
+  if (count === 2) {
+    const cw = (w - gap) / 2;
+    return [
+      { x, y, w: cw, h },
+      { x: x + cw + gap, y, w: cw, h },
+    ];
+  }
+  return [{ x, y, w, h }];
 }

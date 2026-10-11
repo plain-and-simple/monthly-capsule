@@ -1058,14 +1058,14 @@ describe("magazine pdf", () => {
     expect(text).toContain("October 2026");
   });
 
-  it("starts each member on a new page and keeps leftover photos in their section", async () => {
+  it("keeps leftover photos in their section and lets short letters share a page", async () => {
     const jpeg = await tinyJpeg();
     const layout: CapsulePdfLayoutEvent[] = [];
     await buildCapsulePdfBytes({
       archive: buildCapsuleArchive({
         yearMonth: "2026-10",
         groupName: "Regression Kitchen",
-        memberCount: 2,
+        memberCount: 3,
         theme: "magazine",
         letters: [
           {
@@ -1079,8 +1079,13 @@ describe("magazine pdf", () => {
             })),
           },
           {
+            preferred_name: "Morgan Blake",
+            body: "The kitchen was quiet except for the pot lid.",
+            photos: [],
+          },
+          {
             preferred_name: "Jordan Lee",
-            body: "Next person starts clean.",
+            body: "Next short note on the same page.",
             photos: [],
           },
         ],
@@ -1092,20 +1097,27 @@ describe("magazine pdf", () => {
       layout,
     });
     const alex = layout.find((event) => event.kind === "heading" && event.name === "Alex Rivera");
+    const morgan = layout.find((event) => event.kind === "heading" && event.name === "Morgan Blake");
     const jordan = layout.find((event) => event.kind === "heading" && event.name === "Jordan Lee");
     const alexPhotos = layout.filter(
       (event) => event.kind === "photo" && event.person === "Alex Rivera",
     );
     expect(alex).toBeTruthy();
+    expect(morgan).toBeTruthy();
     expect(jordan).toBeTruthy();
-    expect(jordan!.page).toBeGreaterThan(alex!.page);
     expect(alexPhotos.length).toBeGreaterThan(0);
     for (const photo of alexPhotos) {
-      expect(photo.page).toBeLessThan(jordan!.page);
+      const beforeName =
+        photo.page < morgan!.page || (photo.page === morgan!.page && (photo.bottom ?? 0) > morgan!.y);
+      expect(beforeName).toBe(true);
     }
     expect(layout.some((event) => event.kind === "photo" && event.person === "Jordan Lee")).toBe(
       false,
     );
+    expect(morgan!.page).toBe(jordan!.page);
+    expect(source("./capsule-pdf.ts")).not.toContain("magazinePullQuote");
+    expect(source("./capsule-pdf.ts")).not.toContain("maybeDrawMagazinePullQuote");
+    expect(source("./capsule-pdf-magazine.ts")).not.toContain("magazinePullQuote");
   });
 
   it("keeps the name with its first full paragraph", async () => {
@@ -1138,12 +1150,11 @@ describe("magazine pdf", () => {
     expect(riley).toBeTruthy();
     expect(opening.length).toBeGreaterThanOrEqual(10);
     expect(opening.every((event) => event.page === riley!.page)).toBe(true);
-    expect(riley!.y).toBeGreaterThan(PDF_PAGE_HEIGHT - 90);
     expect(source("./capsule-pdf.ts")).toContain("headingKeepWithNextNeeded");
     expect(source("./capsule-pdf.ts")).toContain("forceNewPage");
   });
 
-  it("cover without photos is only the group name and month", async () => {
+  it("fills a photo-less cover with the group name, newsletter kicker, month, and contributors", async () => {
     const bytes = await buildCapsulePdfBytes({
       archive: buildCapsuleArchive({
         yearMonth: "2026-10",
@@ -1156,8 +1167,10 @@ describe("magazine pdf", () => {
     });
     const text = pdfExtractText(bytes);
     expect(text).toContain("REGRESSION KITCHEN");
+    expect(text).toContain("newsletter");
     expect(text).toContain("October 2026");
-    expect(text).not.toContain("Contributors:");
+    expect(text).toContain("Contributors:");
+    expect(text).toContain("Casey Nguyen");
   });
 
   it("renders curly quotes and does not leave an empty hero box", async () => {
@@ -1196,6 +1209,67 @@ describe("magazine pdf", () => {
     expect(selectMagazineTemplate([{ width: 800, height: 1200 }, { width: 800, height: 1200 }])).toBe(
       "two-column",
     );
+  });
+
+  it("does not emit photo-only pages or crop a portrait letter photo to 3:2", async () => {
+    const { archive, photos } = await buildVisualArchive("magazine");
+    const layout: CapsulePdfLayoutEvent[] = [];
+    await buildCapsulePdfBytes({ archive, photos, layout });
+    const pages = layout.filter((event) => event.kind === "page");
+    for (const page of pages) {
+      const hasPhoto = layout.some((event) => event.kind === "photo" && event.page === page.page);
+      const hasCopy = layout.some(
+        (event) =>
+          (event.kind === "text" || event.kind === "heading") && event.page === page.page,
+      );
+      if (hasPhoto) {
+        expect(hasCopy, `page ${page.page} is photo-only`).toBe(true);
+      }
+    }
+    const portraitJpeg = await sharp({
+      create: { width: 800, height: 1200, channels: 3, background: "#2f5b4c" },
+    })
+      .jpeg({ quality: 70 })
+      .toBuffer();
+    const portraitLayout: CapsulePdfLayoutEvent[] = [];
+    await buildCapsulePdfBytes({
+      archive: buildCapsuleArchive({
+        yearMonth: "2026-10",
+        groupName: "Regression Kitchen",
+        memberCount: 1,
+        theme: "magazine",
+        letters: [
+          {
+            preferred_name: "Jordan Lee",
+            body: "All phone photos stayed portrait.",
+            photos: [{ storage_path: "g/p0.jpg", width: 800, height: 1200, sort_order: 0 }],
+          },
+        ],
+      }),
+      photos: [{ storage_path: "g/p0.jpg", bytes: new Uint8Array(portraitJpeg) }],
+      layout: portraitLayout,
+    });
+    const placed = portraitLayout.find(
+      (event) => event.kind === "photo" && event.person === "Jordan Lee" && event.width && event.height,
+    );
+    expect(placed).toBeTruthy();
+    expect((placed!.width ?? 0) / Math.max(1, placed!.height ?? 1)).toBeLessThan(1);
+  });
+
+  it("sets long-letter text in two columns on the magazine fixtures", async () => {
+    const { archive, photos } = await buildVisualArchive("magazine");
+    const layout: CapsulePdfLayoutEvent[] = [];
+    await buildCapsulePdfBytes({ archive, photos, layout });
+    const jordan = layout.filter(
+      (event) =>
+        event.kind === "text" &&
+        event.person === "Jordan Lee" &&
+        event.x != null &&
+        event.width != null,
+    );
+    const xs = new Set(jordan.map((event) => Math.round(event.x!)));
+    expect(jordan.length).toBeGreaterThan(4);
+    expect(xs.size).toBeGreaterThanOrEqual(2);
   });
 });
 
