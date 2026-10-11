@@ -16,6 +16,7 @@ import {
   PHOTOS_MAX,
   SUBMIT_IN_AND_EDITABLE,
   SUBMIT_IN_HEADING,
+  SUBMIT_PREPARING_PHOTOS,
   SUBMIT_SAVED_DRAFT,
   SUBMIT_DRAFT_SAVED,
   SUBMIT_STILL_EDITABLE,
@@ -75,6 +76,7 @@ export function SubmitForm({
     })),
   );
   const [photoError, setPhotoError] = useState<string | null>(null);
+  const [preparingPhotos, setPreparingPhotos] = useState(false);
   const [state, action, pending] = useActionState<SubmitState, FormData>(submitLetter, null);
   const { busy, markBusy } = useInstantBusy(pending);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -181,6 +183,7 @@ export function SubmitForm({
       setPhotoError(dropped > 0 ? PHOTOS_MAX : null);
       return;
     }
+    setPreparingPhotos(true);
     try {
       const next = await Promise.all(
         kept.map(async (file) => {
@@ -199,8 +202,18 @@ export function SubmitForm({
       setPhotoError(dropped > 0 ? PHOTOS_MAX : null);
     } catch (error) {
       setPhotoError(error instanceof Error ? error.message : PHOTO_COMPRESS_FAILED);
+    } finally {
+      setPreparingPhotos(false);
     }
   }
+
+  const buttonBusy = busy || preparingPhotos;
+  const submitPendingLabel = preparingPhotos
+    ? SUBMIT_PREPARING_PHOTOS
+    : photos.some((photo) => photo.blob)
+      ? "Uploading…"
+      : "Submitting…";
+  const draftPendingLabel = preparingPhotos ? SUBMIT_PREPARING_PHOTOS : "Saving…";
 
   const statusLine = submitted ? null : draftHint || status === "draft" ? SUBMIT_DRAFT_SAVED : null;
   const toastMessage =
@@ -232,7 +245,7 @@ export function SubmitForm({
   return (
     <form
       className="stack stack--loose"
-      aria-busy={busy || undefined}
+      aria-busy={buttonBusy || undefined}
       onSubmit={markBusy}
       action={async (formData) => {
         const intent = String(formData.get("intent") ?? "");
@@ -315,7 +328,7 @@ export function SubmitForm({
                 className="photo__remove"
                 type="button"
                 aria-label="Remove photo"
-                disabled={busy}
+                disabled={buttonBusy}
                 onClick={() => {
                   setPhotos((current) => {
                     const next = current.filter((item) => item.id !== photo.id);
@@ -341,7 +354,7 @@ export function SubmitForm({
           accept={PHOTO_FILE_ACCEPT}
           multiple
           hidden
-          disabled={busy}
+          disabled={buttonBusy}
           onChange={(event) => void onFiles(event.target.files)}
         />
         <p className="field__hint">
@@ -355,35 +368,43 @@ export function SubmitForm({
           {photoError}
         </p>
       ) : null}
-      {state?.error ? <p className="err">{state.error}</p> : null}
       <MutationToast pending={busy} ok={state?.ok} message={toastMessage} />
       <div className="stack stack--tight">
         <PendingSubmitButton
           className="btn btn--primary btn--block btn--lg"
           name="intent"
           value="submit"
-          busy={busy}
-          pendingLabel={photos.some((photo) => photo.blob) ? "Uploading…" : "Submitting…"}
+          busy={buttonBusy}
+          disabled={preparingPhotos}
+          pendingLabel={submitPendingLabel}
         >
-          {SUBMIT_AND_SEND}
+          {preparingPhotos ? SUBMIT_PREPARING_PHOTOS : SUBMIT_AND_SEND}
         </PendingSubmitButton>
+        {state?.error ? (
+          <p className="err" role="alert">
+            {state.error}
+          </p>
+        ) : null}
         <PendingSubmitButton
           className="btn btn--secondary btn--block"
           name="intent"
           value="draft"
-          busy={busy}
-          pendingLabel="Saving…"
+          busy={buttonBusy}
+          disabled={preparingPhotos}
+          pendingLabel={draftPendingLabel}
         >
-          {SUBMIT_DRAFT}
+          {preparingPhotos ? SUBMIT_PREPARING_PHOTOS : SUBMIT_DRAFT}
         </PendingSubmitButton>
         <p className="btn-note" role="status">
-          {busy
-            ? photos.some((photo) => photo.blob)
-              ? "Working… uploading photos."
-              : "Working…"
-            : submitted
-              ? SUBMIT_STILL_EDITABLE
-              : "Save as draft to keep it hidden. After you submit, you can still edit until the window closes."}
+          {preparingPhotos
+            ? SUBMIT_PREPARING_PHOTOS
+            : busy
+              ? photos.some((photo) => photo.blob)
+                ? "Working… uploading photos."
+                : "Working…"
+              : submitted
+                ? SUBMIT_STILL_EDITABLE
+                : "Save as draft to keep it hidden. After you submit, you can still edit until the window closes."}
         </p>
       </div>
     </form>

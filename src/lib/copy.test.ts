@@ -65,6 +65,7 @@ import {
   ROSTER_SUBMITTED,
   SUBMIT_AND_SEND,
   SUBMIT_DRAFT,
+  SUBMIT_PREPARING_PHOTOS,
   SUBMIT_IN_AND_EDITABLE,
   SUBMIT_IN_HEADING,
   SUBMIT_SAVED_DRAFT,
@@ -222,6 +223,7 @@ describe("join and manage labels", () => {
   it("locks submit model A labels", () => {
     expect(SUBMIT_DRAFT).toBe("Save as draft");
     expect(SUBMIT_AND_SEND).toBe("Save and submit");
+    expect(SUBMIT_PREPARING_PHOTOS).toBe("Preparing photos…");
     expect(SUBMIT_DRAFT_SAVED).toBe("Draft saved");
     expect(SUBMIT_IN_AND_EDITABLE).toMatch(/keep editing/i);
   });

@@ -112,6 +112,7 @@ export const ROSTER_NOT_YET = "Not yet";
 export const GROUP_NEXT_CAPSULE = "Next capsule";
 export const SUBMIT_DRAFT = "Save as draft";
 export const SUBMIT_AND_SEND = "Save and submit";
+export const SUBMIT_PREPARING_PHOTOS = "Preparing photos…";
 export const SUBMIT_SAVED_DRAFT = "Saved as draft";
 export const SUBMIT_DRAFT_SAVED = "Draft saved";
 export const SUBMIT_SUBMITTED = "Submitted";
