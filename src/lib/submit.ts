@@ -1,3 +1,5 @@
+import { PHOTO_COMPRESS_FAILED, PhotoCompressError } from "@/lib/photo-compress";
+
 export const SUBMIT_STATUSES = ["draft", "submitted"] as const;
 export type SubmitStatus = (typeof SUBMIT_STATUSES)[number];
 
@@ -295,7 +297,8 @@ export type SubmitCommitDeps = {
   writeSubmission: (input: {
     existingId?: string;
     patch: ReturnType<typeof nextSubmissionWrite>;
-  }) => Promise<{ id: string } | { error: string }>;
+    requireNotSubmitted?: boolean;
+  }) => Promise<{ id: string; applied: boolean } | { error: string }>;
   deleteDroppedPhotos: (dropped: StoredPhotoRef[]) => Promise<void>;
   cleanupUploads: (paths: string[]) => Promise<void>;
   rollbackNewPhotos: (paths: string[]) => Promise<void>;
@@ -308,7 +311,27 @@ export type SubmitCommitDeps = {
   }) => void;
 };
 
-const COMPRESS_FAILED = "Could not compress that photo. Try another.";
+export function compressFailureMessage(error: unknown): string {
+  return error instanceof PhotoCompressError ? error.message : PHOTO_COMPRESS_FAILED;
+}
+
+/** DB rows first, then storage. A leftover object is safer than a row pointing at a missing file. */
+export const DROPPED_PHOTO_DELETE_ORDER = ["rows", "storage"] as const;
+
+export async function runDroppedPhotoCleanup(input: {
+  dropped: readonly StoredPhotoRef[];
+  deleteRows: (ids: string[]) => Promise<void>;
+  deleteObjects: (paths: string[]) => Promise<void>;
+  onError?: (error: unknown) => void;
+}): Promise<void> {
+  if (input.dropped.length === 0) return;
+  try {
+    await input.deleteRows(input.dropped.map((photo) => photo.id));
+    await input.deleteObjects(input.dropped.map((photo) => photo.storage_path));
+  } catch (error) {
+    input.onError?.(error);
+  }
+}
 
 /**
  * Photo work first. Mark submitted only after uploads and photo rows succeed.
@@ -341,10 +364,14 @@ export async function runSubmitPhotoCommit(input: {
       intent: "draft",
       now: input.now,
     });
-    const saved = await input.deps.writeSubmission({ existingId, patch: draftPatch });
+    const saved = await input.deps.writeSubmission({
+      existingId,
+      patch: draftPatch,
+      requireNotSubmitted: true,
+    });
     if ("error" in saved) return { error: saved.error };
     existingId = saved.id;
-    existingStatus = "draft";
+    existingStatus = saved.applied ? "draft" : "submitted";
   }
 
   if (!needsPhotoWork) {
@@ -369,8 +396,7 @@ export async function runSubmitPhotoCommit(input: {
       compressed.push(await input.deps.compressFile(i, bytes));
     } catch (error) {
       input.deps.logPhotoFailure({ photoIndex: i, stage: "compress", error });
-      const message = error instanceof Error && error.message ? error.message : COMPRESS_FAILED;
-      return { error: message };
+      return { error: compressFailureMessage(error) };
     }
   }
 
@@ -431,7 +457,14 @@ export async function runSubmitPhotoCommit(input: {
     return { error: written.error };
   }
 
-  await input.deps.deleteDroppedPhotos(dropped);
+  try {
+    await input.deps.deleteDroppedPhotos(dropped);
+  } catch (error) {
+    console.error("submitLetter cleanup failed", {
+      groupId: input.groupId,
+      errorName: error instanceof Error ? error.name : "Error",
+    });
+  }
   return { ok: true, status: input.intent };
 }
 

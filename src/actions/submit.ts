@@ -18,6 +18,7 @@ import {
   newPhotoStorageNonce,
   nextAutosaveWrite,
   parseSubmitIntent,
+  runDroppedPhotoCleanup,
   runSubmitPhotoCommit,
   submissionHasContent,
   type SubmitStatus,
@@ -135,11 +136,21 @@ export async function submitLetter(
           const { error } = await admin.from("photos").insert(rows);
           return { error };
         },
-        writeSubmission: async ({ existingId, patch }) => {
+        writeSubmission: async ({ existingId, patch, requireNotSubmitted }) => {
           if (existingId) {
-            const { error } = await admin.from("submissions").update(patch).eq("id", existingId);
+            let query = admin.from("submissions").update(patch).eq("id", existingId);
+            if (requireNotSubmitted) {
+              const { data: updated, error } = await query
+                .neq("status", "submitted")
+                .select("id")
+                .maybeSingle();
+              if (error) return { error: "Could not save." };
+              if (!updated) return { id: existingId, applied: false };
+              return { id: existingId, applied: true };
+            }
+            const { error } = await query;
             if (error) return { error: "Could not save." };
-            return { id: existingId };
+            return { id: existingId, applied: true };
           }
           const { data: created, error } = await admin
             .from("submissions")
@@ -151,19 +162,26 @@ export async function submitLetter(
             .select("id")
             .single();
           if (error || !created) return { error: "Could not save." };
-          return { id: created.id as string };
+          return { id: created.id as string, applied: true };
         },
         deleteDroppedPhotos: async (dropped) => {
-          await deleteStoredPhotos(dropped.map((photo) => photo.storage_path));
-          if (dropped.length > 0) {
-            await admin
-              .from("photos")
-              .delete()
-              .in(
-                "id",
-                dropped.map((photo) => photo.id),
-              );
-          }
+          await runDroppedPhotoCleanup({
+            dropped,
+            deleteRows: async (ids) => {
+              if (ids.length === 0) return;
+              const { error } = await admin.from("photos").delete().in("id", ids);
+              if (error) throw error;
+            },
+            deleteObjects: async (paths) => {
+              await deleteStoredPhotos(paths);
+            },
+            onError: (error) => {
+              console.error("submitLetter cleanup failed", {
+                groupId,
+                errorName: error instanceof Error ? error.name : "Error",
+              });
+            },
+          });
         },
         cleanupUploads: async (paths) => {
           await deleteStoredPhotos(paths);

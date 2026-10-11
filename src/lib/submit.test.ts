@@ -2,15 +2,17 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { PhotoCompressError } from "./photo-compress";
+import { PHOTO_COMPRESS_FAILED, PHOTO_TOO_LARGE, PhotoCompressError } from "./photo-compress";
 import { isSubmittedThisPeriod, rosterPeriodLabel } from "./roster";
 import { ROSTER_NOT_YET } from "./copy";
 import {
   LETTER_AUTOSAVE_MS,
   POSTGRES_UNIQUE_VIOLATION,
+  DROPPED_PHOTO_DELETE_ORDER,
   SUBMIT_COMMIT_ORDER,
   applyAutosaveInsert,
   applyAutosaveUpdate,
+  compressFailureMessage,
   failedSubmitSnapshot,
   includedSubmissions,
   isIncludedInCapsule,
@@ -21,6 +23,7 @@ import {
   nextSubmissionWrite,
   parseSubmitIntent,
   photoStoragePath,
+  runDroppedPhotoCleanup,
   runSubmitPhotoCommit,
   shouldAutosaveLetter,
   splitKeptAndDroppedPhotos,
@@ -150,8 +153,14 @@ describe("submit action error handling", () => {
     expect(source).toContain("SUBMIT_EMPTY");
     expect(source).toContain("runSubmitPhotoCommit");
     expect(source).toContain("logSubmitPhotoFailure");
+    expect(source).toContain("runDroppedPhotoCleanup");
+    expect(source).toContain("requireNotSubmitted");
+    expect(source).toContain('.neq("status", "submitted")');
     expect(source).toContain("upsert: false");
     expect(source).not.toContain("upsert: true");
+    const cleanup = source.slice(source.indexOf("deleteDroppedPhotos"));
+    expect(cleanup.indexOf('.from("photos")')).toBeLessThan(cleanup.indexOf("deleteStoredPhotos"));
+    expect(cleanup.indexOf('.from("photos")')).toBeGreaterThan(-1);
     expect(source).toMatch(/catch \(error\)/);
     expect(source).toContain("if (isRedirectError(error)) throw error");
   });
@@ -332,12 +341,14 @@ const OLD_PHOTO: StoredPhotoRef = { id: "p1", storage_path: "g/m/s/0.webp" };
 
 function createSubmitHarness(options: {
   existing?: { id: string; status: SubmitStatus | null; body: string } | null;
+  live?: { id: string; status: SubmitStatus | null; body: string };
   photos?: StoredPhotoRef[];
-  failAt?: "compress" | "upload" | "insert" | "write" | null;
+  failAt?: "compress" | "upload" | "insert" | "write" | "cleanup" | null;
 }) {
   const existing = options.existing === undefined ? null : options.existing;
+  const live = options.live ?? existing;
   const state = {
-    submission: existing ? { ...existing } : (null as typeof existing),
+    submission: live ? { ...live } : (null as typeof existing),
     photos: [...(options.photos ?? [])],
     objects: new Set((options.photos ?? []).map((photo) => photo.storage_path)),
     logs: [] as Array<{ photoIndex: number; stage: string; errorName: string }>,
@@ -373,15 +384,21 @@ function createSubmitHarness(options: {
       }
       return {};
     },
-    writeSubmission: async ({ existingId, patch }) => {
+    writeSubmission: async ({ existingId, patch, requireNotSubmitted }) => {
       if (options.failAt === "write" && patch.status === "submitted") {
         return { error: "Could not save." };
       }
+      if (requireNotSubmitted && (state.submission?.status ?? null) === "submitted") {
+        return { id: existingId ?? state.submission?.id ?? "sub-1", applied: false };
+      }
       const id = existingId ?? state.submission?.id ?? "sub-1";
       state.submission = { id, status: patch.status, body: patch.body };
-      return { id };
+      return { id, applied: true };
     },
     deleteDroppedPhotos: async (dropped) => {
+      if (options.failAt === "cleanup") {
+        throw new Error("storage remove failed");
+      }
       const paths = new Set(dropped.map((photo) => photo.storage_path));
       state.photos = state.photos.filter((photo) => !paths.has(photo.storage_path));
       for (const path of paths) state.objects.delete(path);
@@ -462,6 +479,12 @@ describe("submit photo atomicity", () => {
       message: "submitLetter photo failed",
       context: { groupId: "g", photoIndex: 1, stage: "upload", errorName: "StorageApiError" },
     });
+    const lib = readFileSync(resolve(here, "./submit.ts"), "utf8");
+    expect(lib).toContain("PhotoCompressError");
+    expect(lib).toContain("compressFailureMessage");
+    expect(lib).toContain("requireNotSubmitted: true");
+    expect(lib).toContain("runDroppedPhotoCleanup");
+    expect(lib).toMatch(/instanceof PhotoCompressError \? error\.message/);
   });
 
   it("keeps a failed first Submit as a draft and Not yet on the roster", async () => {
@@ -593,5 +616,95 @@ describe("submit photo atomicity", () => {
     expect(harness.state.submission).toEqual(submitted);
     expect(harness.state.photos).toEqual([OLD_PHOTO]);
     expect([...harness.state.objects]).toEqual([OLD_PHOTO.storage_path]);
+  });
+
+  it("deletes dropped photo rows before storage objects", async () => {
+    expect(DROPPED_PHOTO_DELETE_ORDER).toEqual(["rows", "storage"]);
+    const steps: string[] = [];
+    await runDroppedPhotoCleanup({
+      dropped: [OLD_PHOTO],
+      deleteRows: async (ids) => {
+        steps.push(`rows:${ids.join(",")}`);
+      },
+      deleteObjects: async (paths) => {
+        steps.push(`storage:${paths.join(",")}`);
+      },
+    });
+    expect(steps).toEqual(["rows:p1", `storage:${OLD_PHOTO.storage_path}`]);
+
+    const errors: unknown[] = [];
+    await expect(
+      runDroppedPhotoCleanup({
+        dropped: [OLD_PHOTO],
+        deleteRows: async () => {
+          throw new Error("row delete failed");
+        },
+        deleteObjects: async () => {
+          throw new Error("should not run");
+        },
+        onError: (error) => {
+          errors.push(error);
+        },
+      }),
+    ).resolves.toBeUndefined();
+    expect(errors).toHaveLength(1);
+    expect(String(errors[0])).toContain("row delete failed");
+  });
+
+  it("still returns ok when post-commit cleanup fails", async () => {
+    const draft = { id: "sub-1", status: "draft" as const, body: "Soup weather." };
+    const harness = createSubmitHarness({
+      existing: draft,
+      photos: [OLD_PHOTO],
+      failAt: "cleanup",
+    });
+    const result = await runAttempt(harness, {
+      existing: draft,
+      body: "Soup weather, sent.",
+      keepPaths: [],
+    });
+
+    expect(result).toEqual({ ok: true, status: "submitted" });
+    expect(harness.state.submission?.status).toBe("submitted");
+    expect(harness.state.submission?.body).toBe("Soup weather, sent.");
+  });
+
+  it("does not demote a concurrent submit when this tab's draft persist would race", async () => {
+    const stale = { id: "sub-1", status: "draft" as const, body: "stale typed in this tab" };
+    const live = { id: "sub-1", status: "submitted" as const, body: "Other tab sent." };
+    const harness = createSubmitHarness({
+      existing: stale,
+      live,
+      failAt: "compress",
+    });
+    const result = await runAttempt(harness, { existing: stale, body: "stale typed in this tab" });
+
+    expect(result).toEqual({ error: PHOTO_COMPRESS_FAILED });
+    expect(harness.state.submission).toEqual(live);
+    expect(harness.state.submission?.status).toBe("submitted");
+    expect(harness.state.submission?.body).toBe("Other tab sent.");
+    expect(isSubmittedThisPeriod(harness.state.submission)).toBe(true);
+  });
+
+  it("shows only PhotoCompressError messages, never sharp or storage internals", async () => {
+    expect(compressFailureMessage(new PhotoCompressError())).toBe(PHOTO_COMPRESS_FAILED);
+    expect(compressFailureMessage(new PhotoCompressError(PHOTO_TOO_LARGE))).toBe(PHOTO_TOO_LARGE);
+    expect(compressFailureMessage(new Error("VipsJpeg: junk after payload data"))).toBe(
+      PHOTO_COMPRESS_FAILED,
+    );
+    expect(compressFailureMessage({ name: "StorageApiError", message: "bucket policy" })).toBe(
+      PHOTO_COMPRESS_FAILED,
+    );
+
+    const harness = createSubmitHarness({ existing: { id: "sub-1", status: "draft", body: "Soup." } });
+    harness.deps.compressFile = async () => {
+      throw new Error("Input buffer contains unsupported image format");
+    };
+    const result = await runAttempt(harness, {
+      existing: { id: "sub-1", status: "draft", body: "Soup." },
+      body: "Soup.",
+    });
+    expect(result).toEqual({ error: PHOTO_COMPRESS_FAILED });
+    expect(JSON.stringify(result)).not.toContain("unsupported image format");
   });
 });
