@@ -5,7 +5,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { PDFDocument, StandardFonts } from "pdf-lib";
 import sharp from "sharp";
-import { buildCapsuleArchive } from "./capsule-archive";
+import { buildCapsuleArchive, type CapsuleArchive } from "./capsule-archive";
 import {
   buildCapsulePdfBytes,
   capsulePdfFilename,
@@ -51,16 +51,22 @@ import {
   takePdfLine,
   widthOfPdfText,
 } from "./capsule-pdf-fonts";
-import { MAGAZINE_CONTENT_BOTTOM, selectMagazineTemplate } from "./capsule-pdf-magazine";
+import {
+  MAGAZINE_CONTENT_BOTTOM,
+  MAGAZINE_PHOTO_MIN_SHORT,
+  magazineCoverPhotos,
+  selectMagazineTemplate,
+} from "./capsule-pdf-magazine";
 import { DOWNLOAD_PDF_LABEL } from "./copy";
 import {
+  buildLettersArchive,
   buildVisualArchive,
   fillerBody,
   KEEP_TARGET_BODY,
   LONG_RUNON_BODY,
+  MAGAZINE_COUNT_LETTERS,
   TEN_LINE_OPENING,
 } from "./capsule-pdf-fixtures";
-import { CAPSULE_THEMES } from "./capsule-theme";
 import { capsuleTitle } from "./month-version";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -1171,6 +1177,9 @@ describe("magazine pdf", () => {
       expect(image.bottom ?? 0).toBeGreaterThanOrEqual(MAGAZINE_CONTENT_BOTTOM - 1);
     }
     assertNoTextPhotoOverlap(layout, "magazine");
+    assertEveryPhotoDrawnOnce(archive, layout);
+    assertMagazineInsidePhotosMinShort(layout);
+    assertCoverPhotosNotReusedInside(archive, layout);
     expect(selectMagazineTemplate([{ width: 800, height: 1200 }, { width: 800, height: 1200 }])).toBe(
       "two-column",
     );
@@ -1236,7 +1245,68 @@ describe("magazine pdf", () => {
     expect(jordan.length).toBeGreaterThan(4);
     expect(xs.size).toBeGreaterThanOrEqual(2);
   });
+
+  it("draws every input photo exactly once for members with 0–8 photos", async () => {
+    const { archive, photos } = await buildLettersArchive("magazine", MAGAZINE_COUNT_LETTERS, "count");
+    const layout: CapsulePdfLayoutEvent[] = [];
+    await buildCapsulePdfBytes({ archive, photos, layout });
+    expect(archive.letters.map((letter) => letter.photos.length)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8]);
+    assertEveryPhotoDrawnOnce(archive, layout);
+    assertMagazineInsidePhotosMinShort(layout);
+    assertCoverPhotosNotReusedInside(archive, layout);
+    const samLike = archive.letters.find((letter) => letter.photos.length === 6);
+    expect(samLike).toBeTruthy();
+    const drawn = layout.filter(
+      (event) => event.kind === "photo" && samLike!.photos.some((photo) => photo.storage_path === event.storage_path),
+    );
+    expect(drawn).toHaveLength(6);
+  });
 });
+
+function assertEveryPhotoDrawnOnce(archive: CapsuleArchive, layout: CapsulePdfLayoutEvent[]) {
+  for (const letter of archive.letters) {
+    const matches = layout.filter((event) => {
+      if (event.kind !== "photo") return false;
+      if (event.storage_path && letter.photos.some((photo) => photo.storage_path === event.storage_path)) {
+        return true;
+      }
+      return !event.storage_path && event.person === letter.preferred_name;
+    });
+    const byPath = new Map<string, number>();
+    let unpathed = 0;
+    for (const event of matches) {
+      if (event.storage_path) {
+        byPath.set(event.storage_path, (byPath.get(event.storage_path) ?? 0) + 1);
+      } else {
+        unpathed += 1;
+      }
+    }
+    for (const [path, count] of byPath) {
+      expect(count, `${letter.preferred_name} ${path}`).toBe(1);
+    }
+    expect(byPath.size + unpathed, letter.preferred_name).toBe(letter.photos.length);
+  }
+}
+
+function assertMagazineInsidePhotosMinShort(layout: CapsulePdfLayoutEvent[]) {
+  const images = layout.filter(
+    (event) => event.kind === "photo" && event.person && event.width != null && event.height != null,
+  );
+  for (const image of images) {
+    expect(
+      Math.min(image.width!, image.height!),
+      image.storage_path ?? image.person,
+    ).toBeGreaterThanOrEqual(MAGAZINE_PHOTO_MIN_SHORT - 0.5);
+  }
+}
+
+function assertCoverPhotosNotReusedInside(archive: CapsuleArchive, layout: CapsulePdfLayoutEvent[]) {
+  const coverPaths = new Set(magazineCoverPhotos(archive.letters).map((photo) => photo.storage_path));
+  const inside = layout.filter((event) => event.kind === "photo" && event.person && event.storage_path);
+  for (const photo of inside) {
+    expect(coverPaths.has(photo.storage_path!), photo.storage_path).toBe(false);
+  }
+}
 
 function assertNoTextPhotoOverlap(layout: CapsulePdfLayoutEvent[], theme: string) {
   const texts = layout.filter(
@@ -1310,6 +1380,7 @@ describe("existing themes stay on the #60 layout lock", () => {
       const layout: CapsulePdfLayoutEvent[] = [];
       await buildCapsulePdfBytes({ archive, photos, layout });
       expect(layout.map(stableLayoutEvent), theme).toEqual(lock[theme]);
+      assertEveryPhotoDrawnOnce(archive, layout);
     }
     const migration = source("../../supabase/migrations/20261011120000_capsule_theme_magazine.sql");
     expect(migration).toMatch(/^\s*begin;/m);

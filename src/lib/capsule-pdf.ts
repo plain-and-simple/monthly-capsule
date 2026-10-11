@@ -25,13 +25,15 @@ import {
   MAGAZINE_FOOTER_HEIGHT,
   MAGAZINE_INLINE_MAX,
   MAGAZINE_NAME_SIZE,
+  MAGAZINE_PHOTO_MIN_SHORT,
   MAGAZINE_PHOTO_ROW_H,
   MAGAZINE_PHOTO_ROW_MIN_H,
-  MAGAZINE_SHARE_PAGE_FRACTION,
   MAGAZINE_SIDE_FRACTION,
   MAGAZINE_TWO_COL_GUTTER,
   magazineCoverCells,
   magazineCoverPhotos,
+  magazineMinRowHeight,
+  magazineRowCountForMinShort,
   magazineHeroAspect,
   magazineUsesTwoTextColumns,
   planMagazinePerson,
@@ -818,14 +820,16 @@ async function drawMagazineIssue(
       contentBottom: MAGAZINE_CONTENT_BOTTOM,
     },
   );
+  const coverPhotos = magazineCoverPhotos(input.archive.letters);
+  const coverPaths = new Set(coverPhotos.map((photo) => photo.storage_path));
   await drawMagazineCover(doc, cursor, input.fonts, display, {
     groupName: input.groupName,
     title: input.title,
     letters: input.archive.letters,
     photoByPath: input.photoByPath,
+    coverPhotos,
   });
 
-  const pageBody = PDF_PAGE_HEIGHT - MARGIN - MAGAZINE_CONTENT_BOTTOM;
   if (input.archive.letters.length === 0) {
     cursor.forceNewPage();
     cursor.wrapped("No letters this month.", {
@@ -835,31 +839,22 @@ async function drawMagazineIssue(
       color: input.palette.muted,
     });
   } else {
-    let shareNext = false;
     for (const [index, letter] of input.archive.letters.entries()) {
-      const estimated = estimateMagazinePersonHeight(letter, input.fonts);
-      const minH = magazinePersonMinHeight(letter, input.fonts);
+      const inside = sortedLetterPhotos(letter).filter((photo) => !coverPaths.has(photo.storage_path));
+      const startH = magazinePersonStartHeight(letter, input.fonts, inside);
       if (index === 0) {
         cursor.forceNewPage();
-      } else if (
-        shareNext &&
-        estimated <= cursor.remaining() - 18 &&
-        cursor.remaining() >= minH + 24
-      ) {
+      } else if (cursor.remaining() >= startH + 18) {
         cursor.finishWrap();
         cursor.rule(16);
       } else {
         cursor.forceNewPage();
       }
-      const startPage = cursor.pageIndex;
-      const startY = cursor.y;
       const last = index === input.archive.letters.length - 1;
       await drawMagazinePerson(doc, cursor, letter, input.fonts, display, input.photoByPath, {
         reserveBottom: last ? 24 : 0,
+        coverPaths,
       });
-      const used = startPage === cursor.pageIndex ? startY - cursor.y : Number.POSITIVE_INFINITY;
-      shareNext =
-        startPage === cursor.pageIndex && used <= pageBody * MAGAZINE_SHARE_PAGE_FRACTION;
     }
   }
 
@@ -883,30 +878,48 @@ async function drawMagazineCover(
     title: string;
     letters: readonly CapsuleArchiveLetter[];
     photoByPath: Map<string, Uint8Array>;
+    coverPhotos: CapsuleArchivePhoto[];
   },
 ) {
   const artBottom = MAGAZINE_CONTENT_BOTTOM;
-  const artH = PAGE_HEIGHT - artBottom;
-  const coverPhotos = magazineCoverPhotos(input.letters);
-  await drawMagazineCoverArt(doc, cursor, coverPhotos, input.photoByPath, 0, artBottom, PAGE_WIDTH, artH);
+  const titleH = input.coverPhotos.length > 0 ? 248 : PAGE_HEIGHT - artBottom;
+  const collageH = PAGE_HEIGHT - artBottom - titleH;
+  if (input.coverPhotos.length > 0 && collageH > 80) {
+    await drawMagazineCoverArt(
+      doc,
+      cursor,
+      input.coverPhotos,
+      input.photoByPath,
+      0,
+      artBottom + titleH,
+      PAGE_WIDTH,
+      collageH,
+    );
+  } else if (input.coverPhotos.length === 0) {
+    cursor.page.drawRectangle({
+      x: 0,
+      y: artBottom,
+      width: PAGE_WIDTH,
+      height: PAGE_HEIGHT - artBottom,
+      color: mixRgb(cursor.palette.accent, cursor.palette.paper, 0.82),
+    });
+  }
 
-  const panelH = coverPhotos.length > 0 ? Math.max(268, artH * 0.48) : artH;
   cursor.page.drawRectangle({
     x: 0,
     y: artBottom,
     width: PAGE_WIDTH,
-    height: panelH,
-    color: mixRgb(cursor.palette.paper, cursor.palette.ink, 0.06),
-    opacity: coverPhotos.length > 0 ? 0.94 : 1,
+    height: titleH,
+    color: cursor.palette.paper,
   });
   cursor.page.drawLine({
-    start: { x: 0, y: artBottom + panelH },
-    end: { x: PAGE_WIDTH, y: artBottom + panelH },
+    start: { x: 0, y: artBottom + titleH },
+    end: { x: PAGE_WIDTH, y: artBottom + titleH },
     thickness: 2,
     color: cursor.palette.accent,
   });
 
-  cursor.y = artBottom + panelH - 36;
+  cursor.y = artBottom + titleH - 36;
   cursor.wrapped(input.groupName.toUpperCase(), {
     font: display,
     size: MAGAZINE_COVER_SIZE,
@@ -999,10 +1012,20 @@ function magazineBodySize(body: string): number {
   return magazineUsesTwoTextColumns(body) ? MAGAZINE_BODY_SIZE_DENSE : MAGAZINE_BODY_SIZE;
 }
 
-function magazinePersonMinHeight(letter: CapsuleArchiveLetter, fonts: CapsulePdfFonts): number {
+function magazineLetterIsCompact(letter: CapsuleArchiveLetter): boolean {
+  const paragraphs = letterParagraphs(letter.body);
+  return letter.body.trim().length < 180 && paragraphs.length <= 1 && letter.photos.length <= 3;
+}
+
+function magazinePersonStartHeight(
+  letter: CapsuleArchiveLetter,
+  fonts: CapsulePdfFonts,
+  photos: CapsuleArchivePhoto[],
+): number {
   const paragraphs = letterParagraphs(letter.body);
   const first = paragraphs[0] ?? "";
   const size = magazineBodySize(letter.body);
+  const plan = planMagazinePerson(photos);
   const textH = first
     ? estimateWrappedHeight(
         first,
@@ -1013,48 +1036,14 @@ function magazinePersonMinHeight(letter: CapsuleArchiveLetter, fonts: CapsulePdf
         CONTENT_WIDTH * 0.58,
       )
     : 0;
-  const photoH = letter.photos.length > 0 ? 110 : 0;
-  return MAGAZINE_NAME_SIZE + PDF_HEADING_GAP + Math.max(textH, photoH) + 12;
-}
-
-function magazineLetterIsCompact(letter: CapsuleArchiveLetter): boolean {
-  const paragraphs = letterParagraphs(letter.body);
-  return letter.body.trim().length < 180 && paragraphs.length <= 1 && letter.photos.length <= 3;
-}
-
-function estimateMagazinePersonHeight(letter: CapsuleArchiveLetter, fonts: CapsulePdfFonts): number {
-  const photos = sortedLetterPhotos(letter);
-  const paragraphs = letterParagraphs(letter.body);
-  const plan = planMagazinePerson(photos);
-  const compact = magazineLetterIsCompact(letter);
-  const useTwo = magazineUsesTwoTextColumns(letter.body);
-  const size = magazineBodySize(letter.body);
-  const width = useTwo ? (CONTENT_WIDTH - MAGAZINE_TWO_COL_GUTTER) / 2 : CONTENT_WIDTH * 0.62;
-  let textH = 0;
-  for (const paragraph of paragraphs) {
-    textH += estimateWrappedHeight(
-      paragraph,
-      fonts.serif,
-      fonts.emoji,
-      size,
-      MAGAZINE_BODY_LINE_GAP,
-      width,
-    );
-    textH += PDF_PARAGRAPH_GAP;
-  }
-  const extras = plan.inline.length + plan.grid.length;
-  const stacked = plan.template === "hero-side-stack" || plan.template === "two-column";
-  const extraRows = stacked
-    ? Math.ceil(Math.max(0, extras - 3) / 2)
-    : Math.ceil(extras / 2);
-  const heroH = plan.hero ? (compact ? 120 : 190) : 0;
-  const stackH = compact ? 120 : 150;
-  const rowH = compact ? 90 : 130;
   const nameH = MAGAZINE_NAME_SIZE + PDF_HEADING_GAP;
-  if (stacked) {
-    return nameH + heroH + Math.max(textH, stackH) + extraRows * rowH + 20;
-  }
-  return nameH + heroH + textH + extraRows * rowH + 20;
+  const heroH = plan.hero ? Math.min(CONTENT_WIDTH / (16 / 9), 220) : 0;
+  const columnH = plan.columnPhoto
+    ? textH < 40
+      ? MAGAZINE_PHOTO_MIN_SHORT + 20
+      : Math.min(200, Math.max(MAGAZINE_PHOTO_MIN_SHORT, textH + 40))
+    : 0;
+  return nameH + heroH + Math.max(textH, columnH) + 16;
 }
 
 function magazineConsistentRowHeight(input: {
@@ -1076,14 +1065,15 @@ async function drawMagazinePerson(
   fonts: CapsulePdfFonts,
   display: PdfTypeFace,
   photoByPath: Map<string, Uint8Array>,
-  opts: { reserveBottom?: number } = {},
+  opts: { reserveBottom?: number; coverPaths?: Set<string> } = {},
 ) {
-  const photos = sortedLetterPhotos(letter);
+  const coverPaths = opts.coverPaths ?? new Set<string>();
+  const photos = sortedLetterPhotos(letter).filter((photo) => !coverPaths.has(photo.storage_path));
   const paragraphs = letterParagraphs(letter.body);
   const plan = planMagazinePerson(photos);
   const bodySize = magazineBodySize(letter.body);
   const useTwoCol = magazineUsesTwoTextColumns(letter.body);
-  const compact = magazineLetterIsCompact(letter);
+  const compact = magazineLetterIsCompact({ ...letter, photos });
   cursor.finishWrap();
   cursor.setPerson(letter.preferred_name);
 
@@ -1103,23 +1093,25 @@ async function drawMagazinePerson(
   const heroBudget = plan.hero
     ? Math.min(
         compact ? 140 : CONTENT_WIDTH / (16 / 9),
-        Math.max(100, cursor.remaining() - reserved - textEstimate - MAGAZINE_NAME_SIZE - 28),
+        Math.max(MAGAZINE_PHOTO_MIN_SHORT, cursor.remaining() - reserved - textEstimate - MAGAZINE_NAME_SIZE - 28),
       )
     : 0;
-  const columnBudget = compact ? 150 : 200;
   const rowH = magazineConsistentRowHeight({
     remaining: cursor.remaining() - reserved,
     nameAndText: MAGAZINE_NAME_SIZE + PDF_HEADING_GAP + textEstimate,
-    heroH: heroBudget + (plan.columnPhoto ? columnBudget : 0),
+    heroH: heroBudget + (plan.columnPhoto ? 160 : 0),
     extraCount: extras,
   });
+  const placed = new Set<string>();
+  const markPlaced = (path: string | undefined) => {
+    if (path) placed.add(path);
+  };
 
-  if (plan.hero) {
-    await drawMagazineHero(doc, cursor, plan.hero, photoByPath, heroBudget);
+  if (plan.hero && (await drawMagazineHero(doc, cursor, plan.hero, photoByPath, heroBudget))) {
+    markPlaced(plan.hero.storage_path);
   }
 
-  if (plan.template === "two-column" && plan.columnPhoto && compact) {
-    const stack = [plan.columnPhoto, ...plan.inline];
+  if (useTwoCol) {
     const firstTextHeight = firstText
       ? estimateWrappedHeight(
           firstText,
@@ -1127,15 +1119,37 @@ async function drawMagazinePerson(
           fonts.emoji,
           bodySize,
           MAGAZINE_BODY_LINE_GAP,
-          CONTENT_WIDTH * (1 - MAGAZINE_SIDE_FRACTION) - PDF_SIDE_PHOTO_GUTTER,
+          CONTENT_WIDTH,
         )
       : 0;
-    drawMagazineName(cursor, letter.preferred_name, display, firstTextHeight, 160);
-    await drawMagazineSideStack(doc, cursor, stack, photoByPath, Math.min(168, cursor.remaining() - reserved - 12));
-    if (firstText) drawMagazineLetterText(cursor, fonts, firstText, letter.preferred_name, bodySize);
-    cursor.finishWrap();
+    drawMagazineName(cursor, letter.preferred_name, display, firstTextHeight);
+    if (plan.columnPhoto && !plan.hero) {
+      const leftover = await drawMagazineColumnStart(
+        doc,
+        cursor,
+        plan.columnPhoto,
+        photoByPath,
+        fonts,
+        display,
+        letter.preferred_name,
+        firstText,
+        bodySize,
+        220,
+        true,
+      );
+      leftover.forEach(markPlaced);
+    }
+    if (firstText && cursor.hasActiveWrap()) {
+      drawMagazineLetterText(cursor, fonts, firstText, letter.preferred_name, bodySize);
+      cursor.finishWrap();
+      const rest = paragraphs.slice(1);
+      if (rest.length > 0) drawMagazineTwoColParagraphs(cursor, fonts, rest, letter.preferred_name, reserved);
+    } else {
+      cursor.finishWrap();
+      drawMagazineTwoColParagraphs(cursor, fonts, paragraphs, letter.preferred_name, reserved);
+    }
   } else if (plan.template === "two-column" && plan.columnPhoto) {
-    await drawMagazineColumnStart(
+    const leftover = await drawMagazineColumnStart(
       doc,
       cursor,
       plan.columnPhoto,
@@ -1145,12 +1159,14 @@ async function drawMagazinePerson(
       letter.preferred_name,
       firstText,
       bodySize,
-      380,
+      compact ? 160 : 280,
+      false,
     );
+    leftover.forEach(markPlaced);
     const restParas = firstText ? paragraphs.slice(1) : paragraphs;
     if (firstText) drawMagazineLetterText(cursor, fonts, firstText, letter.preferred_name, bodySize);
     cursor.finishWrap();
-    await drawMagazineInterleaved(
+    const drawn = await drawMagazineInterleaved(
       doc,
       cursor,
       fonts,
@@ -1160,6 +1176,7 @@ async function drawMagazinePerson(
       letter.preferred_name,
       { bodySize, rowH, useTwoCol, leaveBottom: reserved },
     );
+    drawn.forEach(markPlaced);
   } else if (plan.template === "hero-side-stack" && plan.inline.length > 0) {
     const stack = plan.inline.slice(0, MAGAZINE_INLINE_MAX);
     const after = plan.inline.slice(stack.length);
@@ -1175,27 +1192,26 @@ async function drawMagazinePerson(
         )
       : 0;
     drawMagazineName(cursor, letter.preferred_name, display, firstTextHeight);
-    await drawMagazineSideStack(
+    const stacked = await drawMagazineSideStack(
       doc,
       cursor,
       stack,
       photoByPath,
-      Math.max(80, cursor.remaining() - reserved - 12),
+      Math.max(MAGAZINE_PHOTO_MIN_SHORT + 8, cursor.remaining() - reserved - 12),
     );
-    if (useTwoCol && !cursor.hasActiveWrap()) {
-      drawMagazineTwoColParagraphs(cursor, fonts, paragraphs, letter.preferred_name, reserved);
-    } else {
-      for (const paragraph of paragraphs) {
-        drawMagazineLetterText(cursor, fonts, paragraph, letter.preferred_name, bodySize);
-      }
+    stacked.placed.forEach(markPlaced);
+    for (const paragraph of paragraphs) {
+      drawMagazineLetterText(cursor, fonts, paragraph, letter.preferred_name, bodySize);
     }
     cursor.finishWrap();
-    await drawMagazineInterleaved(doc, cursor, fonts, [], after, photoByPath, letter.preferred_name, {
+    const pending = [...stacked.leftover, ...after];
+    const drawn = await drawMagazineInterleaved(doc, cursor, fonts, [], pending, photoByPath, letter.preferred_name, {
       bodySize,
       rowH,
       useTwoCol,
       leaveBottom: reserved,
     });
+    drawn.forEach(markPlaced);
   } else {
     const firstTextHeight = firstText
       ? estimateWrappedHeight(
@@ -1208,7 +1224,7 @@ async function drawMagazinePerson(
         )
       : 0;
     drawMagazineName(cursor, letter.preferred_name, display, firstTextHeight);
-    await drawMagazineInterleaved(
+    const drawn = await drawMagazineInterleaved(
       doc,
       cursor,
       fonts,
@@ -1218,11 +1234,13 @@ async function drawMagazinePerson(
       letter.preferred_name,
       { bodySize, rowH, useTwoCol, leaveBottom: reserved },
     );
+    drawn.forEach(markPlaced);
   }
 
-  if (plan.grid.length > 0) {
+  const unplaced = photos.filter((photo) => !placed.has(photo.storage_path));
+  if (unplaced.length > 0) {
     cursor.finishWrap();
-    await drawMagazineFittedGrid(doc, cursor, plan.grid, photoByPath, rowH);
+    await drawMagazineEndGrid(doc, cursor, unplaced, photoByPath, fonts, letter.preferred_name);
   }
 
   cursor.finishWrap();
@@ -1362,34 +1380,45 @@ async function drawMagazineColumnStart(
   firstText: string,
   bodySize: number,
   maxPhotoH = 380,
-) {
+  nameAlreadyDrawn = false,
+): Promise<string[]> {
   const image = await embedPhoto(doc, photoByPath.get(photo.storage_path));
   const colW = CONTENT_WIDTH * MAGAZINE_SIDE_FRACTION;
   if (image && cursor.remaining() < 120) cursor.ensure(Math.min(cursor.remaining() + 1, 160));
   const nativeH = image ? colW * (image.height / Math.max(1, image.width)) : 0;
-  const photoH = image ? Math.min(Math.max(0, cursor.remaining() - 28), nativeH, maxPhotoH) : 0;
   const insetWidth = CONTENT_WIDTH - colW - PDF_SIDE_PHOTO_GUTTER;
   const firstTextHeight = firstText
-    ? measureTextBesidePhoto({
-        text: firstText,
-        font: fonts.serif,
-        emoji: fonts.emoji,
-        size: bodySize,
-        lineGap: MAGAZINE_BODY_LINE_GAP,
+    ? estimateWrappedHeight(
+        firstText,
+        fonts.serif,
+        fonts.emoji,
+        bodySize,
+        MAGAZINE_BODY_LINE_GAP,
         insetWidth,
-        fullWidth: CONTENT_WIDTH,
-        photoHeight: photoH || PDF_SIDE_PHOTO_MIN,
-      })
+      )
     : 0;
-  drawMagazineName(cursor, name, display, firstTextHeight, photoH);
-  if (image && photoH > 16) {
-    const drawH = Math.min(photoH, Math.max(16, cursor.remaining() - 8));
-    if (cursor.y - drawH >= cursor.contentBottom()) {
-      const drawW = drawH * (image.width / image.height);
-      cursor.drawPlacedImage(image, MARGIN, cursor.y, drawW, drawH, photo.storage_path);
-      cursor.startWrapRegion("left", drawW, drawH);
+  let photoH = image ? Math.min(Math.max(0, cursor.remaining() - 28), nativeH, maxPhotoH) : 0;
+  if (image && firstTextHeight > 0 && photoH > firstTextHeight * 1.75) {
+    photoH = Math.max(MAGAZINE_PHOTO_MIN_SHORT, Math.min(photoH, firstTextHeight + 48));
+  }
+  if (!nameAlreadyDrawn) {
+    drawMagazineName(cursor, name, display, firstTextHeight, photoH);
+  }
+  if (image && photoH >= MAGAZINE_PHOTO_MIN_SHORT && cursor.y - photoH >= cursor.contentBottom()) {
+    const drawW = photoH * (image.width / image.height);
+    const short = Math.min(drawW, photoH);
+    if (short + 0.05 >= MAGAZINE_PHOTO_MIN_SHORT) {
+      if (firstTextHeight < 28 && photoH > firstTextHeight * 2) {
+        cursor.drawPlacedImage(image, MARGIN, cursor.y, drawW, photoH, photo.storage_path);
+        cursor.y -= photoH + 10;
+        return [photo.storage_path];
+      }
+      cursor.drawPlacedImage(image, MARGIN, cursor.y, drawW, photoH, photo.storage_path);
+      cursor.startWrapRegion("left", drawW, photoH);
+      return [photo.storage_path];
     }
   }
+  return [];
 }
 
 async function drawMagazineHero(
@@ -1398,14 +1427,14 @@ async function drawMagazineHero(
   photo: CapsuleArchivePhoto,
   photoByPath: Map<string, Uint8Array>,
   maxHeight = 240,
-) {
+): Promise<boolean> {
   const bytes = photoByPath.get(photo.storage_path);
-  if (!bytes) return;
-  if (isPortraitPhoto(photo)) return;
+  if (!bytes) return false;
+  if (isPortraitPhoto(photo)) return false;
   const aspect = magazineHeroAspect(photo.width, photo.height);
-  if (aspect == null) return;
+  if (aspect == null) return false;
   const cropped = await cropJpegToAspect(bytes, aspect);
-  if (!cropped) return;
+  if (!cropped) return false;
   try {
     const image = await doc.embedJpg(cropped);
     const naturalW = CONTENT_WIDTH;
@@ -1414,9 +1443,10 @@ async function drawMagazineHero(
     const drawW = naturalW * scale;
     const drawH = naturalH * scale;
     if (drawH + 16 > cursor.remaining()) {
-      const fit = Math.max(80, cursor.remaining() - 20);
+      const fit = Math.max(MAGAZINE_PHOTO_MIN_SHORT, cursor.remaining() - 20);
       const fitted = Math.min(drawH, fit);
       const fittedW = fitted * (drawW / drawH);
+      if (Math.min(fittedW, fitted) + 0.05 < MAGAZINE_PHOTO_MIN_SHORT) return false;
       cursor.y -= fitted;
       const x = MARGIN + Math.max(0, (CONTENT_WIDTH - fittedW) / 2);
       cursor.page.drawImage(image, { x, y: cursor.y, width: fittedW, height: fitted });
@@ -1432,7 +1462,7 @@ async function drawMagazineHero(
         height: fitted,
       });
       cursor.y -= 12;
-      return;
+      return true;
     }
     cursor.y -= drawH;
     const x = MARGIN + Math.max(0, (CONTENT_WIDTH - drawW) / 2);
@@ -1449,8 +1479,9 @@ async function drawMagazineHero(
       height: drawH,
     });
     cursor.y -= 12;
+    return true;
   } catch {
-    // skip a broken hero rather than leave an empty box
+    return false;
   }
 }
 
@@ -1460,35 +1491,51 @@ async function drawMagazineSideStack(
   photos: CapsuleArchivePhoto[],
   photoByPath: Map<string, Uint8Array>,
   maxStackH?: number,
-) {
-  const items: Array<{ image: PDFImage; storage_path: string; w: number; h: number }> = [];
+): Promise<{ placed: string[]; leftover: CapsuleArchivePhoto[] }> {
+  const items: Array<{ image: PDFImage; photo: CapsuleArchivePhoto; w: number; h: number }> = [];
   const colW = CONTENT_WIDTH * MAGAZINE_SIDE_FRACTION;
   for (const photo of photos) {
     const image = await embedPhoto(doc, photoByPath.get(photo.storage_path));
     if (!image) continue;
     const w = colW;
     const h = w * (image.height / Math.max(1, image.width));
-    items.push({ image, storage_path: photo.storage_path, w, h });
+    items.push({ image, photo, w, h });
   }
-  if (items.length === 0) return;
+  if (items.length === 0) return { placed: [], leftover: [...photos] };
   const gap = PDF_LEFTOVER_GAP;
-  let heights = items.map((item) => item.h);
-  let total = heights.reduce((sum, height) => sum + height, 0) + gap * (items.length - 1);
-  const budget = Math.max(64, Math.min(maxStackH ?? Number.POSITIVE_INFINITY, cursor.remaining() - 8));
-  if (total > budget) {
-    const scale = budget / total;
-    heights = heights.map((height) => height * scale);
-    total = budget;
+  const budget = Math.max(
+    MAGAZINE_PHOTO_MIN_SHORT,
+    Math.min(maxStackH ?? Number.POSITIVE_INFINITY, cursor.remaining() - 8),
+  );
+  let take = items.length;
+  let heights: number[] = [];
+  let total = 0;
+  while (take > 0) {
+    const slice = items.slice(0, take);
+    heights = slice.map((item) => item.h);
+    total = heights.reduce((sum, height) => sum + height, 0) + gap * (slice.length - 1);
+    if (total > budget) {
+      const scale = budget / total;
+      heights = heights.map((height) => height * scale);
+      total = budget;
+    }
+    const shorts = slice.map((item, index) => Math.min(heights[index]! * (item.w / item.h), heights[index]!));
+    if (shorts.every((side) => side + 0.05 >= MAGAZINE_PHOTO_MIN_SHORT)) break;
+    take -= 1;
   }
+  if (take === 0) return { placed: [], leftover: items.map((item) => item.photo) };
   const x = PAGE_WIDTH - MARGIN - colW;
   let top = cursor.y;
-  items.forEach((item, index) => {
+  const placed: string[] = [];
+  items.slice(0, take).forEach((item, index) => {
     const h = heights[index]!;
     const w = h * (item.w / item.h);
-    cursor.drawPlacedImage(item.image, x + (colW - w), top, w, h, item.storage_path);
+    cursor.drawPlacedImage(item.image, x + (colW - w), top, w, h, item.photo.storage_path);
+    placed.push(item.photo.storage_path);
     top -= h + gap;
   });
   cursor.startWrapRegion("right", colW, total);
+  return { placed, leftover: items.slice(take).map((item) => item.photo) };
 }
 
 async function drawMagazineInterleaved(
@@ -1500,72 +1547,63 @@ async function drawMagazineInterleaved(
   photoByPath: Map<string, Uint8Array>,
   person: string,
   opts: { bodySize: number; rowH: number; useTwoCol: boolean; leaveBottom?: number },
-) {
+): Promise<string[]> {
   const pending = [...photos];
   const paras = [...paragraphs];
+  const drawn: string[] = [];
+  const takeDrawn = (paths: string[]) => {
+    for (const path of paths) {
+      drawn.push(path);
+      const index = pending.findIndex((photo) => photo.storage_path === path);
+      if (index >= 0) pending.splice(index, 1);
+    }
+  };
   if (opts.useTwoCol && paras.length > 0 && !cursor.hasActiveWrap()) {
     if (pending.length >= 2) {
       cursor.finishWrap();
-      await drawMagazinePhotoRow(doc, cursor, pending.splice(0, 2), photoByPath, opts.rowH);
+      takeDrawn(await drawMagazinePhotoRow(doc, cursor, pending.slice(0, 2), photoByPath, opts.rowH));
     }
     drawMagazineTwoColParagraphs(cursor, fonts, paras.splice(0), person, opts.leaveBottom ?? 0);
-    await drawMagazinePackedPhotos(doc, cursor, pending, photoByPath, opts.rowH);
-    return;
+    return drawn;
   }
   if (paras.length > 0) {
     drawMagazineLetterText(cursor, fonts, paras.shift()!, person, opts.bodySize);
   }
-  while (paras.length > 0 || pending.length > 0) {
-    if (paras.length === 0 && pending.length > 0) {
-      await drawMagazinePackedPhotos(doc, cursor, pending, photoByPath, opts.rowH);
-      break;
-    }
+  while (paras.length > 0) {
     if (pending.length >= 2) {
       cursor.finishWrap();
-      await drawMagazinePhotoRow(doc, cursor, pending.splice(0, 2), photoByPath, opts.rowH);
-      if (paras.length > 0) {
-        if (opts.useTwoCol && paras.length > 1 && !cursor.hasActiveWrap()) {
-          drawMagazineTwoColParagraphs(cursor, fonts, paras.splice(0), person, opts.leaveBottom ?? 0);
-        } else {
-          drawMagazineLetterText(cursor, fonts, paras.shift()!, person, opts.bodySize);
-        }
-      }
-    } else if (pending.length === 1 && paras.length > 0) {
-      const photo = pending.shift()!;
+      takeDrawn(await drawMagazinePhotoRow(doc, cursor, pending.slice(0, 2), photoByPath, opts.rowH));
+    } else if (pending.length === 1) {
+      const photo = pending[0]!;
       const image = await embedPhoto(doc, photoByPath.get(photo.storage_path));
       cursor.finishWrap();
-      if (image) {
-        cursor.insetImage(image, "right", Math.min(opts.rowH + 36, PDF_SIDE_PHOTO_MAX), photo.storage_path);
-      }
-      drawMagazineLetterText(cursor, fonts, paras.shift()!, person, opts.bodySize);
-      cursor.finishWrap();
-    } else if (pending.length > 0 && paras.length === 0) {
-      await drawMagazinePackedPhotos(doc, cursor, pending, photoByPath, opts.rowH);
-    } else if (paras.length > 0) {
-      const rest = paras.splice(0);
-      cursor.finishWrap();
-      if (opts.useTwoCol) {
-        drawMagazineTwoColParagraphs(cursor, fonts, rest, person, opts.leaveBottom ?? 0);
-      } else {
-        for (const paragraph of rest) {
-          drawMagazineLetterText(cursor, fonts, paragraph, person, opts.bodySize);
-        }
+      if (image && magazineInsetFitsMinShort(image, opts.rowH, cursor.remaining())) {
+        const maxH = Math.max(MAGAZINE_PHOTO_MIN_SHORT, Math.min(opts.rowH + 36, PDF_SIDE_PHOTO_MAX));
+        cursor.insetImage(image, "right", maxH, photo.storage_path);
+        takeDrawn([photo.storage_path]);
       }
     }
+    if (opts.useTwoCol && paras.length > 1 && !cursor.hasActiveWrap()) {
+      drawMagazineTwoColParagraphs(cursor, fonts, paras.splice(0), person, opts.leaveBottom ?? 0);
+    } else {
+      drawMagazineLetterText(cursor, fonts, paras.shift()!, person, opts.bodySize);
+    }
+    cursor.finishWrap();
   }
+  return drawn;
 }
 
-async function drawMagazinePackedPhotos(
-  doc: PDFDocument,
-  cursor: PdfCursor,
-  photos: CapsuleArchivePhoto[],
-  photoByPath: Map<string, Uint8Array>,
-  rowH: number,
-) {
-  const packs = packLeftoverRowCounts(photos.length);
-  for (const count of packs) {
-    await drawMagazinePhotoRow(doc, cursor, photos.splice(0, count), photoByPath, rowH);
-  }
+function magazineInsetFitsMinShort(image: PDFImage, maxH: number, remaining: number): boolean {
+  const maxW = CONTENT_WIDTH * PDF_SIDE_PHOTO_FRACTION;
+  const scale = Math.min(maxW / image.width, maxH / image.height, 1);
+  const width = image.width * scale;
+  const height = image.height * scale;
+  if (Math.min(width, height) + 0.05 < MAGAZINE_PHOTO_MIN_SHORT) return false;
+  const shrink = shrinkSidePhotoToRemaining(height, remaining);
+  if (shrink.pageBreak) return false;
+  const nextH = shrink.height;
+  const nextW = width * (nextH / Math.max(1, height));
+  return Math.min(nextW, nextH) + 0.05 >= MAGAZINE_PHOTO_MIN_SHORT;
 }
 
 async function drawMagazinePhotoRow(
@@ -1574,89 +1612,123 @@ async function drawMagazinePhotoRow(
   photos: CapsuleArchivePhoto[],
   photoByPath: Map<string, Uint8Array>,
   maxH: number,
-) {
+): Promise<string[]> {
   const items: Array<{ image: PDFImage; storage_path: string }> = [];
   for (const photo of photos) {
     const image = await embedPhoto(doc, photoByPath.get(photo.storage_path));
     if (image) items.push({ image, storage_path: photo.storage_path });
   }
-  if (items.length === 0) return;
+  if (items.length === 0) return [];
   const aspects = items.map((entry) => entry.image.width / Math.max(1, entry.image.height));
-  const fitH = Math.min(maxH, Math.max(MAGAZINE_PHOTO_ROW_MIN_H, cursor.remaining() - 10));
-  const row = justifiedRowMetrics(aspects, CONTENT_WIDTH, PDF_LEFTOVER_GAP, fitH);
-  if (row.height + 6 > cursor.remaining()) {
-    const squeezed = justifiedRowMetrics(
-      aspects,
-      CONTENT_WIDTH,
-      PDF_LEFTOVER_GAP,
-      Math.max(40, cursor.remaining() - 6),
-    );
-    if (squeezed.height + 4 <= cursor.remaining()) {
-      drawMagazineJustifiedRow(cursor, items, squeezed);
-      return;
-    }
+  const count = magazineRowCountForMinShort(aspects, CONTENT_WIDTH, PDF_LEFTOVER_GAP);
+  const rowItems = items.slice(0, count);
+  const rowAspects = aspects.slice(0, count);
+  const minH = magazineMinRowHeight(rowAspects);
+  if (cursor.remaining() < minH + 12) return [];
+  const fitH = Math.min(maxH, Math.max(minH, cursor.remaining() - 10));
+  let row = justifiedRowMetrics(rowAspects, CONTENT_WIDTH, PDF_LEFTOVER_GAP, fitH);
+  const shorts = row.widths.map((width) => Math.min(width, row.height));
+  if (shorts.some((side) => side + 0.05 < MAGAZINE_PHOTO_MIN_SHORT)) {
+    row = justifiedRowMetrics(rowAspects, CONTENT_WIDTH, PDF_LEFTOVER_GAP, minH);
+    if (row.height + 8 > cursor.remaining()) return [];
   }
-  if (cursor.y - row.height < cursor.contentBottom()) {
-    const squeezed = justifiedRowMetrics(
-      aspects,
-      CONTENT_WIDTH,
-      PDF_LEFTOVER_GAP,
-      Math.max(36, cursor.remaining() - 4),
-    );
-    drawMagazineJustifiedRow(cursor, items, squeezed);
-    return;
-  }
-  drawMagazineJustifiedRow(cursor, items, row);
+  return drawMagazineJustifiedRow(cursor, rowItems, row);
 }
 
 function drawMagazineJustifiedRow(
   cursor: PdfCursor,
   items: Array<{ image: PDFImage; storage_path: string }>,
   row: { height: number; widths: number[]; usedWidth: number },
-) {
-  const available = Math.max(0, cursor.remaining() - 2);
-  if (available < 8 || items.length === 0) return;
-  const height = Math.min(row.height, available);
-  const scale = height / Math.max(1, row.height);
-  cursor.y -= height;
-  let x = MARGIN + Math.max(0, (CONTENT_WIDTH - row.usedWidth * scale) / 2);
+): string[] {
+  if (items.length === 0 || row.height < 8) return [];
+  const shorts = row.widths.map((width) => Math.min(width, row.height));
+  if (shorts.some((side) => side + 0.05 < MAGAZINE_PHOTO_MIN_SHORT)) return [];
+  if (row.height + 4 > cursor.remaining()) return [];
+  cursor.y -= row.height;
+  let x = MARGIN + Math.max(0, (CONTENT_WIDTH - row.usedWidth) / 2);
   items.forEach((entry, index) => {
-    const w = row.widths[index]! * scale;
+    const w = row.widths[index]!;
     cursor.page.drawImage(entry.image, {
       x,
       y: cursor.y,
       width: w,
-      height,
+      height: row.height,
     });
     cursor.record({
       kind: "photo",
       person: cursor.currentPerson() ?? undefined,
       page: cursor.pageIndex,
       x,
-      y: cursor.y + height,
+      y: cursor.y + row.height,
       width: w,
       bottom: cursor.y,
-      height,
+      height: row.height,
       storage_path: entry.storage_path,
     });
-    x += w + PDF_LEFTOVER_GAP * scale;
+    x += w + PDF_LEFTOVER_GAP;
   });
   cursor.y -= 10;
+  return items.map((entry) => entry.storage_path);
 }
 
-async function drawMagazineFittedGrid(
+async function drawMagazineEndGrid(
   doc: PDFDocument,
   cursor: PdfCursor,
   photos: CapsuleArchivePhoto[],
   photoByPath: Map<string, Uint8Array>,
-  rowH: number,
+  fonts: CapsulePdfFonts,
+  person: string,
 ) {
-  const packs = packLeftoverRowCounts(photos.length);
+  const items: Array<{ image: PDFImage; storage_path: string }> = [];
+  for (const photo of photos) {
+    const image = await embedPhoto(doc, photoByPath.get(photo.storage_path));
+    if (image) items.push({ image, storage_path: photo.storage_path });
+  }
   let offset = 0;
-  for (const count of packs) {
-    const slice = photos.slice(offset, offset + count);
-    offset += count;
-    await drawMagazinePhotoRow(doc, cursor, slice, photoByPath, rowH);
+  const labelOverflowPage = () => {
+    cursor.wrapped(person, {
+      font: fonts.sans,
+      size: 11,
+      lineGap: 3,
+      color: cursor.palette.accent,
+      paragraphGap: 8,
+    });
+  };
+  while (offset < items.length) {
+    const left = items.slice(offset);
+    const aspects = left.map((entry) => entry.image.width / Math.max(1, entry.image.height));
+    const count = magazineRowCountForMinShort(aspects, CONTENT_WIDTH, PDF_LEFTOVER_GAP);
+    const slice = left.slice(0, Math.max(1, count));
+    const sliceAspects = aspects.slice(0, slice.length);
+    const minH = magazineMinRowHeight(sliceAspects);
+    if (cursor.remaining() < minH + 14) {
+      cursor.forceNewPage();
+      labelOverflowPage();
+    }
+    const fitH = Math.min(MAGAZINE_PHOTO_ROW_H, Math.max(minH, cursor.remaining() - 12));
+    let row = justifiedRowMetrics(sliceAspects, CONTENT_WIDTH, PDF_LEFTOVER_GAP, fitH);
+    if (row.widths.some((width) => Math.min(width, row.height) + 0.05 < MAGAZINE_PHOTO_MIN_SHORT)) {
+      row = justifiedRowMetrics(sliceAspects, CONTENT_WIDTH, PDF_LEFTOVER_GAP, minH);
+    }
+    if (row.height + 8 > cursor.remaining()) {
+      cursor.forceNewPage();
+      labelOverflowPage();
+      continue;
+    }
+    const drawn = drawMagazineJustifiedRow(cursor, slice, row);
+    if (drawn.length === 0) {
+      cursor.forceNewPage();
+      labelOverflowPage();
+      const retry = drawMagazineJustifiedRow(
+        cursor,
+        slice,
+        justifiedRowMetrics(sliceAspects, CONTENT_WIDTH, PDF_LEFTOVER_GAP, minH),
+      );
+      if (retry.length === 0) break;
+      offset += retry.length;
+      continue;
+    }
+    offset += drawn.length;
   }
 }
 

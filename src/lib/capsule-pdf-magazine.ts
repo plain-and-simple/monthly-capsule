@@ -18,7 +18,8 @@ export const MAGAZINE_GRID_EXTRA_MIN = 5;
 export const MAGAZINE_INLINE_MAX = 3;
 export const MAGAZINE_CROP_FACE_BIAS = 0.28;
 export const MAGAZINE_PHOTO_ROW_H = 168;
-export const MAGAZINE_PHOTO_ROW_MIN_H = 72;
+export const MAGAZINE_PHOTO_ROW_MIN_H = 100;
+export const MAGAZINE_PHOTO_MIN_SHORT = 100;
 export const MAGAZINE_LONG_LETTER_CHARS = 520;
 export const MAGAZINE_SIDE_FRACTION = 0.38;
 
@@ -108,22 +109,45 @@ export function selectMagazineTemplate(
 export function magazineCoverPhotos(
   letters: readonly { photos: readonly CapsuleArchivePhoto[] }[],
 ): CapsuleArchivePhoto[] {
-  const heroPaths = new Set<string>();
-  const unused: CapsuleArchivePhoto[] = [];
-  const all: CapsuleArchivePhoto[] = [];
+  const picks: CapsuleArchivePhoto[] = [];
   for (const letter of letters) {
+    if (picks.length >= 4) break;
     const photos = [...letter.photos].sort((a, b) => a.sort_order - b.sort_order);
-    const hero = personHeroPhoto(photos);
-    if (hero) heroPaths.add(hero.storage_path);
-    all.push(...photos);
+    if (photos.length < 2) continue;
+    const landscape = photos.find((photo) => isLandscapePhoto(photo));
+    picks.push(landscape ?? photos[photos.length - 1]!);
   }
-  for (const photo of all) {
-    if (!heroPaths.has(photo.storage_path)) unused.push(photo);
+  return picks;
+}
+
+export function magazineMinRowHeight(
+  aspects: readonly number[],
+  minShort = MAGAZINE_PHOTO_MIN_SHORT,
+): number {
+  let minH = minShort;
+  for (const aspect of aspects) {
+    const ratio = aspect > 0 ? aspect : 1;
+    if (ratio < 1) minH = Math.max(minH, minShort / ratio);
   }
-  if (unused.length >= 3) return unused.slice(0, 4);
-  if (unused.length >= 1) return unused.slice(0, 1);
-  if (all.length >= 3) return all.slice(0, 4);
-  return all.slice(0, 1);
+  return minH;
+}
+
+export function magazineRowCountForMinShort(
+  aspects: readonly number[],
+  contentWidth: number,
+  gap: number,
+  minShort = MAGAZINE_PHOTO_MIN_SHORT,
+): number {
+  let count = Math.min(3, aspects.length);
+  while (count > 1) {
+    const slice = aspects.slice(0, count).map((aspect) => (aspect > 0 ? aspect : 1));
+    const sumA = slice.reduce((sum, aspect) => sum + aspect, 0);
+    const height = (contentWidth - gap * (count - 1)) / Math.max(sumA, 0.001);
+    const shorts = slice.map((aspect) => Math.min(aspect * height, height));
+    if (shorts.every((side) => side + 0.05 >= minShort)) return count;
+    count -= 1;
+  }
+  return Math.min(1, aspects.length);
 }
 
 export function magazineUsesTwoTextColumns(body: string): boolean {

@@ -80,32 +80,34 @@ export const MAGAZINE_VISUAL_LETTERS: VisualLetterSpec[] = [
     ],
   },
   {
-    preferred_name: "Casey Nguyen",
-    body: "I wrote this down so October would still have the smell of that pot.",
-    photos: [
-      { color: "#2f5b4c", width: 900, height: 1350 },
-      { color: "#c47a3a", width: 800, height: 1200 },
-    ],
-  },
-  {
-    preferred_name: "Sam Patel",
-    body: GALLERY_BODY,
-    photos: [
-      { color: "#b5b5b0", width: 800, height: 1200 },
-      { color: "#c47a3a", width: 700, height: 1100 },
-      { color: "#8a6a32", width: 900, height: 1400 },
-      { color: "#2f5b4c", width: 750, height: 1200 },
-      { color: "#6b2e1f", width: 850, height: 1250 },
-      { color: "#1a1712", width: 820, height: 1280 },
-    ],
-  },
-  {
     preferred_name: "Riley Chen",
     body: KEEP_TARGET_BODY,
     photos: [
       { color: "#2f5b4c", width: 900, height: 1400 },
       { color: "#8a6a32", width: 850, height: 1250 },
     ],
+  },
+  {
+    preferred_name: "Sam Patel",
+    body: GALLERY_BODY,
+    photos: [
+      { color: "#8a6a32", width: 1400, height: 900 },
+      { color: "#b5b5b0", width: 800, height: 1200 },
+      { color: "#c47a3a", width: 700, height: 1100 },
+      { color: "#2f5b4c", width: 750, height: 1200 },
+      { color: "#6b2e1f", width: 850, height: 1250 },
+      { color: "#1a1712", width: 820, height: 1280 },
+    ],
+  },
+  {
+    preferred_name: "Casey Nguyen",
+    body: "I wrote this down so October would still have the smell of that pot.",
+    photos: [],
+  },
+  {
+    preferred_name: "Noah West",
+    body: ONE_LINE_BODY,
+    photos: [{ color: "#2f5b4c", width: 900, height: 1400 }],
   },
   {
     preferred_name: "Quinn Brooks",
@@ -115,6 +117,20 @@ export const MAGAZINE_VISUAL_LETTERS: VisualLetterSpec[] = [
       { color: "#8a6a32", width: 1400, height: 900 },
       { color: "#2f5b4c", width: 900, height: 1300 },
       { color: "#6b2e1f", width: 850, height: 1280 },
+    ],
+  },
+  {
+    preferred_name: "Eden Walsh",
+    body: "Eight pictures from the walk, and almost nothing to say.",
+    photos: [
+      { color: "#1a1712", width: 800, height: 1200 },
+      { color: "#2f5b4c", width: 850, height: 1250 },
+      { color: "#c47a3a", width: 900, height: 1400 },
+      { color: "#8a6a32", width: 750, height: 1200 },
+      { color: "#6b2e1f", width: 820, height: 1280 },
+      { color: "#c43b2e", width: 880, height: 1320 },
+      { color: "#b5b5b0", width: 700, height: 1100 },
+      { color: "#4a3b2a", width: 860, height: 1290 },
     ],
   },
 ];
@@ -211,17 +227,45 @@ export async function buildKeepArchive(
   };
 }
 
-export async function buildVisualArchive(theme: CapsuleTheme): Promise<{
+const COUNT_SWATCHES = [
+  "#2f5b4c",
+  "#c47a3a",
+  "#8a6a32",
+  "#6b2e1f",
+  "#1a1712",
+  "#c43b2e",
+  "#b5b5b0",
+  "#4a3b2a",
+];
+
+/** One member per photo count 0–8 so the once-drawn invariant covers the drop cases. */
+export const MAGAZINE_COUNT_LETTERS: VisualLetterSpec[] = Array.from({ length: 9 }, (_, count) => ({
+  preferred_name: `Count ${count}`,
+  body: count >= 6 ? GALLERY_BODY : count === 0 ? ONE_LINE_BODY : "A short note beside the pictures.",
+  photos: Array.from({ length: count }, (_, index) => {
+    const landscape = count >= 4 && index === 0;
+    return {
+      color: COUNT_SWATCHES[index % COUNT_SWATCHES.length]!,
+      width: landscape ? 1400 : 900,
+      height: landscape ? 900 : 1400,
+    };
+  }),
+}));
+
+export async function buildLettersArchive(
+  theme: CapsuleTheme,
+  specs: readonly VisualLetterSpec[],
+  prefix: string,
+): Promise<{
   archive: CapsuleArchive;
   photos: CapsulePdfPhotoBytes[];
 }> {
   const photos: CapsulePdfPhotoBytes[] = [];
   const letters = [];
-  const specs = theme === "magazine" ? MAGAZINE_VISUAL_LETTERS : VISUAL_LETTERS;
   for (const [letterIndex, spec] of specs.entries()) {
     const letterPhotos = [];
     for (const [photoIndex, swatch] of spec.photos.entries()) {
-      const storage_path = `visual/${theme}/${letterIndex}/${photoIndex}.jpg`;
+      const storage_path = `${prefix}/${theme}/${letterIndex}/${photoIndex}.jpg`;
       photos.push({
         storage_path,
         bytes: await makeSwatchJpeg(
@@ -254,4 +298,11 @@ export async function buildVisualArchive(theme: CapsuleTheme): Promise<{
     }),
     photos,
   };
+}
+
+export async function buildVisualArchive(theme: CapsuleTheme): Promise<{
+  archive: CapsuleArchive;
+  photos: CapsulePdfPhotoBytes[];
+}> {
+  return buildLettersArchive(theme, theme === "magazine" ? MAGAZINE_VISUAL_LETTERS : VISUAL_LETTERS, "visual");
 }

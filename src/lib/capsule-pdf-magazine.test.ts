@@ -5,9 +5,11 @@ import {
   cropRectForAspect,
   magazineCoverPhotos,
   magazineHeroAspect,
+  magazineRowCountForMinShort,
   MAGAZINE_CROP_FACE_BIAS,
   MAGAZINE_HERO_16_9,
   MAGAZINE_HERO_3_2,
+  MAGAZINE_PHOTO_MIN_SHORT,
   magazineUsesTwoTextColumns,
   planMagazinePerson,
   selectMagazineTemplate,
@@ -96,17 +98,15 @@ describe("magazine template selection", () => {
 });
 
 describe("magazine cover, hero crop, and text density", () => {
-  it("uses leftover photos for the cover instead of any person's hero", () => {
+  it("builds the cover from different members and skips anyone who would have no photo left inside", () => {
     expect(
       magazineCoverPhotos([
         { photos: [] },
         {
-          photos: [
-            { storage_path: "late.jpg", width: 10, height: 10, sort_order: 0 },
-          ],
+          photos: [{ storage_path: "only.jpg", width: 10, height: 10, sort_order: 0 }],
         },
-      ]).map((photo) => photo.storage_path),
-    ).toEqual(["late.jpg"]);
+      ]),
+    ).toEqual([]);
     expect(
       magazineCoverPhotos([
         {
@@ -116,7 +116,7 @@ describe("magazine cover, hero crop, and text density", () => {
           ],
         },
       ]).map((photo) => photo.storage_path),
-    ).toEqual(["extra.jpg"]);
+    ).toEqual(["hero.jpg"]);
     expect(
       magazineCoverPhotos([
         {
@@ -127,19 +127,49 @@ describe("magazine cover, hero crop, and text density", () => {
           ],
         },
       ]).map((photo) => photo.storage_path),
-    ).toEqual(["a.jpg"]);
+    ).toEqual(["c.jpg"]);
     const collage = magazineCoverPhotos([
       {
         photos: [
-          { storage_path: "h.jpg", width: 1400, height: 900, sort_order: 0 },
-          { storage_path: "u1.jpg", width: 800, height: 1200, sort_order: 1 },
-          { storage_path: "u2.jpg", width: 800, height: 1200, sort_order: 2 },
-          { storage_path: "u3.jpg", width: 800, height: 1200, sort_order: 3 },
+          { storage_path: "a-land.jpg", width: 1400, height: 900, sort_order: 0 },
+          { storage_path: "a-port.jpg", width: 800, height: 1200, sort_order: 1 },
+        ],
+      },
+      {
+        photos: [
+          { storage_path: "b1.jpg", width: 800, height: 1200, sort_order: 0 },
+          { storage_path: "b2.jpg", width: 800, height: 1200, sort_order: 1 },
+        ],
+      },
+      {
+        photos: [{ storage_path: "c-only.jpg", width: 1400, height: 900, sort_order: 0 }],
+      },
+      {
+        photos: [
+          { storage_path: "d1.jpg", width: 800, height: 1200, sort_order: 0 },
+          { storage_path: "d-land.jpg", width: 1400, height: 900, sort_order: 1 },
+        ],
+      },
+      {
+        photos: [
+          { storage_path: "e1.jpg", width: 800, height: 1200, sort_order: 0 },
+          { storage_path: "e2.jpg", width: 800, height: 1200, sort_order: 1 },
         ],
       },
     ]);
-    expect(collage.map((photo) => photo.storage_path)).toEqual(["u1.jpg", "u2.jpg", "u3.jpg"]);
+    expect(collage.map((photo) => photo.storage_path)).toEqual([
+      "a-land.jpg",
+      "b2.jpg",
+      "d-land.jpg",
+      "e2.jpg",
+    ]);
     expect(magazineCoverPhotos([{ photos: [] }])).toEqual([]);
+  });
+
+  it("drops a row count until every photo's short side stays at least 100pt", () => {
+    expect(magazineRowCountForMinShort([0.66, 0.66, 0.66], 504, 8, MAGAZINE_PHOTO_MIN_SHORT)).toBe(3);
+    expect(magazineRowCountForMinShort([0.66, 0.66, 0.66], 280, 8, MAGAZINE_PHOTO_MIN_SHORT)).toBe(2);
+    expect(magazineRowCountForMinShort([0.66, 0.66, 0.66], 200, 8, MAGAZINE_PHOTO_MIN_SHORT)).toBe(1);
   });
 
   it("does not crop portraits to 3:2 and only assigns a hero aspect to landscapes", () => {
