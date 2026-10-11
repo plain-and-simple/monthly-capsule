@@ -75,6 +75,28 @@ export function weavePhotoSide(index: number): WeaveSide {
   return index % 2 === 0 ? "right" : "left";
 }
 
+const SHORT_LINE_MAX = 80;
+
+export function isShortSingleLine(text: string): boolean {
+  if (!text || text.includes("\n")) return false;
+  if (/^[-*•–—]\s*\S/.test(text) || /^\d+[.)]\s+\S/.test(text)) return true;
+  return text.length <= SHORT_LINE_MAX;
+}
+
+function mergeConsecutiveShortLines(parts: string[]): string[] {
+  const out: string[] = [];
+  for (const part of parts) {
+    const prev = out[out.length - 1];
+    const prevTail = prev?.split("\n").at(-1) ?? "";
+    if (prev != null && isShortSingleLine(prevTail) && isShortSingleLine(part)) {
+      out[out.length - 1] = `${prev}\n${part}`;
+    } else {
+      out.push(part);
+    }
+  }
+  return out;
+}
+
 export function letterParagraphs(body: string): string[] {
   const normalized = body.replace(/\r\n/g, "\n").trim();
   if (!normalized) return [];
@@ -87,7 +109,8 @@ export function letterParagraphs(body: string): string[] {
     .split("\n")
     .map((line) => line.trim())
     .filter(Boolean);
-  return lines.length > 0 ? lines : [normalized];
+  if (lines.length <= 1) return lines.length > 0 ? lines : [normalized];
+  return mergeConsecutiveShortLines(lines);
 }
 
 export function plateLabel(index: number): string {
