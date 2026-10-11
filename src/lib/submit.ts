@@ -1,3 +1,5 @@
+import { PHOTO_COMPRESS_FAILED, PhotoCompressError } from "@/lib/photo-compress";
+
 export const SUBMIT_STATUSES = ["draft", "submitted"] as const;
 export type SubmitStatus = (typeof SUBMIT_STATUSES)[number];
 
@@ -147,6 +149,323 @@ export const POSTGRES_UNIQUE_VIOLATION = "23505";
 
 export function isUniqueConstraintError(error: { code?: string | null } | null | undefined): boolean {
   return String(error?.code ?? "") === POSTGRES_UNIQUE_VIOLATION;
+}
+
+export function newPhotoStorageNonce(): string {
+  return crypto.randomUUID().replace(/-/g, "").slice(0, 8);
+}
+
+export function photoStoragePath(input: {
+  groupId: string;
+  monthId: string;
+  submissionId: string;
+  sortOrder: number;
+  ext: string;
+  nonce: string;
+}): string {
+  return `${input.groupId}/${input.monthId}/${input.submissionId}/${input.nonce}-${input.sortOrder}.${input.ext}`;
+}
+
+export type StoredPhotoRef = {
+  id: string;
+  storage_path: string;
+};
+
+export function splitKeptAndDroppedPhotos(
+  oldPhotos: readonly StoredPhotoRef[],
+  keepPaths: readonly string[],
+): { kept: StoredPhotoRef[]; dropped: StoredPhotoRef[] } {
+  const kept = oldPhotos.filter((photo) => keepPaths.includes(photo.storage_path));
+  const dropped = oldPhotos.filter((photo) => !keepPaths.includes(photo.storage_path));
+  return { kept, dropped };
+}
+
+export type SubmitPhotoFailureStage = "compress" | "upload" | "insert";
+
+export function submitPhotoFailureLog(input: {
+  groupId: string;
+  photoIndex: number;
+  stage: SubmitPhotoFailureStage;
+  error: unknown;
+}): {
+  message: string;
+  context: {
+    groupId: string;
+    photoIndex: number;
+    stage: SubmitPhotoFailureStage;
+    errorName: string;
+  };
+} {
+  const errorName =
+    input.error instanceof Error
+      ? input.error.name
+      : typeof input.error === "object" && input.error && "name" in input.error
+        ? String((input.error as { name?: string }).name ?? "Error")
+        : "Error";
+  return {
+    message: "submitLetter photo failed",
+    context: {
+      groupId: input.groupId,
+      photoIndex: input.photoIndex,
+      stage: input.stage,
+      errorName,
+    },
+  };
+}
+
+export function logSubmitPhotoFailure(input: {
+  groupId: string;
+  photoIndex: number;
+  stage: SubmitPhotoFailureStage;
+  error: unknown;
+}): void {
+  const log = submitPhotoFailureLog(input);
+  console.error(log.message, log.context);
+}
+
+/**
+ * After a failed Submit, keep the letter as a draft (so the text is not lost)
+ * unless the row was already submitted. A resubmit failure leaves the earlier
+ * submitted body and photos exactly as they were. Draft or missing rows stay
+ * Not yet on the group-home roster.
+ */
+export function failedSubmitSnapshot(input: {
+  existing: { status?: string | null; body: string } | null;
+  attemptedBody: string;
+  existingPhotos: readonly StoredPhotoRef[];
+}): {
+  persistDraft: boolean;
+  status: SubmitStatus | null;
+  body: string;
+  photos: StoredPhotoRef[];
+  rosterSubmitted: boolean;
+} {
+  const alreadySubmitted = (input.existing?.status ?? null) === "submitted";
+  if (alreadySubmitted) {
+    return {
+      persistDraft: false,
+      status: "submitted",
+      body: input.existing!.body,
+      photos: [...input.existingPhotos],
+      rosterSubmitted: true,
+    };
+  }
+  return {
+    persistDraft: true,
+    status: "draft",
+    body: input.attemptedBody,
+    photos: [...input.existingPhotos],
+    rosterSubmitted: false,
+  };
+}
+
+/** Submitted status is last. Dropped photos are deleted only after that write. */
+export const SUBMIT_COMMIT_ORDER = [
+  "persist_draft",
+  "compress",
+  "upload",
+  "insert_photos",
+  "write_submitted",
+  "delete_dropped",
+] as const;
+
+export type SubmitPhotoBytes = {
+  buffer: Uint8Array;
+  contentType: string;
+  width: number;
+  height: number;
+  bytes: number;
+};
+
+export type SubmitPhotoRow = {
+  submission_id: string;
+  storage_path: string;
+  width: number;
+  height: number;
+  bytes: number;
+  sort_order: number;
+};
+
+export type SubmitCommitDeps = {
+  compressFile: (index: number, bytes: Uint8Array) => Promise<SubmitPhotoBytes>;
+  uploadPhoto: (
+    path: string,
+    photo: SubmitPhotoBytes,
+  ) => Promise<{ error?: { name?: string } | null }>;
+  loadPhotos: (submissionId: string) => Promise<StoredPhotoRef[]>;
+  insertPhotoRows: (rows: SubmitPhotoRow[]) => Promise<{ error?: { name?: string } | null }>;
+  writeSubmission: (input: {
+    existingId?: string;
+    patch: ReturnType<typeof nextSubmissionWrite>;
+    requireNotSubmitted?: boolean;
+  }) => Promise<{ id: string; applied: boolean } | { error: string }>;
+  deleteDroppedPhotos: (dropped: StoredPhotoRef[]) => Promise<void>;
+  cleanupUploads: (paths: string[]) => Promise<void>;
+  rollbackNewPhotos: (paths: string[]) => Promise<void>;
+  makeNonce: () => string;
+  photoExt: (contentType: string) => string;
+  logPhotoFailure: (input: {
+    photoIndex: number;
+    stage: SubmitPhotoFailureStage;
+    error: unknown;
+  }) => void;
+};
+
+export function compressFailureMessage(error: unknown): string {
+  return error instanceof PhotoCompressError ? error.message : PHOTO_COMPRESS_FAILED;
+}
+
+/** DB rows first, then storage. A leftover object is safer than a row pointing at a missing file. */
+export const DROPPED_PHOTO_DELETE_ORDER = ["rows", "storage"] as const;
+
+export async function runDroppedPhotoCleanup(input: {
+  dropped: readonly StoredPhotoRef[];
+  deleteRows: (ids: string[]) => Promise<void>;
+  deleteObjects: (paths: string[]) => Promise<void>;
+  onError?: (error: unknown) => void;
+}): Promise<void> {
+  if (input.dropped.length === 0) return;
+  try {
+    await input.deleteRows(input.dropped.map((photo) => photo.id));
+    await input.deleteObjects(input.dropped.map((photo) => photo.storage_path));
+  } catch (error) {
+    input.onError?.(error);
+  }
+}
+
+/**
+ * Photo work first. Mark submitted only after uploads and photo rows succeed.
+ * A first Submit that later fails still keeps the letter as a draft. A failed
+ * resubmit does not rewrite the earlier submitted body or photos.
+ */
+export async function runSubmitPhotoCommit(input: {
+  existing: { id: string; status: string | null; body: string } | null;
+  body: string;
+  intent: SubmitStatus;
+  fileCount: number;
+  keepPaths: string[];
+  photosTouched: boolean;
+  now: string;
+  groupId: string;
+  monthId: string;
+  readFileBytes: (index: number) => Promise<Uint8Array>;
+  deps: SubmitCommitDeps;
+}): Promise<{ ok: true; status: SubmitStatus } | { error: string }> {
+  const alreadySubmitted = (input.existing?.status ?? null) === "submitted";
+  const needsPhotoWork = input.fileCount > 0 || input.photosTouched;
+
+  let existingId = input.existing?.id;
+  let existingStatus = input.existing?.status ?? null;
+
+  if (needsPhotoWork && !alreadySubmitted) {
+    const draftPatch = nextSubmissionWrite({
+      existing: input.existing ? { status: input.existing.status } : null,
+      body: input.body,
+      intent: "draft",
+      now: input.now,
+    });
+    const saved = await input.deps.writeSubmission({
+      existingId,
+      patch: draftPatch,
+      requireNotSubmitted: true,
+    });
+    if ("error" in saved) return { error: saved.error };
+    existingId = saved.id;
+    existingStatus = saved.applied ? "draft" : "submitted";
+  }
+
+  if (!needsPhotoWork) {
+    const patch = nextSubmissionWrite({
+      existing: input.existing ? { status: input.existing.status } : null,
+      body: input.body,
+      intent: input.intent,
+      now: input.now,
+    });
+    const written = await input.deps.writeSubmission({
+      existingId: input.existing?.id,
+      patch,
+    });
+    if ("error" in written) return { error: written.error };
+    return { ok: true, status: input.intent };
+  }
+
+  const compressed: SubmitPhotoBytes[] = [];
+  for (let i = 0; i < input.fileCount; i += 1) {
+    try {
+      const bytes = await input.readFileBytes(i);
+      compressed.push(await input.deps.compressFile(i, bytes));
+    } catch (error) {
+      input.deps.logPhotoFailure({ photoIndex: i, stage: "compress", error });
+      return { error: compressFailureMessage(error) };
+    }
+  }
+
+  if (!existingId) {
+    return { error: "Could not save." };
+  }
+
+  const oldPhotos = await input.deps.loadPhotos(existingId);
+  const { kept, dropped } = splitKeptAndDroppedPhotos(oldPhotos, input.keepPaths);
+  const uploadedPaths: string[] = [];
+  const rows: SubmitPhotoRow[] = [];
+
+  for (let i = 0; i < compressed.length; i += 1) {
+    const photo = compressed[i]!;
+    const storagePath = photoStoragePath({
+      groupId: input.groupId,
+      monthId: input.monthId,
+      submissionId: existingId,
+      sortOrder: kept.length + i,
+      ext: input.deps.photoExt(photo.contentType),
+      nonce: input.deps.makeNonce(),
+    });
+    const { error: uploadError } = await input.deps.uploadPhoto(storagePath, photo);
+    if (uploadError) {
+      input.deps.logPhotoFailure({ photoIndex: i, stage: "upload", error: uploadError });
+      await input.deps.cleanupUploads(uploadedPaths);
+      return { error: "Could not store photo." };
+    }
+    uploadedPaths.push(storagePath);
+    rows.push({
+      submission_id: existingId,
+      storage_path: storagePath,
+      width: photo.width,
+      height: photo.height,
+      bytes: photo.bytes,
+      sort_order: kept.length + i,
+    });
+  }
+
+  if (rows.length > 0) {
+    const { error: insertError } = await input.deps.insertPhotoRows(rows);
+    if (insertError) {
+      input.deps.logPhotoFailure({ photoIndex: 0, stage: "insert", error: insertError });
+      await input.deps.cleanupUploads(uploadedPaths);
+      return { error: "Could not save photos." };
+    }
+  }
+
+  const patch = nextSubmissionWrite({
+    existing: { status: existingStatus },
+    body: input.body,
+    intent: input.intent,
+    now: input.now,
+  });
+  const written = await input.deps.writeSubmission({ existingId, patch });
+  if ("error" in written) {
+    await input.deps.rollbackNewPhotos(uploadedPaths);
+    return { error: written.error };
+  }
+
+  try {
+    await input.deps.deleteDroppedPhotos(dropped);
+  } catch (error) {
+    console.error("submitLetter cleanup failed", {
+      groupId: input.groupId,
+      errorName: error instanceof Error ? error.name : "Error",
+    });
+  }
+  return { ok: true, status: input.intent };
 }
 
 /**

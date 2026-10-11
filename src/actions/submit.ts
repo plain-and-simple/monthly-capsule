@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { membershipIsActive, submitBlockedReason } from "@/lib/account";
 import { MAX_PHOTOS, PHOTO_BUCKET } from "@/lib/constants";
 import { ensureMonth } from "@/lib/compile";
-import { PhotoCompressError, storedPhotoExtension } from "@/lib/photo-compress";
+import { storedPhotoExtension } from "@/lib/photo-compress";
 import { collectPhotoFiles, validatePhotoList } from "@/lib/photo-files";
 import { compressPhotoForStorage } from "@/lib/photo-ingest";
 import { deleteStoredPhotos } from "@/lib/photos";
@@ -14,9 +14,12 @@ import { requireGroupMember } from "@/lib/session";
 import { SUBMIT_EMPTY, PHOTOS_MAX } from "@/lib/copy";
 import {
   isUniqueConstraintError,
+  logSubmitPhotoFailure,
+  newPhotoStorageNonce,
   nextAutosaveWrite,
-  nextSubmissionWrite,
   parseSubmitIntent,
+  runDroppedPhotoCleanup,
+  runSubmitPhotoCommit,
   submissionHasContent,
   type SubmitStatus,
 } from "@/lib/submit";
@@ -91,106 +94,116 @@ export async function submitLetter(
       .maybeSingle();
 
     const now = new Date().toISOString();
-    const patch = nextSubmissionWrite({
-      existing: existing ? { status: (existing.status as string | null) ?? null } : null,
+    const filesToStore = files.slice(0, MAX_PHOTOS - keepPaths.length);
+
+    const result = await runSubmitPhotoCommit({
+      existing: existing
+        ? {
+            id: existing.id as string,
+            status: (existing.status as string | null) ?? null,
+            body: String(existing.body ?? ""),
+          }
+        : null,
       body,
       intent,
+      fileCount: filesToStore.length,
+      keepPaths,
+      photosTouched,
       now,
+      groupId,
+      monthId: month.id,
+      readFileBytes: async (index) => Buffer.from(await filesToStore[index]!.arrayBuffer()),
+      deps: {
+        compressFile: async (_index, bytes) => compressPhotoForStorage(Buffer.from(bytes)),
+        uploadPhoto: async (path, photo) => {
+          const { error } = await admin.storage.from(PHOTO_BUCKET).upload(path, photo.buffer, {
+            contentType: photo.contentType,
+            upsert: false,
+          });
+          return { error };
+        },
+        loadPhotos: async (submissionId) => {
+          const { data } = await admin
+            .from("photos")
+            .select("id, storage_path")
+            .eq("submission_id", submissionId);
+          return (data ?? []).map((row) => ({
+            id: row.id as string,
+            storage_path: row.storage_path as string,
+          }));
+        },
+        insertPhotoRows: async (rows) => {
+          const { error } = await admin.from("photos").insert(rows);
+          return { error };
+        },
+        writeSubmission: async ({ existingId, patch, requireNotSubmitted }) => {
+          if (existingId) {
+            const query = admin.from("submissions").update(patch).eq("id", existingId);
+            if (requireNotSubmitted) {
+              const { data: updated, error } = await query
+                .neq("status", "submitted")
+                .select("id")
+                .maybeSingle();
+              if (error) return { error: "Could not save." };
+              if (!updated) return { id: existingId, applied: false };
+              return { id: existingId, applied: true };
+            }
+            const { error } = await query;
+            if (error) return { error: "Could not save." };
+            return { id: existingId, applied: true };
+          }
+          const { data: created, error } = await admin
+            .from("submissions")
+            .insert({
+              month_id: month.id,
+              member_id: member.id,
+              ...patch,
+            })
+            .select("id")
+            .single();
+          if (error || !created) return { error: "Could not save." };
+          return { id: created.id as string, applied: true };
+        },
+        deleteDroppedPhotos: async (dropped) => {
+          await runDroppedPhotoCleanup({
+            dropped,
+            deleteRows: async (ids) => {
+              if (ids.length === 0) return;
+              const { error } = await admin.from("photos").delete().in("id", ids);
+              if (error) throw error;
+            },
+            deleteObjects: async (paths) => {
+              await deleteStoredPhotos(paths);
+            },
+            onError: (error) => {
+              console.error("submitLetter cleanup failed", {
+                groupId,
+                errorName: error instanceof Error ? error.name : "Error",
+              });
+            },
+          });
+        },
+        cleanupUploads: async (paths) => {
+          await deleteStoredPhotos(paths);
+        },
+        rollbackNewPhotos: async (paths) => {
+          if (paths.length === 0) return;
+          await admin.from("photos").delete().in("storage_path", paths);
+          await deleteStoredPhotos(paths);
+        },
+        makeNonce: newPhotoStorageNonce,
+        photoExt: storedPhotoExtension,
+        logPhotoFailure: ({ photoIndex, stage, error }) => {
+          logSubmitPhotoFailure({ groupId, photoIndex, stage, error });
+        },
+      },
     });
-    let submissionId: string;
 
-    if (existing) {
-      const { error } = await admin.from("submissions").update(patch).eq("id", existing.id);
-      if (error) return { error: "Could not save." };
-      submissionId = existing.id;
-    } else {
-      const { data: created, error } = await admin
-        .from("submissions")
-        .insert({
-          month_id: month.id,
-          member_id: member.id,
-          ...patch,
-        })
-        .select("id")
-        .single();
-      if (error || !created) return { error: "Could not save." };
-      submissionId = created.id;
-    }
-
-    if (files.length > 0 || photosTouched) {
-      const compressed = [];
-      for (const file of files.slice(0, MAX_PHOTOS - keepPaths.length)) {
-        try {
-          compressed.push(await compressPhotoForStorage(Buffer.from(await file.arrayBuffer())));
-        } catch (error) {
-          const message =
-            error instanceof PhotoCompressError ? error.message : "Could not compress that photo. Try another.";
-          return { error: message };
-        }
-      }
-
-      const { data: oldPhotos } = await admin
-        .from("photos")
-        .select("id, storage_path")
-        .eq("submission_id", submissionId);
-
-      const kept = (oldPhotos ?? []).filter((photo) => keepPaths.includes(photo.storage_path as string));
-      const dropped = (oldPhotos ?? []).filter((photo) => !keepPaths.includes(photo.storage_path as string));
-      await deleteStoredPhotos(dropped.map((photo) => photo.storage_path as string));
-      if (dropped.length > 0) {
-        await admin
-          .from("photos")
-          .delete()
-          .in(
-            "id",
-            dropped.map((photo) => photo.id as string),
-          );
-      }
-
-      const rows: {
-        submission_id: string;
-        storage_path: string;
-        width: number;
-        height: number;
-        bytes: number;
-        sort_order: number;
-      }[] = [];
-
-      for (let i = 0; i < compressed.length; i += 1) {
-        const photo = compressed[i]!;
-        const ext = storedPhotoExtension(photo.contentType);
-        const sortOrder = kept.length + i;
-        const storagePath = `${groupId}/${month.id}/${submissionId}/${sortOrder}.${ext}`;
-
-        const { error: uploadError } = await admin.storage.from(PHOTO_BUCKET).upload(storagePath, photo.buffer, {
-          contentType: photo.contentType,
-          upsert: true,
-        });
-        if (uploadError) {
-          return { error: "Could not store photo." };
-        }
-
-        rows.push({
-          submission_id: submissionId,
-          storage_path: storagePath,
-          width: photo.width,
-          height: photo.height,
-          bytes: photo.bytes,
-          sort_order: sortOrder,
-        });
-      }
-
-      if (rows.length > 0) {
-        const { error: photoInsertError } = await admin.from("photos").insert(rows);
-        if (photoInsertError) {
-          return { error: "Could not save photos." };
-        }
-      }
-    }
+    if ("error" in result) return { error: result.error };
 
     revalidatePath(`/g/${groupId}`);
     revalidatePath(`/g/${groupId}/submit`);
-    return { ok: true, status: intent };
+    return { ok: true, status: result.status };
   } catch (error) {
     // redirect() / notFound() use a digest; rethrow those. ensureMonth and
     // photo/storage failures must not become the Next.js digest 500 page.

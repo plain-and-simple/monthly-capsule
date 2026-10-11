@@ -25,6 +25,10 @@ describe("submit model A UI", () => {
     expect(source).toContain("PHOTOS_MAX");
     expect(source).toContain("of {MAX_PHOTOS} photos.");
     expect(source).toContain('role="alert"');
+    expect(source).toContain("SUBMIT_PREPARING_PHOTOS");
+    expect(source).toContain("preparingPhotos");
+    expect(source).toContain("setPreparingPhotos(true)");
+    expect(source).toMatch(/state\?\.error[\s\S]{0,80}role="alert"/);
     expect(source).toContain("value={body}");
     expect(source).toContain("visibleSubmitLetter");
     expect(source).toContain("SUBMIT_IN_HEADING");
