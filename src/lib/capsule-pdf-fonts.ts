@@ -3,8 +3,9 @@ import { join } from "node:path";
 import { inflateSync } from "node:zlib";
 import fontkit from "@pdf-lib/fontkit";
 import type { PDFDocument, PDFFont, PDFPage, RGB } from "pdf-lib";
+import subsetFont from "subset-font";
 
-export const CAPSULE_PDF_PRODUCER = "monthly-capsule-layout/2";
+export const CAPSULE_PDF_PRODUCER = "monthly-capsule-layout/3";
 
 /** Traced onto the Vercel function disk next to process.cwd(); never resolve from the bundled module URL. */
 export const PDF_FONTS_DIR = join(process.cwd(), "src/lib/pdf-fonts");
@@ -14,7 +15,7 @@ const FONT_FILES = {
   serifBold: "LiberationSerif-Bold.ttf",
   serifItalic: "LiberationSerif-Italic.ttf",
   sans: "LiberationSans-Regular.ttf",
-  emoji: "NotoEmoji-Variable.ttf",
+  emoji: "NotoEmoji-Regular.ttf",
 } as const;
 
 export type PdfTypeFace = {
@@ -46,41 +47,115 @@ function asTypeFace(font: PDFFont): PdfTypeFace {
   return { font, glyphs: new Set(font.getCharacterSet()) };
 }
 
-export async function embedCapsulePdfFonts(doc: PDFDocument): Promise<CapsulePdfFonts> {
+type FontkitCmap = { characterSet: number[] };
+
+let emojiCoverage: Set<number> | null = null;
+
+function emojiFontCoverage(): Set<number> {
+  if (emojiCoverage) return emojiCoverage;
+  const face = fontkit.create(readPdfFontFile(FONT_FILES.emoji)) as FontkitCmap;
+  emojiCoverage = new Set(face.characterSet);
+  return emojiCoverage;
+}
+
+export function capsulePdfHaystack(
+  archive: {
+    group_name: string;
+    year_month: string;
+    letters: readonly { preferred_name: string; body: string }[];
+  },
+  extra: readonly string[] = [],
+): string {
+  return [
+    archive.group_name,
+    archive.year_month,
+    ...extra,
+    ...archive.letters.flatMap((letter) => [letter.preferred_name, letter.body]),
+  ].join("\n");
+}
+
+export function collectEmojiCodePoints(text: string, liberation: readonly PdfTypeFace[]): number[] {
+  const missing = new Set<number>();
+  for (const char of text) {
+    const codePoint = char.codePointAt(0);
+    if (codePoint == null || isIgnorablePdfCodePoint(codePoint)) continue;
+    if (liberation.some((face) => face.glyphs.has(codePoint))) continue;
+    missing.add(codePoint);
+  }
+  if (missing.size === 0) return [];
+  const covered = emojiFontCoverage();
+  return [...missing].filter((codePoint) => covered.has(codePoint));
+}
+
+function emptyEmojiFace(liberation: readonly PdfTypeFace[]): PdfTypeFace {
+  return { font: liberation[0]!.font, glyphs: new Set() };
+}
+
+async function embedEmojiFace(
+  doc: PDFDocument,
+  liberation: readonly PdfTypeFace[],
+  text: string,
+): Promise<PdfTypeFace> {
+  try {
+    const codePoints = collectEmojiCodePoints(text, liberation);
+    if (codePoints.length === 0) return emptyEmojiFace(liberation);
+    const subset = await subsetFont(
+      Buffer.from(readPdfFontFile(FONT_FILES.emoji)),
+      String.fromCodePoint(...codePoints),
+      { targetFormat: "sfnt" },
+    );
+    // Already a HarfBuzz subset. fontkit's subsetter corrupts Noto Emoji outlines.
+    return asTypeFace(await doc.embedFont(new Uint8Array(subset), { subset: false }));
+  } catch (error) {
+    console.error("capsule pdf emoji subset failed", {
+      errorName: error instanceof Error ? error.name : "unknown",
+    });
+    return emptyEmojiFace(liberation);
+  }
+}
+
+export async function embedCapsulePdfFonts(doc: PDFDocument, text = ""): Promise<CapsulePdfFonts> {
   doc.registerFontkit(fontkit as never);
-  const [serif, serifBold, serifItalic, sans, emoji] = await Promise.all([
+  const [serif, serifBold, serifItalic, sans] = await Promise.all([
     doc.embedFont(readPdfFontFile(FONT_FILES.serif), { subset: true }),
     doc.embedFont(readPdfFontFile(FONT_FILES.serifBold), { subset: true }),
     doc.embedFont(readPdfFontFile(FONT_FILES.serifItalic), { subset: true }),
     doc.embedFont(readPdfFontFile(FONT_FILES.sans), { subset: true }),
-    doc.embedFont(readPdfFontFile(FONT_FILES.emoji), { subset: true }),
   ]);
+  const liberation = [
+    asTypeFace(serif),
+    asTypeFace(serifBold),
+    asTypeFace(serifItalic),
+    asTypeFace(sans),
+  ] as const;
   return {
-    serif: asTypeFace(serif),
-    serifBold: asTypeFace(serifBold),
-    serifItalic: asTypeFace(serifItalic),
-    sans: asTypeFace(sans),
-    emoji: asTypeFace(emoji),
+    serif: liberation[0],
+    serifBold: liberation[1],
+    serifItalic: liberation[2],
+    sans: liberation[3],
+    emoji: await embedEmojiFace(doc, liberation, text),
   };
 }
 
-function isIgnorableCodePoint(codePoint: number): boolean {
+export function isIgnorablePdfCodePoint(codePoint: number): boolean {
   return (
     codePoint === 0xfe0e ||
     codePoint === 0xfe0f ||
     codePoint === 0x200b ||
     codePoint === 0x200c ||
     codePoint === 0x200d ||
-    codePoint === 0x2060
+    codePoint === 0x2060 ||
+    (codePoint >= 0x1f3fb && codePoint <= 0x1f3ff)
   );
 }
 
 export function pickPdfFont(char: string, primary: PdfTypeFace, fallback: PdfTypeFace): PDFFont | null {
   const codePoint = char.codePointAt(0);
   if (codePoint == null) return null;
+  // Skip VS16 / ZWJ / skin-tone even when a face maps them, so they never draw a box.
+  if (isIgnorablePdfCodePoint(codePoint)) return null;
   if (primary.glyphs.has(codePoint)) return primary.font;
   if (fallback.glyphs.has(codePoint)) return fallback.font;
-  if (isIgnorableCodePoint(codePoint)) return null;
   return primary.font;
 }
 
