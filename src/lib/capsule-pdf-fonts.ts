@@ -87,22 +87,31 @@ export function collectEmojiCodePoints(text: string, liberation: readonly PdfTyp
   return [...missing].filter((codePoint) => covered.has(codePoint));
 }
 
+function emptyEmojiFace(liberation: readonly PdfTypeFace[]): PdfTypeFace {
+  return { font: liberation[0]!.font, glyphs: new Set() };
+}
+
 async function embedEmojiFace(
   doc: PDFDocument,
   liberation: readonly PdfTypeFace[],
   text: string,
 ): Promise<PdfTypeFace> {
-  const codePoints = collectEmojiCodePoints(text, liberation);
-  if (codePoints.length === 0) {
-    return { font: liberation[0]!.font, glyphs: new Set() };
+  try {
+    const codePoints = collectEmojiCodePoints(text, liberation);
+    if (codePoints.length === 0) return emptyEmojiFace(liberation);
+    const subset = await subsetFont(
+      Buffer.from(readPdfFontFile(FONT_FILES.emoji)),
+      String.fromCodePoint(...codePoints),
+      { targetFormat: "sfnt" },
+    );
+    // Already a HarfBuzz subset. fontkit's subsetter corrupts Noto Emoji outlines.
+    return asTypeFace(await doc.embedFont(new Uint8Array(subset), { subset: false }));
+  } catch (error) {
+    console.error("capsule pdf emoji subset failed", {
+      errorName: error instanceof Error ? error.name : "unknown",
+    });
+    return emptyEmojiFace(liberation);
   }
-  const subset = await subsetFont(
-    Buffer.from(readPdfFontFile(FONT_FILES.emoji)),
-    String.fromCodePoint(...codePoints),
-    { targetFormat: "sfnt" },
-  );
-  // Already a HarfBuzz subset. fontkit's subsetter corrupts Noto Emoji outlines.
-  return asTypeFace(await doc.embedFont(new Uint8Array(subset), { subset: false }));
 }
 
 export async function embedCapsulePdfFonts(doc: PDFDocument, text = ""): Promise<CapsulePdfFonts> {

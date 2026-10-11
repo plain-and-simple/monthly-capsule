@@ -225,6 +225,8 @@ describe("static emoji font", () => {
     const source = readFileSync(new URL("./capsule-pdf-fonts.ts", import.meta.url), "utf8");
     expect(source).toContain("subsetFont");
     expect(source).toMatch(/embedFont\(new Uint8Array\(subset\),\s*\{\s*subset:\s*false/);
+    expect(source).toContain("capsule pdf emoji subset failed");
+    expect(source).toContain("errorName");
 
     const doc = await PDFDocument.create();
     const fonts = await embedCapsulePdfFonts(doc, EMOJI_LINE);
