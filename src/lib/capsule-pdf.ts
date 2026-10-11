@@ -1022,6 +1022,15 @@ function magazineFeatureHeight(plan: ReturnType<typeof planMagazinePerson>): num
   return 0;
 }
 
+function magazineMinFeatureHeight(plan: ReturnType<typeof planMagazinePerson>): number {
+  if (plan.hero) return MAGAZINE_PHOTO_MIN_SHORT;
+  if (plan.columnPhoto) {
+    const aspect = plan.columnPhoto.width / Math.max(1, plan.columnPhoto.height);
+    return MAGAZINE_PHOTO_MIN_SHORT / Math.min(aspect, 1);
+  }
+  return 0;
+}
+
 function magazinePersonStartHeight(
   letter: CapsuleArchiveLetter,
   fonts: CapsulePdfFonts,
@@ -1038,9 +1047,9 @@ function magazinePersonStartHeight(
     ? estimateWrappedHeight(first, fonts.serif, fonts.emoji, size, MAGAZINE_BODY_LINE_GAP, insetW)
     : 0;
   const nameH = MAGAZINE_NAME_SIZE + PDF_HEADING_GAP + 12;
-  const featureH = magazineFeatureHeight(plan);
-  if (plan.hero) return nameH + featureH + textH + 16;
-  return nameH + Math.max(textH, featureH) + 16;
+  const featureH = magazineMinFeatureHeight(plan);
+  if (plan.hero) return nameH + featureH + Math.min(textH, 64) + 16;
+  return nameH + Math.max(Math.min(textH, 64), featureH) + 16;
 }
 
 async function drawMagazinePerson(
@@ -1070,11 +1079,33 @@ async function drawMagazinePerson(
     ? estimateWrappedHeight(firstText, fonts.serif, fonts.emoji, bodySize, MAGAZINE_BODY_LINE_GAP, insetW)
     : 0;
   const placed = new Set<string>();
+  const keepFeature = Math.min(
+    magazineFeatureHeight(plan),
+    Math.max(
+      magazineMinFeatureHeight(plan),
+      cursor.remaining() - MAGAZINE_NAME_SIZE - PDF_HEADING_GAP - Math.min(firstTextHeight, 72) - 24,
+    ),
+  );
 
-  drawMagazineName(cursor, letter.preferred_name, display, firstTextHeight, magazineFeatureHeight(plan));
+  drawMagazineName(cursor, letter.preferred_name, display, Math.min(firstTextHeight, 72), keepFeature);
 
-  if (plan.hero && (await drawMagazineHero(doc, cursor, plan.hero, photoByPath, magazineFeatureHeight(plan)))) {
-    placed.add(plan.hero.storage_path);
+  const extraCount = photos.length - (plan.hero || plan.columnPhoto ? 1 : 0);
+  const reserveGrid = extraCount > 0 ? MAGAZINE_PHOTO_MIN_SHORT + 80 : 0;
+  const restTextH = paragraphs.slice(plan.hero ? 0 : 1).reduce((sum, paragraph) => {
+    return (
+      sum +
+      estimateWrappedHeight(paragraph, fonts.serif, fonts.emoji, bodySize, MAGAZINE_BODY_LINE_GAP, CONTENT_WIDTH) +
+      PDF_PARAGRAPH_GAP
+    );
+  }, 0);
+  if (plan.hero) {
+    const heroBudget = Math.min(
+      magazineFeatureHeight(plan),
+      Math.max(MAGAZINE_PHOTO_MIN_SHORT, cursor.remaining() - reserved - reserveGrid - restTextH - 16),
+    );
+    if (await drawMagazineHero(doc, cursor, plan.hero, photoByPath, heroBudget)) {
+      placed.add(plan.hero.storage_path);
+    }
   } else if (plan.columnPhoto) {
     const drawn = await drawMagazineFeaturePortrait(
       doc,
@@ -1082,6 +1113,7 @@ async function drawMagazinePerson(
       plan.columnPhoto,
       photoByPath,
       featureSide,
+      reserveGrid,
     );
     if (drawn) placed.add(plan.columnPhoto.storage_path);
   }
@@ -1249,12 +1281,13 @@ async function drawMagazineFeaturePortrait(
   photo: CapsuleArchivePhoto,
   photoByPath: Map<string, Uint8Array>,
   side: "left" | "right",
+  reserveBottom = 0,
 ): Promise<boolean> {
   const image = await embedPhoto(doc, photoByPath.get(photo.storage_path));
   if (!image) return false;
   const colW = CONTENT_WIDTH * MAGAZINE_SIDE_FRACTION;
   const nativeH = colW * (image.height / Math.max(1, image.width));
-  const photoH = Math.min(nativeH, cursor.remaining() - 16, MAGAZINE_FEATURE_MAX_H);
+  const photoH = Math.min(nativeH, cursor.remaining() - 16 - reserveBottom, MAGAZINE_FEATURE_MAX_H);
   const photoW = photoH * (image.width / image.height);
   if (Math.min(photoW, photoH) + 0.05 < MAGAZINE_PHOTO_MIN_SHORT) return false;
   if (cursor.y - photoH < cursor.contentBottom()) return false;
@@ -1514,6 +1547,30 @@ function drawMagazineJustifiedRow(
   return items.map((entry) => entry.storage_path);
 }
 
+function magazineFillRow(
+  items: Array<{ image: PDFImage; storage_path: string }>,
+  leftover: number,
+): { items: Array<{ image: PDFImage; storage_path: string }>; row: { height: number; widths: number[]; usedWidth: number } } | null {
+  if (items.length === 0 || leftover < MAGAZINE_PHOTO_MIN_SHORT + 6) return null;
+  const aspects = items.map((entry) => entry.image.width / Math.max(1, entry.image.height));
+  let count = magazineRowCountForMinShort(aspects, CONTENT_WIDTH, PDF_LEFTOVER_GAP, MAGAZINE_PHOTO_MIN_SHORT);
+  if (leftover > MAGAZINE_PHOTO_ROW_H + MAGAZINE_PHOTO_MIN_SHORT + 24 && items.length >= 2) {
+    count = Math.min(count, items.length === 2 ? 1 : 2);
+  }
+  while (count >= 1) {
+    const slice = items.slice(0, count);
+    const sliceAspects = aspects.slice(0, count);
+    const budget = Math.min(MAGAZINE_PHOTO_ROW_H, leftover - 8);
+    const row = justifiedRowMetrics(sliceAspects, CONTENT_WIDTH, PDF_LEFTOVER_GAP, budget);
+    const shorts = row.widths.map((width) => Math.min(width, row.height));
+    if (row.height + 6 <= leftover && shorts.every((side) => side + 0.05 >= MAGAZINE_PHOTO_MIN_SHORT)) {
+      return { items: slice, row };
+    }
+    count -= 1;
+  }
+  return null;
+}
+
 async function drawMagazineEndGrid(
   doc: PDFDocument,
   cursor: PdfCursor,
@@ -1541,43 +1598,17 @@ async function drawMagazineEndGrid(
   while (offset < items.length) {
     const left = items.slice(offset);
     const aspects = left.map((entry) => entry.image.width / Math.max(1, entry.image.height));
-    const count = magazineRowCountForMinShort(
-      aspects,
-      CONTENT_WIDTH,
-      PDF_LEFTOVER_GAP,
-      MAGAZINE_PHOTO_MIN_SHORT,
-    );
-    const slice = left.slice(0, Math.max(1, count));
-    const sliceAspects = aspects.slice(0, slice.length);
-    const minH = magazineMinRowHeight(sliceAspects, MAGAZINE_PHOTO_MIN_SHORT);
     const leftover = cursor.remaining() - leaveBottom;
-    if (leftover < minH + 12) {
+    const fitted = magazineFillRow(left, leftover);
+    if (!fitted) {
       cursor.forceNewPage();
       labelOverflowPage();
       continue;
     }
-    const lastRow = slice.length === left.length;
-    const fillH = Math.min(MAGAZINE_PHOTO_ROW_H, lastRow ? leftover - 12 : leftover - 12);
-    let row = justifiedRowMetrics(sliceAspects, CONTENT_WIDTH, PDF_LEFTOVER_GAP, Math.max(minH, fillH));
-    if (row.widths.some((width) => Math.min(width, row.height) + 0.05 < MAGAZINE_PHOTO_MIN_SHORT)) {
-      row = justifiedRowMetrics(sliceAspects, CONTENT_WIDTH, PDF_LEFTOVER_GAP, minH);
-    }
-    if (row.height + 8 > leftover) {
-      cursor.forceNewPage();
-      labelOverflowPage();
-      continue;
-    }
-    const drawn = drawMagazineJustifiedRow(cursor, slice, row);
+    const drawn = drawMagazineJustifiedRow(cursor, fitted.items, fitted.row);
     if (drawn.length === 0) {
       cursor.forceNewPage();
       labelOverflowPage();
-      const retry = drawMagazineJustifiedRow(
-        cursor,
-        slice,
-        justifiedRowMetrics(sliceAspects, CONTENT_WIDTH, PDF_LEFTOVER_GAP, minH),
-      );
-      if (retry.length === 0) break;
-      offset += retry.length;
       continue;
     }
     offset += drawn.length;
