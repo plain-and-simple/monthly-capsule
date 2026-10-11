@@ -5,7 +5,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { PDFDocument, StandardFonts } from "pdf-lib";
 import sharp from "sharp";
-import { buildCapsuleArchive } from "./capsule-archive";
+import { buildCapsuleArchive, type CapsuleArchive } from "./capsule-archive";
 import {
   buildCapsulePdfBytes,
   capsulePdfFilename,
@@ -51,15 +51,22 @@ import {
   takePdfLine,
   widthOfPdfText,
 } from "./capsule-pdf-fonts";
+import {
+  MAGAZINE_CONTENT_BOTTOM,
+  MAGAZINE_PHOTO_MIN_SHORT,
+  magazineCoverPhotos,
+  selectMagazineTemplate,
+} from "./capsule-pdf-magazine";
 import { DOWNLOAD_PDF_LABEL } from "./copy";
 import {
+  buildLettersArchive,
   buildVisualArchive,
   fillerBody,
   KEEP_TARGET_BODY,
   LONG_RUNON_BODY,
+  MAGAZINE_COUNT_LETTERS,
   TEN_LINE_OPENING,
 } from "./capsule-pdf-fixtures";
-import { CAPSULE_THEMES } from "./capsule-theme";
 import { capsuleTitle } from "./month-version";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -912,47 +919,11 @@ describe("pdf layout locks", () => {
   });
 
   it("never lets a text line box intersect a photo on any theme fixture", async () => {
-    for (const theme of CAPSULE_THEMES) {
+    for (const theme of ["classic", "warm", "minimal", "heritage"] as const) {
       const { archive, photos } = await buildVisualArchive(theme);
       const layout: CapsulePdfLayoutEvent[] = [];
       await buildCapsulePdfBytes({ archive, photos, layout });
-      const texts = layout.filter(
-        (event) =>
-          event.kind === "text" &&
-          event.x != null &&
-          event.width != null &&
-          event.height != null &&
-          event.person,
-      );
-      const images = layout.filter(
-        (event) =>
-          event.kind === "photo" && event.x != null && event.width != null && event.height != null,
-      );
-      expect(texts.length).toBeGreaterThan(0);
-      expect(images.length).toBeGreaterThan(0);
-      for (const line of texts) {
-        for (const image of images) {
-          expect(
-            layoutBoxesOverlap(
-              {
-                page: line.page,
-                x: line.x!,
-                y: line.y,
-                width: line.width!,
-                height: line.height!,
-              },
-              {
-                page: image.page,
-                x: image.x!,
-                y: image.y,
-                width: image.width!,
-                height: image.height!,
-              },
-            ),
-            `${theme} "${line.text}" overlaps a photo on page ${line.page}`,
-          ).toBe(false);
-        }
-      }
+      assertNoTextPhotoOverlap(layout, theme);
     }
   });
 
@@ -1040,6 +1011,376 @@ describe("pdf layout locks", () => {
 
 const LONG_BODY_SNIP =
   "The river path stayed muddy after the storm, so we took the long way around the school and talked about the porch light that has been blinking since August.";
+
+describe("magazine pdf", () => {
+  it("puts a footer with the group name and page number on every page", async () => {
+    const { archive, photos } = await buildVisualArchive("magazine");
+    const layout: CapsulePdfLayoutEvent[] = [];
+    const bytes = await buildCapsulePdfBytes({ archive, photos, layout });
+    const text = pdfExtractText(bytes);
+    const pages = layout.filter((event) => event.kind === "page");
+    const footers = layout.filter((event) => event.kind === "footer");
+    expect(pages.length).toBeGreaterThan(1);
+    expect(footers).toHaveLength(pages.length);
+    expect(footers.every((event) => event.text === "Regression Kitchen")).toBe(true);
+    expect(footers.map((event) => event.name)).toEqual(pages.map((event) => String(event.page)));
+    expect(text).toContain("REGRESSION KITCHEN");
+    expect(text).toContain("October 2026");
+  });
+
+  it("keeps leftover photos in their section and lets short letters share a page", async () => {
+    const jpeg = await tinyJpeg();
+    const layout: CapsulePdfLayoutEvent[] = [];
+    await buildCapsulePdfBytes({
+      archive: buildCapsuleArchive({
+        yearMonth: "2026-10",
+        groupName: "Regression Kitchen",
+        memberCount: 3,
+        theme: "magazine",
+        letters: [
+          {
+            preferred_name: "Alex Rivera",
+            body: "- rye bread\n- two pears\n- leftover mint",
+            photos: [0, 1, 2, 3].map((index) => ({
+              storage_path: `g/a${index}.jpg`,
+              width: index % 2 === 0 ? 1200 : 800,
+              height: index % 2 === 0 ? 800 : 1200,
+              sort_order: index,
+            })),
+          },
+          {
+            preferred_name: "Morgan Blake",
+            body: "The kitchen was quiet except for the pot lid.",
+            photos: [],
+          },
+          {
+            preferred_name: "Jordan Lee",
+            body: "Next short note on the same page.",
+            photos: [],
+          },
+        ],
+      }),
+      photos: [0, 1, 2, 3].map((index) => ({
+        storage_path: `g/a${index}.jpg`,
+        bytes: jpeg,
+      })),
+      layout,
+    });
+    const alex = layout.find((event) => event.kind === "heading" && event.name === "Alex Rivera");
+    const morgan = layout.find((event) => event.kind === "heading" && event.name === "Morgan Blake");
+    const jordan = layout.find((event) => event.kind === "heading" && event.name === "Jordan Lee");
+    const alexPhotos = layout.filter(
+      (event) => event.kind === "photo" && event.person === "Alex Rivera",
+    );
+    expect(alex).toBeTruthy();
+    expect(morgan).toBeTruthy();
+    expect(jordan).toBeTruthy();
+    expect(alexPhotos.length).toBeGreaterThan(0);
+    for (const photo of alexPhotos) {
+      const beforeName =
+        photo.page < morgan!.page || (photo.page === morgan!.page && (photo.bottom ?? 0) > morgan!.y);
+      expect(beforeName).toBe(true);
+    }
+    expect(layout.some((event) => event.kind === "photo" && event.person === "Jordan Lee")).toBe(
+      false,
+    );
+    expect(morgan!.page).toBe(jordan!.page);
+    expect(source("./capsule-pdf.ts")).not.toContain("magazinePullQuote");
+    expect(source("./capsule-pdf.ts")).not.toContain("maybeDrawMagazinePullQuote");
+    expect(source("./capsule-pdf-magazine.ts")).not.toContain("magazinePullQuote");
+  });
+
+  it("keeps the name with its first full paragraph", async () => {
+    const layout: CapsulePdfLayoutEvent[] = [];
+    await buildCapsulePdfBytes({
+      archive: buildCapsuleArchive({
+        yearMonth: "2026-10",
+        groupName: "Regression Kitchen",
+        memberCount: 2,
+        theme: "magazine",
+        letters: [
+          { preferred_name: "Casey Nguyen", body: fillerBody(4), photos: [] },
+          {
+            preferred_name: "Riley Chen",
+            body: KEEP_TARGET_BODY,
+            photos: [],
+          },
+        ],
+      }),
+      photos: [],
+      layout,
+    });
+    const riley = layout.find((event) => event.kind === "heading" && event.name === "Riley Chen");
+    const opening = layout.filter(
+      (event) =>
+        event.kind === "text" &&
+        event.person === "Riley Chen" &&
+        /^Line \d+ stays with the name heading/.test(event.text ?? ""),
+    );
+    expect(riley).toBeTruthy();
+    expect(opening.length).toBeGreaterThanOrEqual(10);
+    expect(opening.every((event) => event.page === riley!.page)).toBe(true);
+    expect(source("./capsule-pdf.ts")).toContain("headingKeepWithNextNeeded");
+    expect(source("./capsule-pdf.ts")).toContain("forceNewPage");
+  });
+
+  it("fills a photo-less cover with the group name, newsletter kicker, month, and contributors", async () => {
+    const bytes = await buildCapsulePdfBytes({
+      archive: buildCapsuleArchive({
+        yearMonth: "2026-10",
+        groupName: "Regression Kitchen",
+        memberCount: 1,
+        theme: "magazine",
+        letters: [{ preferred_name: "Casey Nguyen", body: "Just words.", photos: [] }],
+      }),
+      photos: [],
+    });
+    const text = pdfExtractText(bytes);
+    expect(text).toContain("REGRESSION KITCHEN");
+    expect(text).toContain("newsletter");
+    expect(text).toContain("October 2026");
+    expect(text).toContain("Contributors:");
+    expect(text).toContain("Casey Nguyen");
+  });
+
+  it("renders curly quotes and does not leave an empty hero box", async () => {
+    const layout: CapsulePdfLayoutEvent[] = [];
+    const bytes = await buildCapsulePdfBytes({
+      archive: buildCapsuleArchive({
+        yearMonth: "2026-10",
+        groupName: "Regression Kitchen",
+        memberCount: 1,
+        theme: "magazine",
+        letters: [{ preferred_name: "Casey Nguyen", body: "She said “hello” — it’s fine.", photos: [] }],
+      }),
+      photos: [],
+      layout,
+    });
+    const text = pdfExtractText(bytes);
+    expect(text).toContain("\u201c");
+    expect(text).toContain("hello");
+    expect(text).toContain("\u2019");
+    expect(layout.filter((event) => event.kind === "photo" && event.person === "Casey Nguyen")).toEqual(
+      [],
+    );
+    expect(source("./capsule-pdf.ts")).toContain("embedMagazineDisplayFont");
+    expect(source("./capsule-pdf-fonts.ts")).toContain("Oswald-Bold.ttf");
+  });
+
+  it("uses the magazine fixtures for no-overlap and records content above the footer", async () => {
+    const { archive, photos } = await buildVisualArchive("magazine");
+    const layout: CapsulePdfLayoutEvent[] = [];
+    await buildCapsulePdfBytes({ archive, photos, layout });
+    const images = layout.filter((event) => event.kind === "photo" && event.height);
+    expect(images.length).toBeGreaterThan(0);
+    for (const image of images) {
+      expect(image.bottom ?? 0).toBeGreaterThanOrEqual(MAGAZINE_CONTENT_BOTTOM - 1);
+    }
+    assertNoTextPhotoOverlap(layout, "magazine");
+    assertEveryPhotoDrawnOnce(archive, layout);
+    assertMagazineInsidePhotosMinShort(layout);
+    const coverPaths = new Set(magazineCoverPhotos(archive.letters).map((photo) => photo.storage_path));
+    expect(
+      layout.some(
+        (event) => event.kind === "photo" && event.person && event.storage_path && coverPaths.has(event.storage_path),
+      ),
+    ).toBe(true);
+    expect(selectMagazineTemplate([{ width: 800, height: 1200 }, { width: 800, height: 1200 }])).toBe(
+      "two-column",
+    );
+  });
+
+  it("does not emit photo-only pages or crop a portrait letter photo to 3:2", async () => {
+    const { archive, photos } = await buildVisualArchive("magazine");
+    const layout: CapsulePdfLayoutEvent[] = [];
+    await buildCapsulePdfBytes({ archive, photos, layout });
+    const pages = layout.filter((event) => event.kind === "page");
+    for (const page of pages) {
+      const hasPhoto = layout.some((event) => event.kind === "photo" && event.page === page.page);
+      const hasCopy = layout.some(
+        (event) =>
+          (event.kind === "text" || event.kind === "heading") && event.page === page.page,
+      );
+      if (hasPhoto) {
+        expect(hasCopy, `page ${page.page} is photo-only`).toBe(true);
+      }
+    }
+    const portraitJpeg = await sharp({
+      create: { width: 800, height: 1200, channels: 3, background: "#2f5b4c" },
+    })
+      .jpeg({ quality: 70 })
+      .toBuffer();
+    const portraitLayout: CapsulePdfLayoutEvent[] = [];
+    await buildCapsulePdfBytes({
+      archive: buildCapsuleArchive({
+        yearMonth: "2026-10",
+        groupName: "Regression Kitchen",
+        memberCount: 1,
+        theme: "magazine",
+        letters: [
+          {
+            preferred_name: "Jordan Lee",
+            body: "All phone photos stayed portrait.",
+            photos: [{ storage_path: "g/p0.jpg", width: 800, height: 1200, sort_order: 0 }],
+          },
+        ],
+      }),
+      photos: [{ storage_path: "g/p0.jpg", bytes: new Uint8Array(portraitJpeg) }],
+      layout: portraitLayout,
+    });
+    const placed = portraitLayout.find(
+      (event) => event.kind === "photo" && event.person === "Jordan Lee" && event.width && event.height,
+    );
+    expect(placed).toBeTruthy();
+    expect((placed!.width ?? 0) / Math.max(1, placed!.height ?? 1)).toBeLessThan(1);
+    expect(placed!.width ?? 0).toBeGreaterThan(PDF_CONTENT_WIDTH * 0.4);
+  });
+
+  it("sets long-letter text in two columns on the magazine fixtures", async () => {
+    const { archive, photos } = await buildVisualArchive("magazine");
+    const layout: CapsulePdfLayoutEvent[] = [];
+    await buildCapsulePdfBytes({ archive, photos, layout });
+    const jordan = layout.filter(
+      (event) =>
+        event.kind === "text" &&
+        event.person === "Jordan Lee" &&
+        event.x != null &&
+        event.width != null,
+    );
+    const xs = new Set(jordan.map((event) => Math.round(event.x!)));
+    expect(jordan.length).toBeGreaterThan(4);
+    expect(xs.size).toBeGreaterThanOrEqual(2);
+  });
+
+  it("draws every input photo exactly once for members with 0–8 photos", async () => {
+    const { archive, photos } = await buildLettersArchive("magazine", MAGAZINE_COUNT_LETTERS, "count");
+    const layout: CapsulePdfLayoutEvent[] = [];
+    await buildCapsulePdfBytes({ archive, photos, layout });
+    expect(archive.letters.map((letter) => letter.photos.length)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8]);
+    assertEveryPhotoDrawnOnce(archive, layout);
+    assertMagazineInsidePhotosMinShort(layout);
+    const samLike = archive.letters.find((letter) => letter.photos.length === 6);
+    expect(samLike).toBeTruthy();
+    const drawn = layout.filter(
+      (event) => event.kind === "photo" && event.person === samLike!.preferred_name,
+    );
+    expect(drawn).toHaveLength(6);
+  });
+});
+
+function assertEveryPhotoDrawnOnce(archive: CapsuleArchive, layout: CapsulePdfLayoutEvent[]) {
+  for (const letter of archive.letters) {
+    const matches = layout.filter((event) => {
+      if (event.kind !== "photo") return false;
+      return event.person === letter.preferred_name;
+    });
+    const byPath = new Map<string, number>();
+    let unpathed = 0;
+    for (const event of matches) {
+      if (event.storage_path) {
+        byPath.set(event.storage_path, (byPath.get(event.storage_path) ?? 0) + 1);
+      } else {
+        unpathed += 1;
+      }
+    }
+    for (const [path, count] of byPath) {
+      expect(count, `${letter.preferred_name} ${path}`).toBe(1);
+    }
+    expect(byPath.size + unpathed, letter.preferred_name).toBe(letter.photos.length);
+  }
+}
+
+function assertMagazineInsidePhotosMinShort(layout: CapsulePdfLayoutEvent[]) {
+  const images = layout.filter(
+    (event) => event.kind === "photo" && event.person && event.width != null && event.height != null,
+  );
+  for (const image of images) {
+    expect(
+      Math.min(image.width!, image.height!),
+      image.storage_path ?? image.person,
+    ).toBeGreaterThanOrEqual(MAGAZINE_PHOTO_MIN_SHORT - 0.5);
+  }
+}
+
+function assertNoTextPhotoOverlap(layout: CapsulePdfLayoutEvent[], theme: string) {
+  const texts = layout.filter(
+    (event) =>
+      event.kind === "text" &&
+      event.x != null &&
+      event.width != null &&
+      event.height != null &&
+      event.person,
+  );
+  const images = layout.filter(
+    (event) => event.kind === "photo" && event.x != null && event.width != null && event.height != null,
+  );
+  expect(texts.length).toBeGreaterThan(0);
+  expect(images.length).toBeGreaterThan(0);
+  const imagesByPage = new Map<number, typeof images>();
+  for (const image of images) {
+    const list = imagesByPage.get(image.page) ?? [];
+    list.push(image);
+    imagesByPage.set(image.page, list);
+  }
+  for (const line of texts) {
+    for (const image of imagesByPage.get(line.page) ?? []) {
+      expect(
+        layoutBoxesOverlap(
+          {
+            page: line.page,
+            x: line.x!,
+            y: line.y,
+            width: line.width!,
+            height: line.height!,
+          },
+          {
+            page: image.page,
+            x: image.x!,
+            y: image.y,
+            width: image.width!,
+            height: image.height!,
+          },
+        ),
+        `${theme} "${line.text}" overlaps a photo on page ${line.page}`,
+      ).toBe(false);
+    }
+  }
+}
+
+function stableLayoutEvent(event: CapsulePdfLayoutEvent) {
+  return {
+    kind: event.kind,
+    page: event.page,
+    y: event.y,
+    name: event.name ?? null,
+    person: event.person ?? null,
+    text: event.text ?? null,
+    x: event.x ?? null,
+    width: event.width ?? null,
+    bottom: event.bottom ?? null,
+    height: event.height ?? null,
+    storage_path: event.storage_path ?? null,
+  };
+}
+
+describe("existing themes stay on the #60 layout lock", () => {
+  it("classic, warm, minimal, and heritage layout events match #60 on the shared fixtures", async () => {
+    const lock = JSON.parse(readFileSync(resolve(here, "capsule-pdf-layout-lock.json"), "utf8")) as Record<
+      string,
+      ReturnType<typeof stableLayoutEvent>[]
+    >;
+    for (const theme of ["classic", "warm", "minimal", "heritage"] as const) {
+      const { archive, photos } = await buildVisualArchive(theme);
+      const layout: CapsulePdfLayoutEvent[] = [];
+      await buildCapsulePdfBytes({ archive, photos, layout });
+      expect(layout.map(stableLayoutEvent), theme).toEqual(lock[theme]);
+      assertEveryPhotoDrawnOnce(archive, layout);
+    }
+    const migration = source("../../supabase/migrations/20261011120000_capsule_theme_magazine.sql");
+    expect(migration).toMatch(/^\s*begin;/m);
+    expect(migration).toMatch(/^\s*commit;/m);
+  });
+});
 
 describe("pdf wiring locks", () => {
   it("compile stores a pdf and does not fail the capsule if generation throws", () => {

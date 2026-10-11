@@ -11,6 +11,7 @@ function source(rel: string) {
 }
 import {
   CAPSULE_THEME_CATALOG,
+  CAPSULE_THEMES,
   layoutCapsuleSections,
   layoutPersonSection,
   parseCapsuleTheme,
@@ -40,12 +41,14 @@ const bea = {
 };
 
 describe("capsule theme selection", () => {
-  it("keeps four first-party templates with swatches and names", () => {
+  it("keeps five first-party templates with swatches and names", () => {
+    expect(CAPSULE_THEMES).toEqual(["classic", "warm", "minimal", "heritage", "magazine"]);
     expect(CAPSULE_THEME_CATALOG.map((row) => row.id)).toEqual([
       "classic",
       "warm",
       "minimal",
       "heritage",
+      "magazine",
     ]);
     for (const row of CAPSULE_THEME_CATALOG) {
       expect(row.name).toMatch(/^[A-Z][a-z]+$/);
@@ -57,6 +60,7 @@ describe("capsule theme selection", () => {
   it("persists only known theme ids and defaults the rest to classic", () => {
     expect(parseCapsuleTheme("warm")).toBe("warm");
     expect(parseCapsuleTheme("heritage")).toBe("heritage");
+    expect(parseCapsuleTheme("magazine")).toBe("magazine");
     expect(parseCapsuleTheme("minimal")).toBe("minimal");
     expect(parseCapsuleTheme("classic")).toBe("classic");
     expect(parseCapsuleTheme("comic-sans-scraped")).toBe("classic");
@@ -93,7 +97,7 @@ describe("section-per-person structure", () => {
   });
 
   it("html keeps one section per person for every theme", () => {
-    for (const theme of ["classic", "warm", "minimal", "heritage"] as const) {
+    for (const theme of CAPSULE_THEMES) {
       const html = renderArchiveHtml({
         year_month: "2026-10",
         group_name: "Kitchen",
@@ -117,7 +121,7 @@ describe("section-per-person structure", () => {
 
 describe("theme-owned photo vs text layout", () => {
   it("every theme weaves photos beside the writing", () => {
-    for (const theme of ["classic", "warm", "minimal", "heritage"] as const) {
+    for (const theme of CAPSULE_THEMES) {
       const kinds = layoutPersonSection(theme, ada).map((block) => block.kind);
       expect(kinds[0]).toBe("heading");
       expect(kinds.filter((kind) => kind === "photo")).toHaveLength(2);
@@ -139,6 +143,10 @@ describe("theme-owned photo vs text layout", () => {
     expect(THEME_PHOTO_LAYOUT.heritage).toBe("plates");
     expect(plateLabel(0)).toBe("Plate I");
     expect(plateLabel(1)).toBe("Plate II");
+  });
+
+  it("magazine leftover photos stay a clean grid", () => {
+    expect(THEME_PHOTO_LAYOUT.magazine).toBe("grid");
   });
 
   it("html weaves photos on every theme and keeps leftover chrome distinct", () => {
@@ -174,7 +182,13 @@ describe("theme-owned photo vs text layout", () => {
       theme: "heritage",
       letters: [extra],
     });
-    for (const html of [classic, warm, minimal, heritage]) {
+    const magazine = renderArchiveHtml({
+      year_month: "2026-10",
+      group_name: "Kitchen",
+      theme: "magazine",
+      letters: [extra],
+    });
+    for (const html of [classic, warm, minimal, heritage, magazine]) {
       expect(html).toContain('data-layout="photos-woven"');
       expect(html).toContain("letter__run");
       expect(html).toContain("letter__photo--weave");
@@ -186,7 +200,8 @@ describe("theme-owned photo vs text layout", () => {
     expect(minimal).toContain("letter__photos--strip");
     expect(heritage).toContain("letter__plate");
     expect(heritage).toContain("Plate I");
-    expect(new Set([classic, warm, minimal, heritage]).size).toBe(4);
+    expect(magazine).toContain("letter__photos--grid");
+    expect(new Set([classic, warm, minimal, heritage, magazine]).size).toBe(5);
   });
 
   it("compile snapshots the selected theme onto the archive", () => {
@@ -308,6 +323,9 @@ describe("newspaper weave rhythm", () => {
     );
     expect(layoutPersonSection("heritage", extra).map(label).join(" ")).toBe(
       "heading weave text weave text plate",
+    );
+    expect(layoutPersonSection("magazine", extra).map(label).join(" ")).toBe(
+      "heading weave text weave text gallery:grid",
     );
   });
 

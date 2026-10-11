@@ -1620,6 +1620,63 @@ button.listitem:hover {
   color: #5c5140;
 }
 
+.capsule--magazine {
+  background: #f6f1e8;
+  border-color: #e4d5c4;
+  color: #1c1916;
+}
+
+.capsule--magazine .capsule__cover {
+  border-bottom: 0;
+  padding-bottom: 1.8rem;
+}
+
+.capsule--magazine .capsule__kicker {
+  letter-spacing: 0.2em;
+  color: #c43b2e;
+}
+
+.capsule--magazine .capsule__title {
+  font-weight: 700;
+  font-size: 2.2rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin: 0.45rem 0 0.5rem;
+}
+
+.capsule--magazine .letter {
+  border-bottom: 0;
+  padding: 2rem 0 1.4rem;
+}
+
+.capsule--magazine .letter + .letter {
+  border-top: 1px solid #e4d5c4;
+}
+
+.capsule--magazine .letter__name {
+  font-size: 1.35rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #c43b2e;
+  margin-bottom: 1.1rem;
+}
+
+.capsule--magazine .letter__text {
+  font-size: 1.05rem;
+  line-height: 1.75;
+  color: #1c1916;
+}
+
+.capsule--magazine .letter__photo--weave .photo {
+  border-radius: 2px;
+}
+
+.capsule--magazine .capsule__colophon {
+  border-top: 1px solid #e4d5c4;
+  color: #7a6a60;
+}
+
 .capsule__keepsake {
   margin: 0;
 }
@@ -1655,7 +1712,8 @@ button.listitem:hover {
   .capsule--warm,
   .capsule--heritage,
   .capsule--minimal,
-  .capsule--classic {
+  .capsule--classic,
+  .capsule--magazine {
     print-color-adjust: exact;
     -webkit-print-color-adjust: exact;
   }
