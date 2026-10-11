@@ -1,7 +1,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { buildCapsulePdfBytes } from "../src/lib/capsule-pdf";
-import { buildVisualArchive } from "../src/lib/capsule-pdf-fixtures";
+import { buildKeepArchive, buildVisualArchive } from "../src/lib/capsule-pdf-fixtures";
 import { CAPSULE_THEMES } from "../src/lib/capsule-theme";
 
 const slot = process.argv[2] === "after" ? "after" : "before";
@@ -16,6 +16,11 @@ async function main() {
     writeFileSync(path, bytes);
     console.log(`wrote ${path} (${bytes.length} bytes)`);
   }
+  const keep = await buildKeepArchive("classic");
+  const keepBytes = await buildCapsulePdfBytes(keep);
+  const keepPath = join(outDir, "classic-keep.pdf");
+  writeFileSync(keepPath, keepBytes);
+  console.log(`wrote ${keepPath} (${keepBytes.length} bytes)`);
 }
 
 main().catch((error) => {

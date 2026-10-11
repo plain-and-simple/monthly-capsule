@@ -94,6 +94,36 @@ export async function makeSwatchJpeg(
     .toBuffer();
 }
 
+export const KEEP_FILLER_COUNT = 29;
+
+export async function buildKeepArchive(
+  theme: CapsuleTheme,
+  fillerCount = KEEP_FILLER_COUNT,
+): Promise<{
+  archive: CapsuleArchive;
+  photos: CapsulePdfPhotoBytes[];
+}> {
+  const storage_path = `visual/${theme}/keep/0.jpg`;
+  const bytes = await makeSwatchJpeg("#2f5b4c", 1000, 750);
+  return {
+    archive: buildCapsuleArchive({
+      yearMonth: PDF_VISUAL_YEAR_MONTH,
+      groupName: PDF_VISUAL_GROUP,
+      memberCount: 2,
+      theme,
+      letters: [
+        { preferred_name: "Casey Nguyen", body: fillerBody(fillerCount), photos: [] },
+        {
+          preferred_name: "Riley Chen",
+          body: KEEP_TARGET_BODY,
+          photos: [{ storage_path, width: 1000, height: 750, sort_order: 0 }],
+        },
+      ],
+    }),
+    photos: [{ storage_path, bytes }],
+  };
+}
+
 export async function buildVisualArchive(theme: CapsuleTheme): Promise<{
   archive: CapsuleArchive;
   photos: CapsulePdfPhotoBytes[];
