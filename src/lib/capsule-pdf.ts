@@ -1191,21 +1191,25 @@ async function drawMagazinePerson(
           insetWidth,
         )
       : 0;
+    const stackTooTallForText = firstTextHeight > 0 && firstTextHeight < MAGAZINE_PHOTO_MIN_SHORT * 0.7;
     drawMagazineName(cursor, letter.preferred_name, display, firstTextHeight);
-    const stacked = await drawMagazineSideStack(
-      doc,
-      cursor,
-      stack,
-      photoByPath,
-      Math.max(MAGAZINE_PHOTO_MIN_SHORT + 8, cursor.remaining() - reserved - 12),
-    );
-    stacked.placed.forEach(markPlaced);
+    let leftover: CapsuleArchivePhoto[] = [...stack, ...after];
+    if (!stackTooTallForText) {
+      const stacked = await drawMagazineSideStack(
+        doc,
+        cursor,
+        stack,
+        photoByPath,
+        Math.max(MAGAZINE_PHOTO_MIN_SHORT + 8, cursor.remaining() - reserved - 12),
+      );
+      stacked.placed.forEach(markPlaced);
+      leftover = [...stacked.leftover, ...after];
+    }
     for (const paragraph of paragraphs) {
       drawMagazineLetterText(cursor, fonts, paragraph, letter.preferred_name, bodySize);
     }
     cursor.finishWrap();
-    const pending = [...stacked.leftover, ...after];
-    const drawn = await drawMagazineInterleaved(doc, cursor, fonts, [], pending, photoByPath, letter.preferred_name, {
+    const drawn = await drawMagazineInterleaved(doc, cursor, fonts, [], leftover, photoByPath, letter.preferred_name, {
       bodySize,
       rowH,
       useTwoCol,
