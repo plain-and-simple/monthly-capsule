@@ -12,14 +12,36 @@ import {
   capsulePdfHref,
   capsulePdfNeedsUnicodeRerender,
   capsulePdfStoragePath,
-  selectEnsuredCapsulePdf,
+  clampSidePhotoHeight,
   detectImageKind,
+  estimateWrappedHeight,
+  headingKeepWithNextFits,
+  headingKeepWithNextNeeded,
+  leftoverGalleryCols,
+  PDF_BODY_LINE_GAP,
+  PDF_BODY_SIZE,
+  PDF_HEADING_GAP,
+  PDF_KEEP_WITH_NEXT_LINES,
+  PDF_MARGIN,
+  PDF_PAGE_HEIGHT,
+  PDF_PHOTO_SHRINK_MIN,
+  PDF_SIDE_PHOTO_MAX,
+  PDF_SIDE_PHOTO_MIN,
   pdfContentDisposition,
   preparePdfJpeg,
+  selectEnsuredCapsulePdf,
+  shrinkSidePhotoToRemaining,
   themePdfPalette,
+  type CapsulePdfLayoutEvent,
 } from "./capsule-pdf";
-import { CAPSULE_PDF_PRODUCER, capsulePdfHasProducerMark } from "./capsule-pdf-fonts";
+import {
+  CAPSULE_PDF_PRODUCER,
+  capsulePdfHasProducerMark,
+  embedCapsulePdfFonts,
+} from "./capsule-pdf-fonts";
 import { DOWNLOAD_PDF_LABEL } from "./copy";
+import { fillerBody, KEEP_TARGET_BODY } from "./capsule-pdf-fixtures";
+import { capsuleTitle } from "./month-version";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -372,6 +394,253 @@ describe("themed pdf keepsake", () => {
     expect(selectEnsuredCapsulePdf(rebuilt, null)?.tag).toBe("rebuilt");
   });
 });
+
+describe("pdf layout locks", () => {
+  it("sizes side photos to paired text and shrinks before a page break", () => {
+    expect(clampSidePhotoHeight(40)).toBe(PDF_SIDE_PHOTO_MIN);
+    expect(clampSidePhotoHeight(400)).toBe(PDF_SIDE_PHOTO_MAX);
+    expect(clampSidePhotoHeight(160)).toBe(160);
+    expect(shrinkSidePhotoToRemaining(210, 400)).toEqual({ height: 210, pageBreak: false });
+    expect(shrinkSidePhotoToRemaining(210, 90)).toEqual({ height: 210, pageBreak: true });
+    const shrink = shrinkSidePhotoToRemaining(210, 150);
+    expect(shrink.pageBreak).toBe(false);
+    expect(shrink.height).toBeGreaterThanOrEqual(PDF_PHOTO_SHRINK_MIN - 16);
+    expect(shrink.height).toBeLessThan(210);
+  });
+
+  it("keep-with-next uses the first paragraph, or four lines when that paragraph is long", () => {
+    const short = headingKeepWithNextNeeded({
+      headingSize: 18,
+      headingGap: PDF_HEADING_GAP,
+      firstTextHeight: 32,
+      lineHeight: 16,
+    });
+    expect(short).toBe(18 + PDF_HEADING_GAP + 32);
+    const long = headingKeepWithNextNeeded({
+      headingSize: 18,
+      headingGap: PDF_HEADING_GAP,
+      firstTextHeight: 20 * 16,
+      lineHeight: 16,
+    });
+    expect(long).toBe(18 + PDF_HEADING_GAP + PDF_KEEP_WITH_NEXT_LINES * 16);
+    expect(headingKeepWithNextFits(PDF_MARGIN + short, short)).toBe(true);
+    expect(headingKeepWithNextFits(PDF_MARGIN + short - 1, short)).toBe(false);
+  });
+
+  it("estimates wrapped height from the column width", async () => {
+    const doc = await PDFDocument.create();
+    const fonts = await embedCapsulePdfFonts(doc);
+    const one = estimateWrappedHeight(
+      "Hello.",
+      fonts.serif,
+      fonts.emoji,
+      PDF_BODY_SIZE,
+      PDF_BODY_LINE_GAP,
+      504,
+    );
+    const many = estimateWrappedHeight(
+      "Hello there friend, this line is made long enough that it must wrap in a narrow newspaper column beside a photo.",
+      fonts.serif,
+      fonts.emoji,
+      PDF_BODY_SIZE,
+      PDF_BODY_LINE_GAP,
+      180,
+    );
+    expect(one).toBe(PDF_BODY_SIZE + PDF_BODY_LINE_GAP);
+    expect(many).toBeGreaterThan(one);
+  });
+
+  it("uses three leftover columns for portrait-heavy grids", () => {
+    const portraits = [
+      { width: 800, height: 1200 },
+      { width: 700, height: 1100 },
+      { width: 900, height: 1400 },
+    ];
+    expect(leftoverGalleryCols("grid", portraits)).toBe(3);
+    expect(leftoverGalleryCols("grid", [{ width: 1200, height: 800 }])).toBe(2);
+    expect(leftoverGalleryCols("strip", portraits)).toBe(3);
+  });
+
+  it("keeps later paragraphs beside a photo instead of jumping to its bottom", async () => {
+    const jpeg = await sharp({
+      create: { width: 800, height: 1200, channels: 3, background: "#2f5b4c" },
+    })
+      .jpeg({ quality: 70 })
+      .toBuffer();
+    const layout: CapsulePdfLayoutEvent[] = [];
+    await buildCapsulePdfBytes({
+      archive: buildCapsuleArchive({
+        yearMonth: "2026-10",
+        groupName: "Regression Kitchen",
+        memberCount: 1,
+        letters: [
+          {
+            preferred_name: "Jordan Lee",
+            body: "Short one.\n\nAlso short.\n\nA third paragraph stays in the column beside the first photo until that photo is cleared.",
+            photos: [
+              { storage_path: "g/p1.jpg", width: 800, height: 1200, sort_order: 0 },
+              { storage_path: "g/p2.jpg", width: 800, height: 1200, sort_order: 1 },
+            ],
+          },
+        ],
+      }),
+      photos: [
+        { storage_path: "g/p1.jpg", bytes: jpeg },
+        { storage_path: "g/p2.jpg", bytes: jpeg },
+      ],
+      layout,
+    });
+    const photo = layout.find((event) => event.kind === "photo" && event.person === "Jordan Lee");
+    const texts = layout.filter((event) => event.kind === "text" && event.person === "Jordan Lee");
+    expect(photo).toBeTruthy();
+    expect(texts.length).toBeGreaterThanOrEqual(3);
+    const beside = texts.filter(
+      (event) => event.page === photo!.page && event.y > photo!.bottom!,
+    );
+    expect(beside.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("does not leave a name heading alone at the bottom of a page", async () => {
+    const jpeg = await tinyJpeg();
+    let proof:
+      | {
+          caseyEnd: CapsulePdfLayoutEvent;
+          riley: CapsulePdfLayoutEvent;
+          firstText: CapsulePdfLayoutEvent;
+        }
+      | null = null;
+    const firstLine = KEEP_TARGET_BODY.split("\n\n")[0]!;
+    for (let n = 10; n <= 40; n += 1) {
+      const layout: CapsulePdfLayoutEvent[] = [];
+      await buildCapsulePdfBytes({
+        archive: buildCapsuleArchive({
+          yearMonth: "2026-10",
+          groupName: "Regression Kitchen",
+          memberCount: 2,
+          letters: [
+            { preferred_name: "Casey Nguyen", body: fillerBody(n), photos: [] },
+            {
+              preferred_name: "Riley Chen",
+              body: KEEP_TARGET_BODY,
+              photos: [{ storage_path: "g/r0.jpg", width: 12, height: 8, sort_order: 0 }],
+            },
+          ],
+        }),
+        photos: [{ storage_path: "g/r0.jpg", bytes: jpeg }],
+        layout,
+      });
+      const caseyEnd = [...layout]
+        .reverse()
+        .find((event) => event.person === "Casey Nguyen" && event.kind === "text");
+      const riley = layout.find((event) => event.kind === "heading" && event.name === "Riley Chen");
+      const firstText = layout.find(
+        (event) => event.kind === "text" && event.person === "Riley Chen",
+      );
+      if (!caseyEnd || !riley || !firstText) continue;
+      expect(firstText.page).toBe(riley.page);
+      expect(firstText.text).toContain("first paragraph");
+      const needed = headingKeepWithNextNeeded({
+        headingSize: 18,
+        headingGap: PDF_HEADING_GAP,
+        firstTextHeight: 16 * 4,
+        lineHeight: 16,
+      });
+      const remainingAfterCasey = caseyEnd.y - 26;
+      if (remainingAfterCasey - PDF_MARGIN < needed && remainingAfterCasey > PDF_MARGIN) {
+        expect(riley.page).toBe(caseyEnd.page + 1);
+        expect(riley.y).toBeGreaterThan(PDF_PAGE_HEIGHT - 90);
+        proof = { caseyEnd, riley, firstText };
+        break;
+      }
+    }
+    expect(proof).not.toBeNull();
+    expect(proof?.firstText.text).toContain(firstLine.slice(0, 20));
+  });
+
+  it("finishes one person's photos before the next name heading", async () => {
+    const jpeg = await tinyJpeg();
+    const layout: CapsulePdfLayoutEvent[] = [];
+    await buildCapsulePdfBytes({
+      archive: buildCapsuleArchive({
+        yearMonth: "2026-10",
+        groupName: "Regression Kitchen",
+        memberCount: 2,
+        letters: [
+          {
+            preferred_name: "Alex Rivera",
+            body: "- rye bread\n- two pears\n- leftover mint",
+            photos: [
+              { storage_path: "g/a1.jpg", width: 12, height: 18, sort_order: 0 },
+              { storage_path: "g/a2.jpg", width: 12, height: 18, sort_order: 1 },
+              { storage_path: "g/a3.jpg", width: 12, height: 18, sort_order: 2 },
+            ],
+          },
+          {
+            preferred_name: "Jordan Lee",
+            body: LONG_BODY_SNIP,
+            photos: [{ storage_path: "g/j1.jpg", width: 12, height: 8, sort_order: 0 }],
+          },
+        ],
+      }),
+      photos: [
+        { storage_path: "g/a1.jpg", bytes: jpeg },
+        { storage_path: "g/a2.jpg", bytes: jpeg },
+        { storage_path: "g/a3.jpg", bytes: jpeg },
+        { storage_path: "g/j1.jpg", bytes: jpeg },
+      ],
+      layout,
+    });
+    const jordan = layout.find((event) => event.kind === "heading" && event.name === "Jordan Lee");
+    const alexPhotos = layout.filter(
+      (event) => event.kind === "photo" && event.person === "Alex Rivera",
+    );
+    expect(jordan).toBeTruthy();
+    expect(alexPhotos.length).toBeGreaterThan(0);
+    for (const photo of alexPhotos) {
+      const before =
+        photo.page < jordan!.page || (photo.page === jordan!.page && photo.bottom! > jordan!.y);
+      expect(before).toBe(true);
+    }
+  });
+
+  it("re-renders an older producer PDF in place without minting a ·vN edition", async () => {
+    const oldDoc = await PDFDocument.create();
+    oldDoc.setProducer("monthly-capsule-unicode/1");
+    oldDoc.addPage();
+    const oldBytes = await oldDoc.save();
+    expect(capsulePdfNeedsUnicodeRerender(oldBytes)).toBe(true);
+
+    const archive = buildCapsuleArchive({
+      yearMonth: "2026-10",
+      groupName: "Regression Kitchen",
+      memberCount: 1,
+      theme: "classic",
+      letters: [{ preferred_name: "Alex Rivera", body: "Synthetic note.", photos: [] }],
+    });
+    expect(archive.theme).toBe("classic");
+    expect(archive.month_version).toBe(1);
+    const rebuilt = await buildCapsulePdfBytes({ archive, photos: [] });
+    expect(capsulePdfHasProducerMark(rebuilt)).toBe(true);
+    expect(capsulePdfNeedsUnicodeRerender(rebuilt)).toBe(false);
+    expect(selectEnsuredCapsulePdf({ tag: "stored", bytes: oldBytes }, { tag: "rebuilt", bytes: rebuilt })?.tag).toBe(
+      "rebuilt",
+    );
+    expect(capsulePdfStoragePath("g1", "2026-10", 1)).toBe("g1/pdfs/2026-10/v1.pdf");
+    expect(capsulePdfFilename("Regression Kitchen", "2026-10", 1)).toBe("regression-kitchen-2026-10.pdf");
+    expect(capsuleTitle("October 2026", 1)).toBe("October 2026");
+    expect(capsuleTitle("October 2026", 1)).not.toContain("v2");
+    expect(CAPSULE_PDF_PRODUCER).toBe("monthly-capsule-layout/2");
+    expect(source("./capsule-pdf-store.ts")).toContain("upsert: true");
+    expect(source("./capsule-pdf-store.ts")).toContain("capsulePdfNeedsUnicodeRerender");
+    expect(source("./capsule-pdf-store.ts")).not.toContain("planForceOpen");
+    expect(source("./capsule-pdf-store.ts")).not.toContain("createMonth");
+    expect(source("./capsule-pdf-response.ts")).not.toContain("planForceOpen");
+    expect(source("./capsule-pdf-store.ts")).toContain("input.version");
+  });
+});
+
+const LONG_BODY_SNIP =
+  "The river path stayed muddy after the storm, so we took the long way around the school and talked about the porch light that has been blinking since August.";
 
 describe("pdf wiring locks", () => {
   it("compile stores a pdf and does not fail the capsule if generation throws", () => {
