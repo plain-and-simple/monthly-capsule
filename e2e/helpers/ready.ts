@@ -15,7 +15,11 @@ import {
   SUBMIT_SAVED_DRAFT,
 } from "../../src/lib/copy";
 import { CYCLE_ALREADY_OPEN, CYCLE_OPENED } from "../../src/lib/cycle";
-import { canRunAuthenticatedE2E } from "../../src/lib/e2e-target";
+import {
+  assertE2EEmailNotReservedExample,
+  canRunAuthenticatedE2E,
+  resolveE2EBaseURL,
+} from "../../src/lib/e2e-target";
 import { STUDIO_CODE_ERROR } from "../../src/lib/studio-code";
 import { E2E_STORAGE_STATE_PATH } from "./auth-file";
 
@@ -30,6 +34,8 @@ export function e2eCredentials(): {
   groupId: string | null;
 } | null {
   if (!canRunAuthenticatedE2E()) return null;
+  // Fail closed if someone points production e2e at a reserved example.* mailbox.
+  assertE2EEmailNotReservedExample(resolveE2EBaseURL());
   const email = process.env.E2E_EMAIL?.trim() ?? "";
   const password = process.env.E2E_PASSWORD?.trim() ?? "";
   return {

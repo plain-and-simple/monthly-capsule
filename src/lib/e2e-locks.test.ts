@@ -108,4 +108,16 @@ describe("e2e suite locks", () => {
     expect(ready).toContain("GROUP_FIRST_CAPSULE_HEADING");
     expect(ready).toContain("primary.or(write).or(edit).or(resume).or(first)");
   });
+
+  it("does not create durable production groups with reserved example.* mailboxes", () => {
+    const auth = readFileSync(resolve(repoRoot, "e2e/ready-auth.spec.ts"), "utf8");
+    const ready = readFileSync(resolve(repoRoot, "e2e/helpers/ready.ts"), "utf8");
+    const target = readFileSync(resolve(repoRoot, "src/lib/e2e-target.ts"), "utf8");
+    // Authenticated Ready path reuses a seeded group; it must not hit /create.
+    expect(auth).not.toMatch(/goto\([`'"]\/create/);
+    expect(auth).not.toContain("createGroup");
+    expect(ready).toContain("assertE2EEmailNotReservedExample");
+    expect(target).toContain("assertE2EEmailNotReservedExample");
+    expect(target).toContain("isReservedExampleEmail");
+  });
 });

@@ -11,6 +11,8 @@ import {
   cronShouldSendCapsule,
   formatCapsuleSendResult,
   formatSkippedNoEmail,
+  formatSkippedTestEmail,
+  partitionDeliverableEmails,
   previewCapsuleSend,
   RESEND_SEND_TIMEOUT_MS,
   RESEND_TIMEOUT_MESSAGE,
@@ -31,6 +33,7 @@ import type { Account, Capsule, Group, Member, Month, Submission } from "@/lib/t
 export type SendGroupMonthResult = {
   sent: number;
   skippedNoEmail: number;
+  skippedTestEmail: number;
   skippedNames: string[];
   markedSent: boolean;
   error: string | null;
@@ -43,19 +46,22 @@ export type SendGroupMonthResult = {
     | "no-resend-key"
     | "bad-from"
     | "no-recipients"
+    | "skipped-test-recipients"
     | "resend-error"
     | "dry-run";
   message: string;
 };
 
 function sendResult(
-  partial: Omit<SendGroupMonthResult, "message" | "skippedNames"> & {
+  partial: Omit<SendGroupMonthResult, "message" | "skippedNames" | "skippedTestEmail"> & {
     message?: string;
     skippedNames?: string[];
+    skippedTestEmail?: number;
   },
 ): SendGroupMonthResult {
   const skippedNames = partial.skippedNames ?? [];
-  const payload = { ...partial, skippedNames };
+  const skippedTestEmail = partial.skippedTestEmail ?? 0;
+  const payload = { ...partial, skippedNames, skippedTestEmail };
   return { ...payload, message: partial.message ?? formatCapsuleSendResult(payload) };
 }
 
@@ -236,15 +242,100 @@ async function sendCapsuleEmail(
       accountEmail: member.account_id ? accountEmailById.get(member.account_id) ?? null : null,
     })),
   );
+  const { deliverable, skippedTestEmails } = partitionDeliverableEmails(resolved.emails);
+  if (skippedTestEmails.length > 0) {
+    console.info("capsule email skipped test recipients", {
+      capsuleId: capsule.id,
+      count: skippedTestEmails.length,
+      // Log domains only — avoid dumping full leftover test addresses in prod logs.
+      domains: [
+        ...new Set(
+          skippedTestEmails.map((email) => email.slice(email.lastIndexOf("@") + 1).toLowerCase()),
+        ),
+      ],
+    });
+  }
 
   const from = capsuleFromHeader(resendFromEmail());
   const preview = previewCapsuleSend({
     fromOk: from.ok,
     fromError: from.ok ? undefined : from.error,
     hasResendKey: Boolean(resendApiKey()),
-    recipientCount: resolved.emails.length,
+    recipientCount: deliverable.length,
     skippedNoEmail: resolved.skippedNoEmail,
   });
+
+  if (opts.dryRun) {
+    if (!from.ok || (!preview.canSend && deliverable.length > 0)) {
+      return sendResult({
+        sent: 0,
+        skippedNoEmail: preview.skippedNoEmail,
+        skippedNames: resolved.skippedNames,
+        markedSent: false,
+        error: preview.error,
+        reason: preview.reason,
+      });
+    }
+    const skipped = formatSkippedNoEmail({
+      skippedNoEmail: preview.skippedNoEmail,
+      skippedNames: resolved.skippedNames,
+    });
+    const skippedTest = formatSkippedTestEmail(skippedTestEmails.length);
+    return sendResult({
+      sent: 0,
+      skippedNoEmail: preview.skippedNoEmail,
+      skippedTestEmail: skippedTestEmails.length,
+      skippedNames: resolved.skippedNames,
+      markedSent: false,
+      error: null,
+      reason: "dry-run",
+      message: [
+        `Dry run: would send ${preview.wouldSend}.`,
+        skipped,
+        skippedTest,
+      ]
+        .filter(Boolean)
+        .join(" "),
+    });
+  }
+
+  // Only reserved example.* recipients: stamp so cron stops retrying forever.
+  if (deliverable.length === 0 && skippedTestEmails.length > 0) {
+    const markedSent = shouldMarkCapsuleEmailed({
+      attempted: 0,
+      accepted: 0,
+      skippedTestEmail: skippedTestEmails.length,
+    });
+    if (markedSent) {
+      let stamped = admin
+        .from("capsules")
+        .update(sentEmailUpdate(new Date().toISOString()))
+        .eq("id", capsule.id);
+      if (!opts.forceResend) {
+        stamped = stamped.is("email_sent_at", null);
+      }
+      await stamped;
+      console.info("capsule email stamped after skipping test recipients", {
+        capsuleId: capsule.id,
+        skippedTestEmail: skippedTestEmails.length,
+      });
+    }
+    return sendResult({
+      sent: 0,
+      skippedNoEmail: resolved.skippedNoEmail,
+      skippedTestEmail: skippedTestEmails.length,
+      skippedNames: resolved.skippedNames,
+      markedSent,
+      error: null,
+      reason: "skipped-test-recipients",
+      message: [
+        formatSkippedTestEmail(skippedTestEmails.length),
+        markedSent ? "Marked sent so cron will not retry." : null,
+      ]
+        .filter(Boolean)
+        .join(" "),
+    });
+  }
 
   if (!from.ok || !preview.canSend) {
     return sendResult({
@@ -254,22 +345,6 @@ async function sendCapsuleEmail(
       markedSent: false,
       error: preview.error,
       reason: preview.reason,
-    });
-  }
-
-  if (opts.dryRun) {
-    const skipped = formatSkippedNoEmail({
-      skippedNoEmail: preview.skippedNoEmail,
-      skippedNames: resolved.skippedNames,
-    });
-    return sendResult({
-      sent: 0,
-      skippedNoEmail: preview.skippedNoEmail,
-      skippedNames: resolved.skippedNames,
-      markedSent: false,
-      error: null,
-      reason: "dry-run",
-      message: [`Dry run: would send ${preview.wouldSend}.`, skipped].filter(Boolean).join(" "),
     });
   }
 
@@ -340,7 +415,7 @@ async function sendCapsuleEmail(
   const resend = new Resend(key);
   let accepted = 0;
   let error: string | null = null;
-  for (const to of resolved.emails) {
+  for (const to of deliverable) {
     try {
       const result = await withTimeout(
         resend.emails.send({
@@ -379,8 +454,9 @@ async function sendCapsuleEmail(
   }
 
   const markedSent = shouldMarkCapsuleEmailed({
-    attempted: resolved.emails.length,
+    attempted: deliverable.length,
     accepted,
+    skippedTestEmail: skippedTestEmails.length,
   });
   if (markedSent) {
     let stamped = admin
@@ -394,8 +470,9 @@ async function sendCapsuleEmail(
   } else {
     console.error("capsule email not stamped", {
       capsuleId: capsule.id,
-      attempted: resolved.emails.length,
+      attempted: deliverable.length,
       accepted,
+      skippedTestEmail: skippedTestEmails.length,
       error,
     });
   }
@@ -403,6 +480,7 @@ async function sendCapsuleEmail(
   return sendResult({
     sent: accepted,
     skippedNoEmail: resolved.skippedNoEmail,
+    skippedTestEmail: skippedTestEmails.length,
     skippedNames: resolved.skippedNames,
     markedSent,
     error,

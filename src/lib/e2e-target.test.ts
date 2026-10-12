@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { PRODUCTION_HOST, PRODUCTION_ORIGIN } from "@/lib/hosting";
 import {
+  assertE2EEmailNotReservedExample,
   E2E_ALLOW_PRODUCTION_VALUE,
   E2E_LOCAL_ORIGIN,
   assertE2ETargetAllowed,
@@ -99,5 +100,32 @@ describe("e2e target is fail-closed against production", () => {
         E2E_CRON_SECRET: "secret",
       }),
     ).toBe(true);
+  });
+
+  it("refuses production e2e when E2E_EMAIL is a reserved example.* address", () => {
+    expect(() =>
+      resolveE2EBaseURL({
+        E2E_BASE_URL: PRODUCTION_ORIGIN,
+        E2E_ALLOW_PRODUCTION: E2E_ALLOW_PRODUCTION_VALUE,
+        E2E_EMAIL: "capsule.regression.oct5@example.com",
+      }),
+    ).toThrow(/reserved example/);
+    expect(() =>
+      assertE2EEmailNotReservedExample(PRODUCTION_ORIGIN, {
+        E2E_EMAIL: "p0capsule@example.com",
+      }),
+    ).toThrow(/reserved example/);
+    expect(() =>
+      resolveE2EBaseURL({
+        E2E_BASE_URL: PRODUCTION_ORIGIN,
+        E2E_ALLOW_PRODUCTION: E2E_ALLOW_PRODUCTION_VALUE,
+        E2E_EMAIL: "e2e@plainandsimple.app",
+      }),
+    ).not.toThrow();
+    expect(() =>
+      assertE2EEmailNotReservedExample(E2E_LOCAL_ORIGIN, {
+        E2E_EMAIL: "ada@example.com",
+      }),
+    ).not.toThrow();
   });
 });

@@ -1,3 +1,4 @@
+import { isReservedExampleEmail } from "./email-policy";
 import { PRODUCTION_HOST, PRODUCTION_ORIGIN } from "./hosting";
 
 /** Explicit opt-in. Any other value (including "true") stays fail-closed. */
@@ -28,6 +29,25 @@ export function assertE2ETargetAllowed(
 }
 
 /**
+ * Production e2e must use a real deliverable mailbox.
+ * Reserved example.* addresses left durable rows that made the email cron fail daily.
+ */
+export function assertE2EEmailNotReservedExample(
+  baseUrl: string,
+  env: E2ETargetEnv = process.env,
+): void {
+  if (!isProductionE2ETarget(baseUrl)) return;
+  const email = env.E2E_EMAIL?.trim() ?? "";
+  if (!email) return;
+  if (!isReservedExampleEmail(email)) return;
+  throw new Error(
+    `Refusing production e2e with reserved example.* E2E_EMAIL (${email.split("@")[1]}). ` +
+      "Use a real deliverable test mailbox so leftover groups do not poison the email cron.",
+  );
+}
+
+
+/**
  * Resolve the browser origin for Playwright.
  * Never defaults to production. Unset E2E_BASE_URL → local webServer.
  */
@@ -35,6 +55,7 @@ export function resolveE2EBaseURL(env: E2ETargetEnv = process.env): string {
   const explicit = env.E2E_BASE_URL?.trim();
   const base = explicit || E2E_LOCAL_ORIGIN;
   assertE2ETargetAllowed(base, env);
+  assertE2EEmailNotReservedExample(base, env);
   return base.replace(/\/$/, "");
 }
 
