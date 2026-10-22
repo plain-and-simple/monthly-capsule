@@ -22,6 +22,8 @@ export const LONG_BODY = [
 
 export const GALLERY_BODY = "One short note about the porch light and the extra pictures from the walk.";
 
+export const ONE_LINE_BODY = "The kitchen was quiet except for the pot lid.";
+
 export const LONG_RUNON_BODY = [
   "The river path stayed muddy after the storm so we took the long way around the school and talked about the porch light that has been blinking since August and the chair someone left out with a dark oval of rainwater on the seat and the maple that dropped one leaf at a time onto the wet sidewalk while we stood there longer than we meant to just watching October settle in around the houses and the back door that never quite latches unless you lean on it and the radio that kept losing the station while the beans simmered and the kitchen windows fogged",
   "and later we walked the same loop again because the puddles had turned the color of tea and the schoolyard fence had a mitten stuck on it and someone had written a grocery list on the back of an envelope that kept unfolding in the wind and we talked about the extra chair on the porch and the way the maple kept dropping leaves onto the wet sidewalk one at a time as if it were counting October out loud",
@@ -49,6 +51,89 @@ export type VisualLetterSpec = {
   body: string;
   photos: Array<{ color: string; width: number; height: number }>;
 };
+
+export const MAGAZINE_VISUAL_LETTERS: VisualLetterSpec[] = [
+  {
+    preferred_name: "Alex Rivera",
+    body: BULLET_BODY,
+    photos: [
+      { color: "#2f5b4c", width: 1200, height: 800 },
+      { color: "#c47a3a", width: 900, height: 1400 },
+      { color: "#8a6a32", width: 800, height: 1200 },
+    ],
+  },
+  {
+    preferred_name: "Jordan Lee",
+    body: LONG_BODY,
+    photos: [
+      { color: "#1a1712", width: 900, height: 1400 },
+      { color: "#2f5b4c", width: 800, height: 1300 },
+      { color: "#6b2e1f", width: 850, height: 1250 },
+    ],
+  },
+  {
+    preferred_name: "Morgan Blake",
+    body: ONE_LINE_BODY,
+    photos: [
+      { color: "#c43b2e", width: 800, height: 1300 },
+      { color: "#8a6a32", width: 900, height: 1400 },
+    ],
+  },
+  {
+    preferred_name: "Riley Chen",
+    body: KEEP_TARGET_BODY,
+    photos: [
+      { color: "#2f5b4c", width: 900, height: 1400 },
+      { color: "#8a6a32", width: 850, height: 1250 },
+    ],
+  },
+  {
+    preferred_name: "Sam Patel",
+    body: GALLERY_BODY,
+    photos: [
+      { color: "#8a6a32", width: 1400, height: 900 },
+      { color: "#b5b5b0", width: 800, height: 1200 },
+      { color: "#c47a3a", width: 700, height: 1100 },
+      { color: "#2f5b4c", width: 750, height: 1200 },
+      { color: "#6b2e1f", width: 850, height: 1250 },
+      { color: "#1a1712", width: 820, height: 1280 },
+    ],
+  },
+  {
+    preferred_name: "Casey Nguyen",
+    body: "I wrote this down so October would still have the smell of that pot.",
+    photos: [],
+  },
+  {
+    preferred_name: "Noah West",
+    body: ONE_LINE_BODY,
+    photos: [{ color: "#2f5b4c", width: 900, height: 1400 }],
+  },
+  {
+    preferred_name: "Quinn Brooks",
+    body: LONG_BODY,
+    photos: [
+      { color: "#c43b2e", width: 800, height: 1200 },
+      { color: "#8a6a32", width: 1400, height: 900 },
+      { color: "#2f5b4c", width: 900, height: 1300 },
+      { color: "#6b2e1f", width: 850, height: 1280 },
+    ],
+  },
+  {
+    preferred_name: "Eden Walsh",
+    body: "Eight pictures from the walk, and almost nothing to say.",
+    photos: [
+      { color: "#1a1712", width: 800, height: 1200 },
+      { color: "#2f5b4c", width: 850, height: 1250 },
+      { color: "#c47a3a", width: 900, height: 1400 },
+      { color: "#8a6a32", width: 750, height: 1200 },
+      { color: "#6b2e1f", width: 820, height: 1280 },
+      { color: "#c43b2e", width: 880, height: 1320 },
+      { color: "#b5b5b0", width: 700, height: 1100 },
+      { color: "#4a3b2a", width: 860, height: 1290 },
+    ],
+  },
+];
 
 export const VISUAL_LETTERS: VisualLetterSpec[] = [
   {
@@ -96,9 +181,17 @@ export async function makeSwatchJpeg(
   color: string,
   width: number,
   height: number,
+  maxEdge?: number,
 ): Promise<Uint8Array> {
+  let w = width;
+  let h = height;
+  if (maxEdge && Math.max(width, height) > maxEdge) {
+    const scale = maxEdge / Math.max(width, height);
+    w = Math.max(8, Math.round(width * scale));
+    h = Math.max(8, Math.round(height * scale));
+  }
   return sharp({
-    create: { width, height, channels: 3, background: color },
+    create: { width: w, height: h, channels: 3, background: color },
   })
     .jpeg({ quality: 70 })
     .toBuffer();
@@ -134,19 +227,53 @@ export async function buildKeepArchive(
   };
 }
 
-export async function buildVisualArchive(theme: CapsuleTheme): Promise<{
+const COUNT_SWATCHES = [
+  "#2f5b4c",
+  "#c47a3a",
+  "#8a6a32",
+  "#6b2e1f",
+  "#1a1712",
+  "#c43b2e",
+  "#b5b5b0",
+  "#4a3b2a",
+];
+
+/** One member per photo count 0–8 so the once-drawn invariant covers the drop cases. */
+export const MAGAZINE_COUNT_LETTERS: VisualLetterSpec[] = Array.from({ length: 9 }, (_, count) => ({
+  preferred_name: `Count ${count}`,
+  body: count >= 6 ? GALLERY_BODY : count === 0 ? ONE_LINE_BODY : "A short note beside the pictures.",
+  photos: Array.from({ length: count }, (_, index) => {
+    const landscape = count >= 4 && index === 0;
+    return {
+      color: COUNT_SWATCHES[index % COUNT_SWATCHES.length]!,
+      width: landscape ? 1400 : 900,
+      height: landscape ? 900 : 1400,
+    };
+  }),
+}));
+
+export async function buildLettersArchive(
+  theme: CapsuleTheme,
+  specs: readonly VisualLetterSpec[],
+  prefix: string,
+): Promise<{
   archive: CapsuleArchive;
   photos: CapsulePdfPhotoBytes[];
 }> {
   const photos: CapsulePdfPhotoBytes[] = [];
   const letters = [];
-  for (const [letterIndex, spec] of VISUAL_LETTERS.entries()) {
+  for (const [letterIndex, spec] of specs.entries()) {
     const letterPhotos = [];
     for (const [photoIndex, swatch] of spec.photos.entries()) {
-      const storage_path = `visual/${theme}/${letterIndex}/${photoIndex}.jpg`;
+      const storage_path = `${prefix}/${theme}/${letterIndex}/${photoIndex}.jpg`;
       photos.push({
         storage_path,
-        bytes: await makeSwatchJpeg(swatch.color, swatch.width, swatch.height),
+        bytes: await makeSwatchJpeg(
+          swatch.color,
+          swatch.width,
+          swatch.height,
+          theme === "magazine" ? 240 : undefined,
+        ),
       });
       letterPhotos.push({
         storage_path,
@@ -165,10 +292,17 @@ export async function buildVisualArchive(theme: CapsuleTheme): Promise<{
     archive: buildCapsuleArchive({
       yearMonth: PDF_VISUAL_YEAR_MONTH,
       groupName: PDF_VISUAL_GROUP,
-      memberCount: VISUAL_LETTERS.length,
+      memberCount: specs.length,
       theme,
       letters,
     }),
     photos,
   };
+}
+
+export async function buildVisualArchive(theme: CapsuleTheme): Promise<{
+  archive: CapsuleArchive;
+  photos: CapsulePdfPhotoBytes[];
+}> {
+  return buildLettersArchive(theme, theme === "magazine" ? MAGAZINE_VISUAL_LETTERS : VISUAL_LETTERS, "visual");
 }

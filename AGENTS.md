@@ -11,7 +11,7 @@ Chandler is the product manager. Research, plan, ship. Dogfood. Prefer a usable 
 - **PIN is bcrypt-only.** Generated at create/regen, shown once, never recovered. Do not display, email, or reconstruct a stored Group PIN. Do not add PIN-reminder UI. Owner regen is the only way to get a new PIN (old one dies; sessions stay valid).
 - **Do not generate a PDF during email send.** Resend has a short timeout. Compile (or first download) stores `capsules.pdf_storage_path`. Email attaches that object only if it already exists. PDF failure must not block compile or email.
 - **Do not silently drop photos.** Max is 6 (`MAX_PHOTOS`). If someone picks 10, keep 6, skip compressing the rest, and show `PHOTOS_MAX` (`You can add 6 photos. Extra photos were not added.`).
-- **Newspaper wrap is every theme**, not Warm-only. Classic, Warm, Minimal, and Heritage all put photos beside the writing. Theme owns type, paper, and leftover chrome — not “letter then a photo dump.”
+- **Newspaper wrap is every HTML theme**, not Warm-only. Classic, Warm, Minimal, Heritage, and Magazine all put photos beside the writing on the web view. Theme owns type, paper, and leftover chrome — not “letter then a photo dump.” Magazine’s PDF is a separate path: landscape hero or tall portrait beside the text, 1–3 photos on the person’s page, short letters may share a page, no automatic pull quotes, footer band on every page.
 - **Do not reopen** hosting/`basePath`, phone/SMS, rich editor, video, co-owners, or regenerate-past-month.
 - Theme picker stays **swatch + name**. No layout descriptions on the picker. Default remains Classic. Past months stay as-built.
 
@@ -21,10 +21,10 @@ People typically write about two paragraphs and put photos on the sides so it re
 
 - Pair at most one photo with each paragraph (alternate right, then left).
 - If they write little and attach a lot, extras go **after** the letter.
-- Leftover treatment by theme: Classic/Warm **grid**, Minimal **strip**, Heritage **plates**.
+- Leftover treatment by theme: Classic/Warm/Magazine **grid**, Minimal **strip**, Heritage **plates**.
 - In-flow HTML must wrap each photo+paragraph in `.letter__run` (`display: flow-root`). Sibling floats after a full-width first paragraph do not wrap.
 - CSS: `.letter__photo--weave` floats (~42% width); `--left` / `--right`; stack full-width under 640px.
-- PDF: `insetImage` (~42% width, keep `y` at the photo top) then column-aware `wrapped()` until past the photo. `finishWrap()` before the next photo, gallery, plate, or rule.
+- PDF: Classic/Warm/Minimal/Heritage use `insetImage` (~42% width, keep `y` at the photo top) then column-aware `wrapped()` until past the photo. `finishWrap()` before the next photo, gallery, plate, or rule. Magazine prefers the first landscape as a full-width hero; if every photo is portrait it uses a two-column tall photo instead of cropping to 3:2. Short letters can share a page. Keep the same no-overlap / keep-with-next / leftover-in-section rules.
 - Code: `src/lib/capsule-theme.ts` (`weaveLetterBlocks`, `leftoverPhotoBlocks`, `groupWovenRuns`), `src/components/capsule-document.tsx`, `src/lib/capsule-archive.ts`, `src/lib/capsule-pdf.ts`, weave rules in `src/app/globals.css`.
 
 ## PDF keepsake

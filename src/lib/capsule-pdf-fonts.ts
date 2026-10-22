@@ -46,6 +46,13 @@ function asTypeFace(font: PDFFont): PdfTypeFace {
   return { font, glyphs: new Set(font.getCharacterSet()) };
 }
 
+/** Magazine display headers only. Other themes do not embed this file. */
+export async function embedMagazineDisplayFont(doc: PDFDocument): Promise<PdfTypeFace> {
+  doc.registerFontkit(fontkit as never);
+  const font = await doc.embedFont(readPdfFontFile("Oswald-Bold.ttf"), { subset: true });
+  return asTypeFace(font);
+}
+
 export async function embedCapsulePdfFonts(doc: PDFDocument): Promise<CapsulePdfFonts> {
   doc.registerFontkit(fontkit as never);
   const [serif, serifBold, serifItalic, sans, emoji] = await Promise.all([

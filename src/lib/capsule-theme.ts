@@ -1,4 +1,4 @@
-export const CAPSULE_THEMES = ["classic", "warm", "minimal", "heritage"] as const;
+export const CAPSULE_THEMES = ["classic", "warm", "minimal", "heritage", "magazine"] as const;
 export type CapsuleTheme = (typeof CAPSULE_THEMES)[number];
 export const DEFAULT_CAPSULE_THEME: CapsuleTheme = "classic";
 
@@ -13,6 +13,7 @@ export const CAPSULE_THEME_CATALOG: readonly CapsuleThemeSwatch[] = [
   { id: "warm", name: "Warm", colors: ["#f3e0c8", "#6b2e1f", "#c47a3a"] },
   { id: "minimal", name: "Minimal", colors: ["#f7f7f5", "#2b2b2b", "#b5b5b0"] },
   { id: "heritage", name: "Heritage", colors: ["#f3ead7", "#1c1710", "#8a6a32"] },
+  { id: "magazine", name: "Magazine", colors: ["#f6f1e8", "#1c1916", "#c43b2e"] },
 ];
 
 const THEME_SET = new Set<string>(CAPSULE_THEMES);
@@ -53,6 +54,7 @@ export const THEME_PHOTO_LAYOUT: Record<CapsuleTheme, LetterPhotoLayout> = {
   warm: "grid",
   minimal: "strip",
   heritage: "plates",
+  magazine: "grid",
 };
 
 export type ThemePhoto = {
