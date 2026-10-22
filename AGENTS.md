@@ -1,5 +1,7 @@
 # Agent notes — Monthly Capsule
 
+Studio rules: `plain-and-simple/studio` README.md (private). This file covers only Monthly Capsule.
+
 Read `README.md` first. That file is the product lock (hosting, PIN, accounts, schedule, compile, email, e2e). This file is how to work on top of it without repeating the mistakes from recent shipping.
 
 Chandler is the product manager. Research, plan, ship. Dogfood. Prefer a usable letter-and-photos capsule over extra features.
@@ -58,5 +60,5 @@ People typically write about two paragraphs and put photos on the sides so it re
 
 - Web: `npm run dev` on port 3000. `.cursor/start.sh` may start local Supabase first.
 - Keep PRs focused. PIN, PDF/layout, and photo-cap are separate concerns.
-- **Merge ready work into `main` yourself.** Chandler does not merge or track pull requests. After CI is green, land it.
+- **An agreed change merges to `main` once `npm test`, `npm run typecheck` and PR CI pass** (studio rule). Chandler does not merge or track pull requests. Every merge is a production deploy.
 - Dogfood against the real submit → compile → capsule → PDF path. Do not invent a second editor or a second photo pipeline.
