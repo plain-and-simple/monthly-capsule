@@ -235,6 +235,56 @@ export function capsulePdfHasProducerMark(bytes: Uint8Array): boolean {
   return haystack.toUpperCase().includes(utf16BeHex(CAPSULE_PDF_PRODUCER));
 }
 
+function decodePdfName(value: string): string {
+  const unescaped = value.replace(/#([0-9A-Fa-f]{2})/g, (_, hex: string) =>
+    String.fromCharCode(Number.parseInt(hex, 16)),
+  );
+  return unescaped.replace(/^[A-Z]{6}\+/, "");
+}
+
+function decodeHexUtf16Name(hex: string): string {
+  const clean = hex.replace(/^FEFF/i, "");
+  let out = "";
+  for (let i = 0; i + 3 < clean.length; i += 4) {
+    out += String.fromCharCode(Number.parseInt(clean.slice(i, i + 4), 16));
+  }
+  return out.replace(/^[A-Z]{6}\+/, "");
+}
+
+/** pdffonts-equivalent: unique embedded font names from a Chromium or pdf-lib PDF. */
+export function pdfEmbeddedFontNames(bytes: Uint8Array): string[] {
+  const haystack = pdfHaystack(bytes);
+  const names = new Set<string>();
+  for (const match of haystack.matchAll(/\/(?:BaseFont|FontName)\s*\/([^\s()<>[\]{}/%]+)/g)) {
+    names.add(decodePdfName(match[1]!));
+  }
+  for (const match of haystack.matchAll(/\/(?:BaseFont|FontName)\s*\(([^)]+)\)/g)) {
+    names.add(decodePdfName(match[1]!));
+  }
+  for (const match of haystack.matchAll(/\/(?:BaseFont|FontName)\s*<([0-9A-Fa-f]+)>/g)) {
+    names.add(decodeHexUtf16Name(match[1]!));
+  }
+  const known = [
+    "CapsuleSerif",
+    "CapsuleSerifBold",
+    "CapsuleSerifItalic",
+    "CapsuleSans",
+    "CapsuleEmoji",
+    "LiberationSerif",
+    "LiberationSerif-Bold",
+    "LiberationSerif-Italic",
+    "LiberationSerif-Regular",
+    "LiberationSans",
+    "LiberationSans-Regular",
+    "NotoColorEmoji",
+    "Noto Color Emoji",
+  ];
+  for (const name of known) {
+    if (haystack.includes(name)) names.add(name);
+  }
+  return [...names];
+}
+
 export function capsulePdfNeedsUnicodeRerender(bytes: Uint8Array): boolean {
   return !capsulePdfHasProducerMark(bytes);
 }

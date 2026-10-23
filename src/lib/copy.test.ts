@@ -30,6 +30,7 @@ import {
   LANDING_SIGN_IN,
   LANDING_SIGN_UP,
   CONTRIBUTORS_PREFIX,
+  IN_THIS_ISSUE,
   DOWNLOAD_PDF_LABEL,
   CAPSULE_EMAIL_PDF_NOTE,
   MANAGE_TAG_NOT_OPEN,
@@ -247,6 +248,7 @@ describe("join and manage labels", () => {
     expect(MANAGE_TAG_NOT_OPEN).toBe("Next capsule not open");
     expect(contributorsLine(["Ada", "Sam", "Sam"])).toBe(`${CONTRIBUTORS_PREFIX} Ada, Sam, Sam`);
     expect(contributorsLine([])).toBe("");
+    expect(IN_THIS_ISSUE).toBe("In this issue");
     expect(DOWNLOAD_PDF_LABEL).toBe("Download PDF");
     expect(CAPSULE_EMAIL_PDF_NOTE).toBe("A PDF keepsake is attached when we have one.");
   });

@@ -3,7 +3,7 @@ import sharp from "sharp";
 import { buildCapsuleArchive } from "./capsule-archive";
 import { buildCapsulePdfBytes } from "./capsule-pdf";
 import { shutdownCapsuleBrowser } from "./capsule-pdf-chromium";
-import { capsulePdfHasProducerMark } from "./capsule-pdf-fonts";
+import { capsulePdfHasProducerMark, pdfEmbeddedFontNames } from "./capsule-pdf-fonts";
 
 async function plate(width: number, height: number, seed: number): Promise<Uint8Array> {
   const raw = Buffer.alloc(width * height * 3);
@@ -101,4 +101,17 @@ describe("b2 chromium render", () => {
     expect(coldMs).toBeLessThan(55_000);
     expect(warmMs).toBeLessThan(20_000);
   });
+
+  it("embeds the bundled text fonts and the colour emoji font when the letter has emoji", async () => {
+    const archive = letter("The plum tree finally did something this year. Hello 🎉", []);
+    const bytes = await buildCapsulePdfBytes({ archive, photos: [] });
+    expect(capsulePdfHasProducerMark(bytes)).toBe(true);
+    const names = pdfEmbeddedFontNames(bytes).join(" | ").toLowerCase();
+    expect(names).toMatch(/capsuleserif|liberationserif/);
+    expect(names).toMatch(/capsuleserifbold|liberation.*bold|liberationserif-bold/);
+    expect(names).toMatch(/capsuleserifitalic|liberation.*italic|liberationserif-italic/);
+    expect(names).toMatch(/capsulesans|liberationsans/);
+    expect(names).toMatch(/capsuleemoji|notocoloremoji|noto color emoji|noto-colemoji|colr/);
+  });
 });
+

@@ -324,7 +324,7 @@ describe("themed pdf keepsake", () => {
     expect(bytes.length).toBeGreaterThan(800);
     expect(text).toContain("Wren");
     expect(text).toContain("plum tree");
-    expect(text).toContain("Contributors: Wren");
+    expect(text).toContain("In this issue");
     expect(text).toContain("CEDAR STREET");
   });
 
@@ -404,7 +404,7 @@ describe("themed pdf keepsake", () => {
           { storage_path: "g/m/1.jpg", bytes: jpeg },
         ],
       });
-      const text = pdfExtractText(bytes);
+      const text = pdfExtractText(bytes).replace(/\s+/g, " ");
       expect(text).toContain("plum tree");
       expect(text).toContain("porch light");
     }

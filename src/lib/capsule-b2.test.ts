@@ -3,27 +3,35 @@ import {
   B2_CONTENT_BOTTOM,
   B2_INNER_W,
   B2_INNER_X,
+  B2_PAGE_H,
   B2_PAGE_W,
   B2_TEMPLATE_IDS,
   HEADER_STYLES,
   MAX_TRIM,
+  MIN_FOOTER_GAP,
+  PAGE_UNFILLED_MAX,
   SPREAD_WORD_MIN,
   TEMPLATE_REPEAT_PENALTY,
   auditPageContent,
+  bindPhotosToSlots,
   faceFullyVisible,
   heroScore,
   layoutCapsuleDocument,
   magazineRowCounts,
   measureTextWidth,
   orderPhotos,
+  pageUnfilledRatio,
   parseFaceBoxes,
   parsePhotoFacesList,
   placeCrop,
   scoreCandidate,
+  slotFitsPhoto,
   wordCount,
   type B2Photo,
   type PagePlan,
+  type PlacedPhoto,
 } from "./capsule-b2";
+import { IN_THIS_ISSUE as ISSUE_COPY } from "./copy";
 import { capsuleThemeMeta, type CapsuleTheme } from "./capsule-theme";
 
 function photo(
@@ -309,7 +317,11 @@ describe("b2 page templates", () => {
     expect(plan.pages[0]?.paper).toBe(classic.colors[0]);
     expect(plan.pages[1]?.headerFill).toBe(classic.colors[2]);
     expect(plan.pages[0]?.lines.some((line) => line.text === "CEDAR STREET")).toBe(true);
-    expect(plan.pages[0]?.lines.some((line) => line.text.includes("Contributors: Ada"))).toBe(true);
+    expect(plan.pages[0]?.lines.filter((line) => line.role === "cover" && line.text === "CEDAR STREET")).toHaveLength(1);
+    expect(plan.pages[0]?.lines.some((line) => line.role === "cover" && line.text === "Cedar Street")).toBe(false);
+    expect(plan.pages[0]?.lines.some((line) => line.text === ISSUE_COPY)).toBe(true);
+    expect(plan.pages[0]?.lines.some((line) => line.role === "cover" && line.text === "Ada")).toBe(true);
+    expect(plan.pages[0]?.lines.some((line) => line.role === "cover" && line.text === "2")).toBe(true);
 
     const minimal = layout([{ body: LETTER }], "minimal");
     expect(minimal.pages[1]?.headerFill).toBe(capsuleThemeMeta("minimal").colors[1]);
@@ -341,7 +353,12 @@ describe("b2 page templates", () => {
     expect(ada.every((page) => page !== bea[0])).toBe(true);
     const lead = ada.flatMap((page) => page.photos).find((item) => item.lead);
     expect(lead?.storagePath).toBe("ada");
-    expect(lead && ada.flatMap((page) => page.photos).every((item) => item.w * item.h <= lead.w * lead.h + 1)).toBe(true);
+    expect(lead?.crop.letterbox).toBe(false);
+    const adaPlaced = ada.flatMap((page) => page.photos);
+    const fittingLarger = adaPlaced.filter(
+      (item) => slotFitsPhoto(person, item.w, item.h) && item.w * item.h > (lead?.w ?? 0) * (lead?.h ?? 0) + 1,
+    );
+    expect(fittingLarger).toHaveLength(0);
     expectPhotosOnce(ada, [object, person]);
     expectFacesKept(ada, [object, person]);
     for (const line of ada.flatMap((page) => page.lines).filter((line) => line.role !== "footer")) {
@@ -351,3 +368,186 @@ describe("b2 page templates", () => {
     expectClean(plan.pages);
   });
 });
+
+describe("b2 cover", () => {
+  it("shows the group name once, a contents list with real page numbers, and a lead collage", () => {
+    const adaShots = [
+      photo("ada-lead", 900, 1200, [{ x: 0.3, y: 0.15, w: 0.35, h: 0.3 }], 0),
+      photo("ada-wide", 1600, 900, [], 1),
+    ];
+    const beaShot = photo("bea-lead", 1400, 900);
+    const long = Array.from({ length: 900 }, (_, index) => `word${index}`).join(" ");
+    const plan = layout([
+      { name: "Ada", body: long, photos: adaShots },
+      { name: "Bea", body: LETTER, photos: [beaShot] },
+    ]);
+    const cover = plan.pages[0]!;
+    expect(cover.templateId).toBe("cover");
+    const coverText = cover.lines.filter((line) => line.role === "cover").map((line) => line.text);
+    expect(coverText.filter((text) => text === "CEDAR STREET")).toHaveLength(1);
+    expect(coverText).not.toContain("Cedar Street");
+    expect(coverText).toContain(ISSUE_COPY);
+    const adaPage = plan.pages.findIndex((page) => page.personName === "Ada") + 1;
+    const beaPage = plan.pages.findIndex((page) => page.personName === "Bea") + 1;
+    expect(adaPage).toBe(2);
+    expect(beaPage).toBeGreaterThan(adaPage);
+    expect(personPages(plan, "Ada").length).toBeGreaterThanOrEqual(2);
+    expect(coverText).toContain("Ada");
+    expect(coverText).toContain(String(adaPage));
+    expect(coverText).toContain("Bea");
+    expect(coverText).toContain(String(beaPage));
+    expect(cover.photos.map((item) => item.storagePath).sort()).toEqual(["ada-lead", "bea-lead"].sort());
+    for (const placed of cover.photos) {
+      expect(placed.crop.maxSide).toBeLessThanOrEqual(MAX_TRIM + 0.002);
+      expect(placed.crop.letterbox).toBe(false);
+    }
+    expectFacesKept([cover], [adaShots[0]!, beaShot]);
+    expectClean(plan.pages);
+  });
+
+  it("still makes a filled cover when nobody sent a photo", () => {
+    const plan = layout([
+      { name: "Ada", body: LETTER },
+      { name: "Bea", body: "Hello October." },
+    ]);
+    const cover = plan.pages[0]!;
+    expect(cover.photos).toHaveLength(0);
+    expect(cover.bands.length).toBeGreaterThan(0);
+    expect(cover.lines.some((line) => line.role === "cover" && line.text === "CEDAR STREET")).toBe(true);
+    expect(cover.lines.some((line) => line.text === ISSUE_COPY)).toBe(true);
+    expect(pageUnfilledRatio(cover)).toBeLessThan(0.72);
+    expectClean(plan.pages);
+  });
+});
+
+describe("b2 lead assignment invariants", () => {
+  function mildMixes(): B2Photo[][] {
+    const faces = [{ x: 0.28, y: 0.14, w: 0.36, h: 0.3 }];
+    const shapes: Array<[string, number, number, B2Photo["faces"]]> = [
+      ["p", 800, 1200, faces],
+      ["l", 1600, 900, []],
+      ["s", 1000, 1000, []],
+      ["t", 900, 1500, faces],
+      ["w", 1800, 1000, []],
+      ["q", 1100, 900, []],
+    ];
+    const mixes: B2Photo[][] = [];
+    for (let n = 1; n <= 6; n += 1) {
+      for (let offset = 0; offset < shapes.length; offset += 1) {
+        mixes.push(
+          Array.from({ length: n }, (_, index) => {
+            const spec = shapes[(offset + index) % shapes.length]!;
+            return photo(`${spec[0]}${n}-${offset}-${index}`, spec[1], spec[2], spec[3], index);
+          }),
+        );
+      }
+    }
+    mixes.push([photo("face-p", 850, 1300, faces, 0), photo("obj-l", 1700, 950, [], 1)]);
+    mixes.push([photo("obj-l2", 1700, 950, [], 0), photo("face-p2", 850, 1300, faces, 1)]);
+    return mixes;
+  }
+
+  it("never letterboxes a mild photo when a fitting arrangement exists", () => {
+    for (const shots of mildMixes()) {
+      const plan = layout([{ body: `${LETTER} ${LETTER}`, photos: shots }]);
+      const pages = personPages(plan, "Wren");
+      expectPhotosOnce(pages, shots);
+      expectFacesKept(pages, shots);
+      expectClean(plan.pages);
+      for (const placed of pages.flatMap((page) => page.photos)) {
+        expect(placed.crop.maxSide, placed.storagePath).toBeLessThanOrEqual(MAX_TRIM + 0.002);
+        const source = shots.find((item) => item.storagePath === placed.storagePath)!;
+        if (placed.crop.letterbox || placed.fit === "contain") {
+          const slots = pages.flatMap((page) => page.photos);
+          const anyFit = slots.some((slot) => slotFitsPhoto(source, slot.w, slot.h));
+          expect(anyFit, placed.storagePath).toBe(false);
+        }
+      }
+      const lead = pages.flatMap((page) => page.photos).find((item) => item.lead);
+      if (lead) {
+        const source = shots.find((item) => item.storagePath === lead.storagePath);
+        expect(source).toBeTruthy();
+        if (source && !lead.crop.letterbox) {
+          expect(slotFitsPhoto(source, lead.w, lead.h)).toBe(true);
+        }
+      }
+    }
+  });
+
+  it("keeps the lead in a fitting slot instead of swapping into a mismatched large frame", () => {
+    const portrait = photo("tall", 800, 1200, [{ x: 0.3, y: 0.18, w: 0.32, h: 0.28 }], 1);
+    const wide = photo("wide", 1800, 900, [], 0);
+    const slots: PlacedPhoto[] = [
+      {
+        storagePath: "tall",
+        x: 0,
+        y: 0,
+        w: 180,
+        h: 270,
+        crop: placeCrop(portrait, 180 / 270),
+        fit: "cover",
+        lead: false,
+      },
+      {
+        storagePath: "wide",
+        x: 190,
+        y: 0,
+        w: 360,
+        h: 180,
+        crop: placeCrop(wide, 360 / 180),
+        fit: "cover",
+        lead: false,
+      },
+    ];
+    const bound = bindPhotosToSlots(slots, orderPhotos([wide, portrait]));
+    const lead = bound.find((item) => item.lead)!;
+    expect(lead.storagePath).toBe("tall");
+    expect(lead.crop.letterbox).toBe(false);
+    expect(slotFitsPhoto(portrait, lead.w, lead.h)).toBe(true);
+    expect(bound.every((item) => item.crop.letterbox === false)).toBe(true);
+  });
+});
+
+describe("b2 fill and footer", () => {
+  it("keeps unfilled area down on typical short and long letters", () => {
+    const short = LETTER;
+    const long = Array.from({ length: 220 }, (_, index) => `word${index}`).join(" ");
+    const one = [photo("one", 1200, 800)];
+    const three = [
+      photo("a", 900, 1200, [{ x: 0.3, y: 0.2, w: 0.3, h: 0.28 }], 0),
+      photo("b", 1400, 900, [], 1),
+      photo("c", 1000, 1000, [], 2),
+    ];
+    const fixtures = [
+      layout([{ body: short, photos: one }]),
+      layout([{ body: short, photos: three }]),
+      layout([{ body: long, photos: [] }]),
+    ];
+    for (const plan of fixtures) {
+      expectClean(plan.pages);
+      for (const page of plan.pages) {
+        if (page.templateId === "cover") continue;
+        expect(pageUnfilledRatio(page), page.templateId).toBeLessThanOrEqual(PAGE_UNFILLED_MAX);
+        const last = page.lines.filter((line) => line.role === "body").at(-1);
+        if (last) {
+          expect(B2_PAGE_H - 30 - (last.y + last.h)).toBeGreaterThanOrEqual(MIN_FOOTER_GAP - 0.6);
+        }
+      }
+    }
+  });
+
+  it("uses cream name ink on a green block header", () => {
+    const plan = layout([
+      { name: "Ada", body: LETTER },
+      { name: "Bea", body: LETTER },
+    ]);
+    const block = plan.pages.find((page) => page.headerStyle === "block" && page.personName);
+    expect(block).toBeTruthy();
+    const name = block!.lines.find((line) => line.role === "name")!;
+    expect(name.color).toBe(block!.headerInk);
+    expect(name.color).not.toBe(block!.ink);
+    expect(block!.headerFill).toBe("#2f5b4c");
+    expect(name.color).toBe("#fffdf7");
+  });
+});
+

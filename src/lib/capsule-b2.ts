@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import fontkit from "@pdf-lib/fontkit";
 import { PDF_FONTS_DIR } from "@/lib/capsule-pdf-fonts";
+import { IN_THIS_ISSUE } from "@/lib/copy";
 import { capsuleThemeMeta, type CapsuleTheme } from "@/lib/capsule-theme";
 import { type FaceBox } from "@/lib/face-boxes";
 
@@ -53,12 +54,21 @@ export type PlacedLine = {
 
 export type HeaderStyle = "rule" | "block" | "serif";
 
+export type PageBand = {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  fill: string;
+};
+
 export type PagePlan = {
   templateId: string;
   headerStyle: HeaderStyle;
   personName: string | null;
   lines: PlacedLine[];
   photos: PlacedPhoto[];
+  bands: PageBand[];
   paper: string;
   ink: string;
   accent: string;
@@ -94,7 +104,8 @@ export const B2_MARGIN_X = 32;
 export const B2_CONTENT_TOP = 26;
 export const B2_HEADER_H = 44;
 export const B2_GAP = 12;
-export const B2_CONTENT_BOTTOM = B2_PAGE_H - B2_FOOTER_H - 6;
+export const MIN_FOOTER_GAP = 12;
+export const B2_CONTENT_BOTTOM = B2_PAGE_H - B2_FOOTER_H - MIN_FOOTER_GAP;
 export const B2_INNER_X = B2_MARGIN_X;
 export const B2_INNER_W = B2_PAGE_W - B2_MARGIN_X * 2;
 export const B2_BODY_TOP = B2_CONTENT_TOP + B2_HEADER_H + 8;
@@ -104,7 +115,10 @@ export const FACE_PAD = 0.02;
 export const MIN_FACE_AREA = 0.003;
 export const TEMPLATE_REPEAT_PENALTY = 2.5;
 export const SPREAD_WORD_MIN = 650;
+export const BLANK_PENALTY = 22;
+export const LETTERBOX_PENALTY = 8;
 export const HEADER_STYLES: readonly HeaderStyle[] = ["rule", "block", "serif"];
+export const PAGE_UNFILLED_MAX = 0.42;
 
 const BODY_FONTS = [14, 13.5, 13, 12.5, 12, 11.5, 11, 10.5];
 const DISPLAY_FONTS = [22, 20, 18, 16, 15, 14, 13, 12, 11, 10.5];
@@ -147,7 +161,7 @@ function advanceOf(char: string, size: number, style: FontStyle): number {
   if (glyph.id !== 0) {
     width = (glyph.advanceWidth / primary.unitsPerEm) * size;
   } else {
-    const emoji = loadFace("NotoEmoji-Variable.ttf");
+    const emoji = loadFace("Noto-COLRv1.ttf");
     const alt = emoji.glyphForCodePoint(code);
     width = alt.id === 0 ? size * 0.5 : (alt.advanceWidth / emoji.unitsPerEm) * size;
   }
@@ -309,11 +323,13 @@ export function scoreCandidate(input: {
   templateId: string;
   previousTemplateId: string | null;
   affinity: number;
+  letterboxCount?: number;
 }): number {
   let score = input.affinity;
-  score -= input.blankRatio * 8;
+  score -= input.blankRatio * BLANK_PENALTY;
   score -= Math.max(0, 12.5 - input.fontSize) * 1.2;
   score -= input.meanCrop * 4;
+  score -= (input.letterboxCount ?? 0) * LETTERBOX_PENALTY;
   if (input.heroIsLargest) score += 1.5;
   if (input.objectIsBiggest && input.hasPerson) score -= 1.5;
   if (input.previousTemplateId && input.previousTemplateId === input.templateId) {
@@ -465,7 +481,7 @@ function flowText(input: FlowInput): { lines: PlacedLine[]; used: number } | nul
   if (!minPlaced) return null;
   if (!input.fill) return { lines: minPlaced.lines, used: minPlaced.used };
   let lo = minLine;
-  let hi = input.size * 1.62;
+  let hi = input.size * 1.85;
   for (let i = 0; i < 14; i += 1) {
     const mid = (lo + hi) / 2;
     const placed = placeAt(mid, paraGap);
@@ -475,6 +491,55 @@ function flowText(input: FlowInput): { lines: PlacedLine[]; used: number } | nul
   const placed = placeAt(lo, paraGap);
   if (!placed) return { lines: minPlaced.lines, used: minPlaced.used };
   return { lines: placed.lines, used: placed.used };
+}
+
+export function slotFitsPhoto(photo: B2Photo, slotW: number, slotH: number): boolean {
+  const target = slotW / Math.max(1, slotH);
+  const [minAspect, maxAspect] = aspectRange(photo);
+  return target >= minAspect - 1e-4 && target <= maxAspect + 1e-4;
+}
+
+export function regionUnfilledRatio(
+  photos: readonly PlacedPhoto[],
+  lines: readonly PlacedLine[],
+  bands: readonly PageBand[],
+  top: number,
+  bottom: number,
+): number {
+  const height = bottom - top;
+  if (!(height > 1)) return 1;
+  const step = 8;
+  const cols = Math.max(1, Math.ceil(B2_PAGE_W / step));
+  const rows = Math.max(1, Math.ceil(height / step));
+  const grid = new Uint8Array(cols * rows);
+  const mark = (x: number, y: number, w: number, h: number) => {
+    const x0 = Math.max(0, Math.floor(x / step));
+    const y0 = Math.max(0, Math.floor((y - top) / step));
+    const x1 = Math.min(cols, Math.ceil((x + w) / step));
+    const y1 = Math.min(rows, Math.ceil((y + h - top) / step));
+    for (let row = y0; row < y1; row += 1) {
+      const offset = row * cols;
+      for (let col = x0; col < x1; col += 1) grid[offset + col] = 1;
+    }
+  };
+  for (const band of bands) mark(band.x, band.y, band.w, band.h);
+  for (const photo of photos) mark(photo.x, photo.y, photo.w, photo.h);
+  for (const line of lines) {
+    mark(line.x, line.y, line.w, line.h);
+  }
+  let filled = 0;
+  for (const cell of grid) filled += cell;
+  return 1 - filled / (cols * rows);
+}
+
+export function pageUnfilledRatio(page: PagePlan): number {
+  return regionUnfilledRatio(
+    page.photos,
+    page.lines.filter((line) => line.role !== "footer"),
+    page.bands,
+    page.personName ? B2_BODY_TOP : B2_CONTENT_TOP,
+    B2_CONTENT_BOTTOM,
+  );
 }
 
 function textHeight(text: string, size: number, width: number, columns: 1 | 2): number | null {
@@ -601,31 +666,141 @@ function placeInSlot(photo: B2Photo, slot: PlacedPhoto, lead: boolean): PlacedPh
   };
 }
 
+function reshapeSlotToPhoto(slot: PlacedPhoto, photo: B2Photo): PlacedPhoto {
+  const aspect = photo.width / Math.max(1, photo.height);
+  const slotAspect = slot.w / Math.max(1, slot.h);
+  let { x, y, w, h } = slot;
+  if (slotAspect > aspect + 1e-4) {
+    w = h * aspect;
+    x = slot.x + (slot.w - w) / 2;
+  } else if (slotAspect < aspect - 1e-4) {
+    h = w / aspect;
+    y = slot.y + (slot.h - h) / 2;
+  }
+  return { ...slot, x, y, w, h };
+}
+
+function eachPerm<T>(items: readonly T[], visit: (perm: T[]) => void): void {
+  const arr = items.slice();
+  const n = arr.length;
+  visit(arr);
+  if (n < 2) return;
+  const counters = new Array<number>(n).fill(0);
+  let i = 1;
+  while (i < n) {
+    if (counters[i]! < i) {
+      const j = i % 2 === 0 ? 0 : counters[i]!;
+      const tmp = arr[j]!;
+      arr[j] = arr[i]!;
+      arr[i] = tmp;
+      visit(arr);
+      counters[i]! += 1;
+      i = 1;
+    } else {
+      counters[i] = 0;
+      i += 1;
+    }
+  }
+}
+
+function assignmentCost(
+  photos: readonly PlacedPhoto[],
+  heroPath: string | undefined,
+  byPath: ReadonlyMap<string, B2Photo>,
+): number {
+  let letterboxes = 0;
+  let crop = 0;
+  let heroArea = 0;
+  let maxFit = 0;
+  for (const photo of photos) {
+    const boxed = photo.crop.letterbox || photo.fit === "contain";
+    if (boxed) letterboxes += 1;
+    crop += photo.crop.maxSide;
+    const area = photo.w * photo.h;
+    const source = byPath.get(photo.storagePath);
+    if (source && !boxed && slotFitsPhoto(source, photo.w, photo.h) && area > maxFit) maxFit = area;
+    if (photo.storagePath === heroPath && !boxed) heroArea = area;
+  }
+  const heroFitsLargest = heroArea > 0 && heroArea >= maxFit - 1;
+  return letterboxes * 10_000 + crop * 40 - (heroFitsLargest ? 80 : 0) - heroArea * 0.001;
+}
+
+function greedyAssign(slots: readonly PlacedPhoto[], sources: B2Photo[], hero: B2Photo): B2Photo[] {
+  const remaining = sources.slice();
+  const assign: Array<B2Photo | undefined> = new Array(slots.length);
+  const used = new Set<number>();
+  const place = (photo: B2Photo, preferLargest: boolean) => {
+    let best = -1;
+    let bestKey = Infinity;
+    slots.forEach((slot, index) => {
+      if (used.has(index)) return;
+      const crop = placeCrop(photo, slot.w / Math.max(1, slot.h));
+      const area = slot.w * slot.h;
+      const key = crop.letterbox
+        ? 1e6 + Math.abs(Math.log((slot.w / Math.max(1, slot.h)) / (photo.width / Math.max(1, photo.height))))
+        : crop.maxSide * 10 - (preferLargest ? area / 1000 : 0);
+      if (key < bestKey) {
+        bestKey = key;
+        best = index;
+      }
+    });
+    if (best < 0) return;
+    used.add(best);
+    assign[best] = photo;
+    const at = remaining.findIndex((item) => item.storagePath === photo.storagePath);
+    if (at >= 0) remaining.splice(at, 1);
+  };
+  place(hero, true);
+  for (const photo of remaining.slice()) place(photo, false);
+  return assign.filter((photo): photo is B2Photo => !!photo);
+}
+
+/** Bind photos to existing slot geometry without letterboxing the lead when a fitting slot exists. */
+export function bindPhotosToSlots(placed: PlacedPhoto[], ordered: readonly B2Photo[]): PlacedPhoto[] {
+  if (placed.length === 0) return placed;
+  const byPath = new Map(ordered.map((photo) => [photo.storagePath, photo]));
+  const sources = placed.map((slot) => byPath.get(slot.storagePath)).filter((photo): photo is B2Photo => !!photo);
+  if (sources.length !== placed.length) return placed;
+  const hero =
+    ordered.find((photo) => sources.some((item) => item.storagePath === photo.storagePath)) ?? sources[0]!;
+
+  const apply = (slots: readonly PlacedPhoto[], assign: readonly B2Photo[]) =>
+    slots.map((slot, index) => placeInSlot(assign[index]!, slot, assign[index]!.storagePath === hero.storagePath));
+
+  let best = apply(placed, sources);
+  let bestCost = assignmentCost(best, hero.storagePath, byPath);
+
+  const consider = (slots: readonly PlacedPhoto[], assign: readonly B2Photo[]) => {
+    if (assign.length !== slots.length) return;
+    const photos = apply(slots, assign);
+    const next = assignmentCost(photos, hero.storagePath, byPath);
+    if (next + 1e-9 < bestCost) {
+      best = photos;
+      bestCost = next;
+    }
+  };
+
+  if (placed.length <= 7) eachPerm(sources, (perm) => consider(placed, perm));
+  else consider(placed, greedyAssign(placed, sources, hero));
+
+  const heroPlaced = best.find((photo) => photo.storagePath === hero.storagePath);
+  if (heroPlaced && (heroPlaced.crop.letterbox || heroPlaced.fit === "contain")) {
+    let largest = 0;
+    placed.forEach((slot, index) => {
+      if (slot.w * slot.h > placed[largest]!.w * placed[largest]!.h + 0.5) largest = index;
+    });
+    const reshaped = placed.map((slot, index) => (index === largest ? reshapeSlotToPhoto(slot, hero) : slot));
+    const rest = sources.filter((photo) => photo.storagePath !== hero.storagePath);
+    const assign: B2Photo[] = reshaped.map((_, index) => (index === largest ? hero : rest.shift()!));
+    if (assign.every(Boolean) && assign.length === reshaped.length) consider(reshaped, assign);
+    consider(reshaped, greedyAssign(reshaped, sources, hero));
+  }
+
+  return best;
+}
+
 function markLead(photos: PlacedPhoto[], ordered: readonly B2Photo[]): PlacedPhoto[] {
-  if (photos.length === 0) return photos;
-  const hero = ordered[0];
-  if (!hero) return photos;
-  const next = photos.map((photo) => ({ ...photo, lead: false }));
-  let largest = 0;
-  next.forEach((photo, index) => {
-    if (photo.w * photo.h > next[largest]!.w * next[largest]!.h + 0.5) largest = index;
-  });
-  const heroIndex = next.findIndex((photo) => photo.storagePath === hero.storagePath);
-  if (heroIndex < 0) {
-    next[largest] = placeInSlot(hero, next[largest]!, true);
-    return next;
-  }
-  if (heroIndex !== largest) {
-    const displacedPath = next[largest]!.storagePath;
-    const displaced = ordered.find((photo) => photo.storagePath === displacedPath);
-    const heroSlot = next[heroIndex]!;
-    const largeSlot = next[largest]!;
-    next[largest] = placeInSlot(hero, largeSlot, true);
-    if (displaced) next[heroIndex] = placeInSlot(displaced, heroSlot, false);
-  } else {
-    next[heroIndex] = { ...next[heroIndex]!, lead: true };
-  }
-  return next;
+  return bindPhotosToSlots(photos, ordered);
 }
 
 type Built = {
@@ -638,12 +813,13 @@ type Built = {
   objectIsBiggest: boolean;
   hasPerson: boolean;
   affinity: number;
+  letterboxCount: number;
 };
 
 function statsFor(
   photos: PlacedPhoto[],
+  lines: PlacedLine[],
   ordered: readonly B2Photo[],
-  blank: number,
   fontSize: number,
   affinity: number,
   templateId: B2TemplateId,
@@ -658,16 +834,34 @@ function statsFor(
   const objectIsBiggest = !!biggestSource && realFaces(biggestSource).length === 0;
   const hasPerson = ordered.some((photo) => realFaces(photo).length > 0);
   const meanCrop = photos.length ? photos.reduce((sum, photo) => sum + photo.crop.maxSide, 0) / photos.length : 0;
+  const letterboxCount = photos.filter((photo) => photo.crop.letterbox || photo.fit === "contain").length;
+  const blankRatio = regionUnfilledRatio(photos, lines, [], B2_BODY_TOP, B2_CONTENT_BOTTOM);
   return {
     templateId,
     fontSize,
-    blankRatio: clamp(blank / B2_AVAIL, 0, 1),
+    blankRatio: clamp(blankRatio, 0, 1),
     meanCrop,
     heroIsLargest,
     objectIsBiggest,
     hasPerson,
     affinity,
+    letterboxCount,
   };
+}
+
+function clampPhotoToPage(photo: PlacedPhoto): PlacedPhoto {
+  let { x, y, w, h } = photo;
+  if (x < 0) {
+    w += x;
+    x = 0;
+  }
+  if (y < 0) {
+    h += y;
+    y = 0;
+  }
+  if (x + w > B2_PAGE_W) w = Math.max(1, B2_PAGE_W - x);
+  if (y + h > B2_CONTENT_BOTTOM) h = Math.max(1, B2_CONTENT_BOTTOM - y);
+  return { ...photo, x, y, w, h };
 }
 
 function finishSingle(
@@ -678,15 +872,9 @@ function finishSingle(
   fontSize: number,
   affinity: number,
 ): Built {
-  const bottom = Math.max(
-    B2_BODY_TOP,
-    ...photos.map((photo) => photo.y + photo.h),
-    ...lines.map((line) => line.y + line.h),
-  );
-  const blank = Math.max(0, B2_CONTENT_BOTTOM - bottom);
-  const marked = markLead(photos, ordered);
+  const marked = markLead(photos, ordered).map(clampPhotoToPage);
   return {
-    ...statsFor(marked, ordered, blank, fontSize, affinity, templateId),
+    ...statsFor(marked, lines, ordered, fontSize, affinity, templateId),
     pages: [{ lines, photos: marked }],
   };
 }
@@ -708,6 +896,8 @@ function fitPhotosThenText(input: {
   if (input.ordered.length === 0) return null;
   const columns = input.columns ?? columnsFor(input.text);
   const fonts = input.fonts;
+  let best: Built | null = null;
+  let bestScore = -Infinity;
   for (const size of fonts) {
     const needed = textHeight(input.text, size, B2_INNER_W, columns);
     if (needed == null) continue;
@@ -733,9 +923,14 @@ function fitPhotosThenText(input: {
         })
       : { lines: [], used: 0 };
     if (!flowed) continue;
-    return finishSingle(input.templateId, input.ordered, photos, flowed.lines, size, input.affinity);
+    const built = finishSingle(input.templateId, input.ordered, photos, flowed.lines, size, input.affinity);
+    const score = -built.blankRatio * 20 + built.fontSize * 0.12 - built.letterboxCount * 8;
+    if (score > bestScore + 1e-9) {
+      best = built;
+      bestScore = score;
+    }
   }
-  return null;
+  return best;
 }
 
 function exactSlots(photos: readonly B2Photo[], widthFor: (photo: B2Photo) => number): Block | null {
@@ -781,11 +976,24 @@ function scaleBlockTo(block: Block, budget: number): Block {
 
 function buildPortraitFeature(hero: B2Photo, ordered: B2Photo[], text: string, ink: string): Built | null {
   const aspect = hero.width / Math.max(1, hero.height);
-  const photoW = Math.min(B2_INNER_W * 0.48, B2_AVAIL * 0.92 * aspect);
-  const photoH = photoW / aspect;
+  const textMin = 96;
+  const maxW = B2_INNER_W - textMin - 14;
+  let photoH = Math.min(B2_AVAIL, maxW / Math.max(0.2, aspect));
+  let photoW = photoH * aspect;
+  if (photoW > maxW) {
+    photoW = maxW;
+    photoH = photoW / aspect;
+  }
+  photoW = Math.min(photoW, B2_INNER_W * 0.62);
+  photoH = photoW / aspect;
+  if (photoH > B2_AVAIL) {
+    photoH = B2_AVAIL;
+    photoW = photoH * aspect;
+  }
   const textX = B2_INNER_X + photoW + 14;
   const textW = B2_INNER_X + B2_INNER_W - textX;
-  if (textW < 80) return null;
+  if (textW < 80 || photoW < 64 || photoH < 64) return null;
+  let best: Built | null = null;
   for (const size of BODY_FONTS) {
     const beside = text.trim()
       ? flowText({
@@ -793,37 +1001,33 @@ function buildPortraitFeature(hero: B2Photo, ordered: B2Photo[], text: string, i
           x: textX,
           y: B2_BODY_TOP,
           w: textW,
-          h: Math.max(photoH, B2_AVAIL),
+          h: B2_AVAIL,
           columns: 1,
           size,
-          fill: photoH >= B2_AVAIL * 0.75,
+          fill: true,
           color: ink,
         })
       : { lines: [] as PlacedLine[], used: 0 };
     if (!beside) continue;
     if (beside.used > B2_AVAIL + 0.5) continue;
-    const slotH = Math.max(photoH, Math.min(beside.used, B2_AVAIL));
-    const slotW = Math.min(photoW, slotH * aspect);
     const photos: PlacedPhoto[] = [
       {
         storagePath: hero.storagePath,
         x: B2_INNER_X,
         y: B2_BODY_TOP,
-        w: slotW,
-        h: slotH * aspect <= slotW + 1 ? slotH : slotW / aspect,
+        w: photoW,
+        h: photoH,
         crop: { ...ZERO_CROP },
         fit: "cover",
         lead: true,
       },
     ];
-    photos[0]!.h = photos[0]!.w / aspect;
-    if (photos[0]!.y + photos[0]!.h > B2_CONTENT_BOTTOM) {
-      photos[0]!.h = B2_CONTENT_BOTTOM - photos[0]!.y;
-      photos[0]!.w = photos[0]!.h * aspect;
+    const built = finishSingle("portrait-feature", ordered, photos, beside.lines, size, 1.45);
+    if (!best || built.blankRatio < best.blankRatio - 1e-9 || (Math.abs(built.blankRatio - best.blankRatio) < 1e-9 && built.fontSize > best.fontSize)) {
+      best = built;
     }
-    return finishSingle("portrait-feature", ordered, photos, beside.lines, size, 1.45);
   }
-  return null;
+  return best;
 }
 
 function buildLetterbox(ordered: B2Photo[], text: string, ink: string): Built | null {
@@ -863,62 +1067,62 @@ function buildLetterbox(ordered: B2Photo[], text: string, ink: string): Built | 
 
 function buildSideStack(ordered: B2Photo[], text: string, ink: string): Built | null {
   if (ordered.length < 2 || ordered.length > 4 || ordered.some(isExtreme)) return null;
-  const columnW = B2_INNER_W * 0.36;
+  const textMin = wordCount(text) < 80 ? 132 : 200;
+  const columnW = Math.min(B2_INNER_W * 0.62, B2_INNER_W - textMin - 12);
   const textW = B2_INNER_W - columnW - 12;
+  if (columnW < 90 || textW < 80) return null;
   let heights = ordered.map((photo) => columnW / (photo.width / Math.max(1, photo.height)));
   let stack = heights.reduce((sum, height) => sum + height, 0) + ROW_GAP * (ordered.length - 1);
-  if (stack > B2_AVAIL * 0.92) {
-    const scale = (B2_AVAIL * 0.86) / stack;
+  const target = B2_AVAIL * 0.98;
+  if (Math.abs(stack - target) > 8) {
+    const scale = target / stack;
     const next = ordered.map((photo, index) => {
       const height = heights[index]! * scale;
-      const aspect = columnW / height;
-      return placeCrop(photo, aspect);
+      return placeCrop(photo, columnW / height);
     });
-    if (next.some((crop) => crop.letterbox || crop.maxSide > MAX_TRIM + 0.002)) return null;
-    heights = heights.map((height) => height * scale);
-    stack = heights.reduce((sum, height) => sum + height, 0) + ROW_GAP * (ordered.length - 1);
+    if (!next.some((crop) => crop.letterbox || crop.maxSide > MAX_TRIM + 0.002)) {
+      heights = heights.map((height) => height * scale);
+      stack = heights.reduce((sum, height) => sum + height, 0) + ROW_GAP * (ordered.length - 1);
+    } else if (stack > target) {
+      return null;
+    }
   }
+  let best: Built | null = null;
   for (const size of BODY_FONTS) {
     const flowed = flowText({
       text,
       x: B2_INNER_X,
       y: B2_BODY_TOP,
       w: textW,
-      h: Math.max(stack, size * 2),
+      h: Math.min(B2_AVAIL, Math.max(stack, size * 2)),
       columns: 1,
       size,
-      fill: false,
+      fill: true,
       color: ink,
     });
     if (!flowed) continue;
-    if (flowed.used > stack + 1 && stack + B2_GAP + (flowed.used - stack) > B2_AVAIL) continue;
-    const textBottom = B2_BODY_TOP + Math.max(stack, flowed.used);
-    if (textBottom > B2_CONTENT_BOTTOM + 0.5) continue;
+    if (flowed.used > B2_AVAIL + 0.5) continue;
     let y = B2_BODY_TOP;
     const photos: PlacedPhoto[] = ordered.map((photo, index) => {
       const height = heights[index]!;
-      const aspect = columnW / height;
-      const crop = placeCrop(photo, aspect);
+      const crop = placeCrop(photo, columnW / height);
       const placed: PlacedPhoto = {
         storagePath: photo.storagePath,
         x: B2_INNER_X + textW + 12,
         y,
         w: columnW,
         h: height,
-        crop: crop.letterbox ? { ...ZERO_CROP, letterbox: true } : crop,
+        crop: crop.letterbox ? letterboxCrop() : crop,
         fit: crop.letterbox ? "contain" : "cover",
         lead: false,
       };
       y += height + ROW_GAP;
       return placed;
     });
-    const lines =
-      flowed.used <= stack + 1
-        ? flowed.lines
-        : flowed.lines;
-    return finishSingle("side-stack", ordered, photos, lines, size, 0.15);
+    const built = finishSingle("side-stack", ordered, photos, flowed.lines, size, 0.55);
+    if (!best || built.blankRatio < best.blankRatio - 1e-9) best = built;
   }
-  return null;
+  return best;
 }
 
 function buildMosaic(ordered: B2Photo[], text: string, ink: string): Built | null {
@@ -928,18 +1132,16 @@ function buildMosaic(ordered: B2Photo[], text: string, ink: string): Built | nul
   const right = ordered.slice(1, 5);
   const below = ordered.slice(1 + right.length);
   if (below.length === 1) return null;
-  const heroAspect = hero.width / hero.height;
-  let heroW = B2_INNER_W * 0.5;
+  const heroAspect = aspectAt(hero, 0.15);
+  let heroW = B2_INNER_W * 0.58;
   let heroH = heroW / heroAspect;
-  const maxH = B2_AVAIL * 0.7;
+  const maxH = B2_AVAIL * 0.92;
   if (heroH > maxH) {
     heroH = maxH;
     heroW = heroH * heroAspect;
   }
   const rightW = B2_INNER_W - heroW - ROW_GAP;
   if (rightW < 70) return null;
-  const cellH = (heroH - ROW_GAP * (right.length - 1)) / right.length;
-  if (cellH < 36) return null;
   const photos: PlacedPhoto[] = [
     {
       storagePath: hero.storagePath,
@@ -947,25 +1149,37 @@ function buildMosaic(ordered: B2Photo[], text: string, ink: string): Built | nul
       y: 0,
       w: heroW,
       h: heroH,
-      crop: { ...ZERO_CROP },
+      crop: placeCrop(hero, heroW / Math.max(1, heroH)),
       fit: "cover",
       lead: true,
     },
   ];
-  right.forEach((photo, index) => {
-    const slotAspect = rightW / cellH;
-    const crop = placeCrop(photo, slotAspect);
-    photos.push({
-      storagePath: photo.storagePath,
-      x: heroW + ROW_GAP,
-      y: index * (cellH + ROW_GAP),
-      w: rightW,
-      h: cellH,
-      crop: crop.letterbox ? letterboxCrop() : crop,
-      fit: crop.letterbox ? "contain" : "cover",
-      lead: false,
-    });
-  });
+  if (photos[0]!.crop.letterbox) return null;
+  const rightStack = fitStretch((stretch) => {
+    let y = 0;
+    const items: PlacedPhoto[] = [];
+    for (const photo of right) {
+      const aspect = aspectAt(photo, stretch);
+      const height = rightW / aspect;
+      if (!(height > 24)) return null;
+      const crop = placeCrop(photo, aspect);
+      if (crop.letterbox || crop.maxSide > MAX_TRIM + 0.002) return null;
+      items.push({
+        storagePath: photo.storagePath,
+        x: heroW + ROW_GAP,
+        y,
+        w: rightW,
+        h: height,
+        crop,
+        fit: "cover",
+        lead: false,
+      });
+      y += height + ROW_GAP;
+    }
+    return { items, height: Math.max(0, y - ROW_GAP) };
+  }, heroH);
+  if (!rightStack) return null;
+  photos.push(...rightStack.items);
   let blockH = heroH;
   if (below.length > 0) {
     const row = rowBlock(below, [below.length], B2_INNER_W, 0.35);
@@ -1050,10 +1264,11 @@ function buildOneLine(ordered: B2Photo[], text: string, ink: string): Built | nu
     }
     return null;
   }
-  const photoBudget = B2_AVAIL * 0.62;
   for (const size of ONE_LINE_FONTS) {
     const width = measureTextWidth(trimmed, size, "serif");
     if (width > B2_INNER_W) continue;
+    const textH = size * 1.25;
+    const photoBudget = B2_AVAIL - textH - B2_GAP;
     const natural = exactSlots(ordered, (photo) => {
       const aspect = photo.width / Math.max(1, photo.height);
       return aspect < 0.5 ? B2_INNER_W * 0.42 : B2_INNER_W;
@@ -1062,14 +1277,13 @@ function buildOneLine(ordered: B2Photo[], text: string, ink: string): Built | nu
     const fitted = scaleBlockTo(natural, photoBudget);
     const photos = shiftBlock(fitted, B2_INNER_X, B2_BODY_TOP);
     const textY = B2_BODY_TOP + fitted.height + B2_GAP;
-    const textH = B2_CONTENT_BOTTOM - textY;
-    if (textH < size * 1.15) continue;
+    if (textY + textH > B2_CONTENT_BOTTOM + 0.5) continue;
     const line: PlacedLine = {
       text: trimmed,
       x: B2_INNER_X + (B2_INNER_W - width) / 2,
-      y: textY + Math.max(0, (textH - size * 1.2) / 2),
+      y: textY,
       w: width,
-      h: size * 1.2,
+      h: textH,
       size,
       font: "serif",
       color: ink,
@@ -1179,21 +1393,14 @@ function buildSpread(ordered: B2Photo[], text: string, ink: string, force: boole
   }
   if (cursor < tokens.length || pages.length < minPages) return null;
   const fontSize = Math.min(...pages.flatMap((page) => page.lines.map((line) => line.size).concat(12)));
-  const blanks = pages.map((page) => {
-    const bottom = Math.max(
-      B2_BODY_TOP,
-      ...page.photos.map((photo) => photo.y + photo.h),
-      ...page.lines.map((line) => line.y + line.h),
-    );
-    return Math.max(0, B2_CONTENT_BOTTOM - bottom);
-  });
-  const blank = blanks.reduce((sum, value) => sum + value, 0) / Math.max(1, blanks.length);
   const markedPages = pages.map((page) => ({
     ...page,
-    photos: markLead(page.photos, ordered),
+    photos: markLead(page.photos, ordered).map(clampPhotoToPage),
   }));
+  const allPhotos = markedPages.flatMap((page) => page.photos);
+  const allLines = markedPages.flatMap((page) => page.lines);
   return {
-    ...statsFor(markedPages.flatMap((page) => page.photos), ordered, blank, fontSize, force ? 0.2 : 1.6, "spread"),
+    ...statsFor(allPhotos, allLines, ordered, fontSize, force ? 0.2 : 1.6, "spread"),
     pages: markedPages,
   };
 }
@@ -1234,7 +1441,7 @@ function candidateList(ordered: B2Photo[], text: string, ink: string): Built[] {
         text,
         ink,
         affinity: 1.25,
-        fonts: BODY_FONTS,
+        fonts: wordCount(text) < 80 ? DISPLAY_FONTS : BODY_FONTS,
         block: (stretch) => rowBlock(ordered, [1], B2_INNER_W, stretch),
       }),
     );
@@ -1338,6 +1545,7 @@ function pickBuilt(ordered: B2Photo[], text: string, ink: string, previousTempla
       templateId: built.templateId,
       previousTemplateId,
       affinity: built.affinity,
+      letterboxCount: built.letterboxCount,
     });
     if (!best || score > best.score + 1e-9) best = { built, score };
   }
@@ -1356,6 +1564,7 @@ function pickBuilt(ordered: B2Photo[], text: string, ink: string, previousTempla
     objectIsBiggest: false,
     hasPerson: false,
     affinity: 0,
+    letterboxCount: 0,
   };
 }
 
@@ -1425,51 +1634,73 @@ function placeFooter(pageNumber: number, groupName: string, month: string, ink: 
   ];
 }
 
-function coverLines(input: {
-  groupName: string;
+function coverCollage(leads: readonly B2Photo[], budget: number, top: number): PlacedPhoto[] {
+  if (leads.length === 0 || budget < 48) return [];
+  const used = leads.slice(0, 8);
+  const counts = magazineRowCounts(used.length);
+  const block = fitStretch((stretch) => rowBlock(used, counts, B2_INNER_W, stretch), budget);
+  if (block) return bindPhotosToSlots(shiftBlock(block, B2_INNER_X, top), used);
+  const natural = exactSlots(used, (photo) => {
+    const aspect = photo.width / Math.max(1, photo.height);
+    if (used.length === 1) return aspect < 0.5 ? B2_INNER_W * 0.46 : B2_INNER_W;
+    if (aspect < 0.5) return B2_INNER_W * 0.4;
+    return B2_INNER_W;
+  });
+  if (!natural) return [];
+  return bindPhotosToSlots(shiftBlock(scaleBlockTo(natural, budget), B2_INNER_X, top), used);
+}
+
+function buildCoverPage(input: {
   groupUpper: string;
   month: string;
-  contributors: string;
   missed: string;
   theme: CapsuleTheme;
   ink: string;
   accent: string;
+  paper: string;
   empty: boolean;
-}): PlacedLine[] {
+  toc: ReadonlyArray<{ name: string; page: number }>;
+  leads: readonly B2Photo[];
+}): { lines: PlacedLine[]; photos: PlacedPhoto[]; bands: PageBand[] } {
+  const fill = luminance(input.accent) < 170 ? input.accent : input.ink;
+  const mastInk = luminance(input.paper) > 180 ? input.paper : "#fffdf8";
+  const mastH = input.leads.length ? (input.theme === "heritage" ? 92 : 78) : input.theme === "heritage" ? 168 : 156;
+  const bands: PageBand[] = [{ x: 0, y: 0, w: B2_PAGE_W, h: mastH, fill }];
   const lines: PlacedLine[] = [];
-  let y = 48;
+  let titleY = 22;
   if (input.theme === "heritage") {
     lines.push({
       text: "A keepsake",
       x: B2_INNER_X,
-      y,
+      y: 12,
       w: B2_INNER_W,
-      h: 18,
-      size: 14,
+      h: 16,
+      size: 13,
       font: "serifItalic",
-      color: input.accent,
+      color: mastInk,
       role: "cover",
     });
-    y += 28;
+    titleY = 32;
   }
-  let size = 36;
+  let size = input.leads.length ? 32 : 46;
   while (size > 16 && measureTextWidth(input.groupUpper, size, "serifBold") > B2_INNER_W) size -= 1;
   lines.push({
     text: input.groupUpper,
     x: B2_INNER_X,
-    y,
+    y: input.leads.length ? titleY : Math.max(titleY, (mastH - size * 1.15) / 2),
     w: B2_INNER_W,
-    h: size * 1.05,
+    h: size * 1.15,
     size,
     font: "serifBold",
-    color: input.ink,
+    color: mastInk,
     role: "cover",
   });
-  y += size + 14;
+
+  let cursor = mastH + 16;
   lines.push({
     text: input.month,
     x: B2_INNER_X,
-    y,
+    y: cursor,
     w: B2_INNER_W,
     h: 18,
     size: 14,
@@ -1477,42 +1708,69 @@ function coverLines(input: {
     color: input.ink,
     role: "cover",
   });
-  y += 28;
-  lines.push({
-    text: input.groupName,
-    x: B2_INNER_X,
-    y,
-    w: B2_INNER_W,
-    h: 16,
-    size: 12,
-    font: "sans",
-    color: input.ink,
-    role: "cover",
-  });
-  y += 28;
-  if (input.contributors) {
-    const wrapped = wrapParagraph(input.contributors, 12, B2_INNER_W, "serif");
-    for (const line of wrapped) {
+  cursor += 26;
+
+  const tocCount = input.toc.length;
+  const tocBlock = 26 + tocCount * 22 + (input.missed ? 24 : 0) + (input.empty ? 28 : 0);
+  const collageBudget = Math.max(72, B2_CONTENT_BOTTOM - cursor - tocBlock - 16);
+  const photos = coverCollage(input.leads, collageBudget, cursor);
+  if (photos.length > 0) {
+    cursor = Math.max(...photos.map((photo) => photo.y + photo.h)) + 18;
+  } else {
+    cursor += input.empty ? 36 : 40;
+    bands.push({ x: B2_INNER_X, y: cursor - 18, w: 72, h: 3, fill });
+  }
+
+  if (tocCount > 0) {
+    const tocSize = input.leads.length ? 13 : 16;
+    const tocGap = input.leads.length ? 22 : 28;
+    lines.push({
+      text: IN_THIS_ISSUE,
+      x: B2_INNER_X,
+      y: cursor,
+      w: B2_INNER_W,
+      h: tocSize + 6,
+      size: tocSize,
+      font: "serifItalic",
+      color: input.ink,
+      role: "cover",
+    });
+    cursor += tocSize + 12;
+    for (const item of input.toc) {
+      const num = String(item.page);
+      const numW = Math.max(12, measureTextWidth(num, tocSize, "sans"));
+      const nameW = B2_INNER_W - numW - 16;
       lines.push({
-        text: line,
+        text: item.name,
         x: B2_INNER_X,
-        y,
-        w: B2_INNER_W,
-        h: 16,
-        size: 12,
+        y: cursor,
+        w: nameW,
+        h: tocSize + 6,
+        size: tocSize,
         font: "serif",
         color: input.ink,
         role: "cover",
       });
-      y += 18;
+      lines.push({
+        text: num,
+        x: B2_INNER_X + B2_INNER_W - numW,
+        y: cursor,
+        w: numW,
+        h: tocSize + 6,
+        size: tocSize,
+        font: "sans",
+        color: input.ink,
+        role: "cover",
+      });
+      cursor += tocGap;
     }
-    y += 8;
   }
+
   if (input.missed) {
     lines.push({
       text: input.missed,
       x: B2_INNER_X,
-      y,
+      y: cursor,
       w: B2_INNER_W,
       h: 16,
       size: 11,
@@ -1520,13 +1778,14 @@ function coverLines(input: {
       color: input.ink,
       role: "cover",
     });
-    y += 28;
+    cursor += 24;
   }
+
   if (input.empty) {
     lines.push({
       text: "No letters this month.",
       x: B2_INNER_X,
-      y: Math.max(y + 12, 280),
+      y: Math.max(cursor, mastH + 120),
       w: B2_INNER_W,
       h: 20,
       size: 14,
@@ -1535,7 +1794,8 @@ function coverLines(input: {
       role: "cover",
     });
   }
-  return lines;
+
+  return { lines, photos, bands };
 }
 
 export type LayoutLetter = {
@@ -1552,42 +1812,59 @@ export function layoutCapsuleDocument(input: {
   missedLine: string;
   contributors: string;
 }): DocumentPlan {
+  void input.contributors;
   const swatch = capsuleThemeMeta(input.theme);
   const paper = swatch.colors[0]!;
   const ink = swatch.colors[1]!;
   const accent = swatch.colors[2]!;
-  const rawPages: Array<{ templateId: string; personName: string | null; lines: PlacedLine[]; photos: PlacedPhoto[] }> = [];
-  rawPages.push({
-    templateId: "cover",
-    personName: null,
-    lines: coverLines({
-      groupName: input.groupName,
-      groupUpper: input.groupName.toUpperCase(),
-      month: input.monthLabel,
-      contributors: input.contributors,
-      missed: input.missedLine,
-      theme: input.theme,
-      ink,
-      accent,
-      empty: input.letters.length === 0,
-    }),
-    photos: [],
-  });
-
+  const letterPages: Array<{
+    templateId: string;
+    personName: string | null;
+    lines: PlacedLine[];
+    photos: PlacedPhoto[];
+    bands: PageBand[];
+  }> = [];
+  const toc: Array<{ name: string; page: number }> = [];
   let previous: string | null = null;
+  let nextPage = 2;
   for (const letter of input.letters) {
+    toc.push({ name: letter.preferredName, page: nextPage });
     const ordered = orderPhotos(letter.photos);
     const built = pickBuilt(ordered, letter.body, ink, previous);
     for (const page of built.pages) {
-      rawPages.push({
+      letterPages.push({
         templateId: built.templateId,
         personName: letter.preferredName,
         lines: page.lines,
         photos: page.photos,
+        bands: [],
       });
       previous = built.templateId;
+      nextPage += 1;
     }
   }
+
+  const leads = input.letters
+    .map((letter) => orderPhotos(letter.photos)[0])
+    .filter((photo): photo is B2Photo => !!photo);
+
+  const cover = buildCoverPage({
+    groupUpper: input.groupName.toUpperCase(),
+    month: input.monthLabel,
+    missed: input.missedLine,
+    theme: input.theme,
+    ink,
+    accent,
+    paper,
+    empty: input.letters.length === 0,
+    toc,
+    leads,
+  });
+
+  const rawPages = [
+    { templateId: "cover", personName: null, lines: cover.lines, photos: cover.photos, bands: cover.bands },
+    ...letterPages,
+  ];
 
   const pages: PagePlan[] = rawPages.map((page, index) => {
     const headerStyle = HEADER_STYLES[index % HEADER_STYLES.length]!;
@@ -1601,6 +1878,7 @@ export function layoutCapsuleDocument(input: {
       personName: page.personName,
       lines,
       photos: page.photos,
+      bands: page.bands,
       paper,
       ink,
       accent,
@@ -1621,9 +1899,9 @@ export function boxesOverlap(
 
 export function auditPageContent(page: PagePlan): string[] {
   const problems: string[] = [];
-  const body = page.lines.filter((line) => line.role === "body" || line.role === "name");
+  const body = page.lines.filter((line) => line.role === "body" || line.role === "name" || line.role === "cover");
   for (const line of body) {
-    if (line.y < B2_CONTENT_TOP - 1 || line.y + line.h > B2_CONTENT_BOTTOM + 1.5) {
+    if (line.role !== "cover" && (line.y < B2_CONTENT_TOP - 1 || line.y + line.h > B2_CONTENT_BOTTOM + 1.5)) {
       problems.push(`text outside content: ${line.text.slice(0, 24)}`);
     }
     for (const photo of page.photos) {
