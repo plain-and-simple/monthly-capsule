@@ -126,6 +126,12 @@ export const B2_BODY_SIZE = 14;
  * Older uploads have no boxes; a tiny centred trim is the whole allowance.
  */
 export const COVER_UNKNOWN_TRIM = 0.03;
+/** Contents names and page numbers never go below this. */
+export const COVER_TOC_MIN = 11;
+/** With 4 or more lead photos, one cell may not take more of the collage than this. */
+export const COVER_PHOTO_SHARE_MAX = 0.35;
+/** A spread page should not leave more of the content box empty than this. */
+export const SPREAD_PAGE_UNFILLED_MAX = 0.15;
 /** A photo block may not float with more than this fraction of the content width empty on both sides. */
 export const PHOTO_SIDE_GAP_MAX = 0.08;
 /**
@@ -727,12 +733,14 @@ function assignmentCost(
   photos: readonly PlacedPhoto[],
   heroPath: string | undefined,
   byPath: ReadonlyMap<string, B2Photo>,
+  original: readonly string[],
 ): number {
   let letterboxes = 0;
   let crop = 0;
   let heroArea = 0;
   let maxFit = 0;
-  for (const photo of photos) {
+  let disorder = 0;
+  photos.forEach((photo, index) => {
     const boxed = photo.crop.letterbox || photo.fit === "contain";
     if (boxed) letterboxes += 1;
     crop += photo.crop.maxSide;
@@ -740,9 +748,12 @@ function assignmentCost(
     const source = byPath.get(photo.storagePath);
     if (source && !boxed && slotFitsPhoto(source, photo.w, photo.h) && area > maxFit) maxFit = area;
     if (photo.storagePath === heroPath && !boxed) heroArea = area;
-  }
+    const from = original.indexOf(photo.storagePath);
+    if (from >= 0) disorder += Math.abs(from - index);
+  });
   const heroFitsLargest = heroArea > 0 && heroArea >= maxFit - 1;
-  return letterboxes * 10_000 + crop * 40 - (heroFitsLargest ? 80 : 0) - heroArea * 0.001;
+  // Order is a tie-break under crop. It must not outweigh a real trim change.
+  return letterboxes * 10_000 + crop * 40 - (heroFitsLargest ? 80 : 0) - heroArea * 0.001 + disorder * 0.02;
 }
 
 function greedyAssign(slots: readonly PlacedPhoto[], sources: B2Photo[], hero: B2Photo): B2Photo[] {
@@ -781,19 +792,24 @@ export function bindPhotosToSlots(placed: PlacedPhoto[], ordered: readonly B2Pho
   const byPath = new Map(ordered.map((photo) => [photo.storagePath, photo]));
   const sources = placed.map((slot) => byPath.get(slot.storagePath)).filter((photo): photo is B2Photo => !!photo);
   if (sources.length !== placed.length) return placed;
-  const hero =
-    ordered.find((photo) => sources.some((item) => item.storagePath === photo.storagePath)) ?? sources[0]!;
+  const lead = ordered[0];
+  const leadOnPage = !!lead && sources.some((item) => item.storagePath === lead.storagePath);
+  // A continuation page has no lead. Treating the first leftover as the hero
+  // shoves it into the largest cell and scrambles the rest.
+  const hero = leadOnPage ? lead : sources[0]!;
+  const heroPath = leadOnPage ? hero.storagePath : undefined;
+  const original = sources.map((photo) => photo.storagePath);
 
   const apply = (slots: readonly PlacedPhoto[], assign: readonly B2Photo[]) =>
-    slots.map((slot, index) => placeInSlot(assign[index]!, slot, assign[index]!.storagePath === hero.storagePath));
+    slots.map((slot, index) => placeInSlot(assign[index]!, slot, assign[index]!.storagePath === heroPath));
 
   let best = apply(placed, sources);
-  let bestCost = assignmentCost(best, hero.storagePath, byPath);
+  let bestCost = assignmentCost(best, heroPath, byPath, original);
 
   const consider = (slots: readonly PlacedPhoto[], assign: readonly B2Photo[]) => {
     if (assign.length !== slots.length) return;
     const photos = apply(slots, assign);
-    const next = assignmentCost(photos, hero.storagePath, byPath);
+    const next = assignmentCost(photos, heroPath, byPath, original);
     if (next + 1e-9 < bestCost) {
       best = photos;
       bestCost = next;
@@ -996,7 +1012,121 @@ function scaleBlockTo(block: Block, budget: number): Block {
   };
 }
 
+const LEADING_GROWTH = 1.85 / 1.28;
+
+function placedUnfilled(photos: readonly PlacedPhoto[], lines: readonly PlacedLine[]): number {
+  return regionUnfilledRatio(photos, lines, [], B2_BODY_TOP, B2_CONTENT_BOTTOM);
+}
+
+/**
+ * Photos in a left column at their real aspect, text beside that column and
+ * the remainder across the full measure underneath. Used when a full-width
+ * row would leave the letter no room at the standard body size.
+ */
+function fitBesidePage(
+  photos: readonly B2Photo[],
+  tokens: readonly Token[],
+  ink: string,
+): { lines: PlacedLine[]; photos: PlacedPhoto[]; unfilled: number } | null {
+  if (photos.length === 0 || photos.length > 4 || tokens.length === 0) return null;
+  let best: { lines: PlacedLine[]; photos: PlacedPhoto[]; unfilled: number; area: number } | null = null;
+  const lo = 110;
+  const hi = B2_INNER_W * 0.64;
+  for (let step = 0; step < 14; step += 1) {
+    const columnW = lo + ((hi - lo) * step) / 13;
+    const aspects = photos.map((photo) => photo.width / Math.max(1, photo.height));
+    const heights = aspects.map((aspect) => columnW / aspect);
+    if (heights.some((height) => height < 90)) continue;
+    const stackH = heights.reduce((sum, height) => sum + height, 0) + ROW_GAP * (photos.length - 1);
+    if (stackH > B2_AVAIL - B2_BODY_SIZE * 2) continue;
+    const textW = B2_INNER_W - columnW - B2_GAP;
+    if (textW < 140) continue;
+    const belowH = B2_AVAIL - stackH - B2_GAP;
+    const besideCount = fitTokenCount(tokens, stackH, tokens.length, textW, 1);
+    const rest = tokens.slice(besideCount);
+    const belowColumns: 1 | 2 = rest.length > 36 ? 2 : 1;
+    if (rest.length > 0) {
+      const need = textHeight(joinTokens(rest), B2_BODY_SIZE, B2_INNER_W, belowColumns);
+      if (need == null || need > belowH + 0.5) continue;
+    }
+    const beside =
+      besideCount > 0
+        ? flowText({
+            text: joinTokens(tokens.slice(0, besideCount)),
+            x: B2_INNER_X + columnW + B2_GAP,
+            y: B2_BODY_TOP,
+            w: textW,
+            h: stackH,
+            columns: 1,
+            size: B2_BODY_SIZE,
+            fill: true,
+            color: ink,
+          })
+        : { lines: [] as PlacedLine[], used: 0 };
+    if (!beside) continue;
+    const below =
+      rest.length > 0
+        ? flowText({
+            text: joinTokens(rest),
+            x: B2_INNER_X,
+            y: B2_BODY_TOP + stackH + B2_GAP,
+            w: B2_INNER_W,
+            h: belowH,
+            columns: belowColumns,
+            size: B2_BODY_SIZE,
+            fill: true,
+            color: ink,
+          })
+        : { lines: [] as PlacedLine[], used: 0 };
+    if (!below) continue;
+    let y = 0;
+    const items: PlacedPhoto[] = photos.map((photo, index) => {
+      const height = heights[index]!;
+      const placed: PlacedPhoto = {
+        storagePath: photo.storagePath,
+        x: 0,
+        y,
+        w: columnW,
+        h: height,
+        crop: { ...ZERO_CROP },
+        fit: "cover",
+        lead: false,
+      };
+      y += height + ROW_GAP;
+      return placed;
+    });
+    const shifted = shiftBlock({ items, height: stackH }, B2_INNER_X, B2_BODY_TOP);
+    const lines = [...beside.lines, ...below.lines];
+    const unfilled = placedUnfilled(shifted, lines);
+    const area = shifted.reduce((sum, photo) => sum + photo.w * photo.h, 0);
+    if (!best || unfilled < best.unfilled - 0.008 || (Math.abs(unfilled - best.unfilled) <= 0.008 && area > best.area)) {
+      best = { lines, photos: shifted, unfilled, area };
+    }
+  }
+  if (!best) return null;
+  return { lines: best.lines, photos: best.photos, unfilled: best.unfilled };
+}
+
+function finishBeside(
+  templateId: B2TemplateId,
+  ordered: readonly B2Photo[],
+  text: string,
+  ink: string,
+  affinity: number,
+): Built | null {
+  const fitted = fitBesidePage(ordered, tokenize(text), ink);
+  if (!fitted) return null;
+  if (wordCount(fitted.lines.map((line) => line.text).join(" ")) !== wordCount(text)) return null;
+  return finishSingle(templateId, ordered.slice(), fitted.photos, fitted.lines, B2_BODY_SIZE, affinity);
+}
+
 function buildPortraitFeature(hero: B2Photo, ordered: B2Photo[], text: string, ink: string): Built | null {
+  const classic = buildPortraitBeside(hero, ordered, text, ink);
+  if (classic) return classic;
+  return finishBeside("portrait-feature", ordered, text, ink, 1.45);
+}
+
+function buildPortraitBeside(hero: B2Photo, ordered: B2Photo[], text: string, ink: string): Built | null {
   const aspect = hero.width / Math.max(1, hero.height);
   const textMin = 96;
   const maxW = B2_INNER_W - textMin - 14;
@@ -1382,147 +1512,388 @@ function fitTokenCount(
   return best;
 }
 
-/** Flush-left stack at the real aspect. Used when a full-width row cannot be reached inside the trim limit. */
-function flushColumn(photos: readonly B2Photo[], maxH: number): Block | null {
-  if (photos.length === 0) return null;
-  const aspects = photos.map((photo) => photo.width / Math.max(1, photo.height));
-  const gaps = ROW_GAP * Math.max(0, photos.length - 1);
-  const sumInv = aspects.reduce((sum, aspect) => sum + 1 / Math.max(0.05, aspect), 0);
-  let width = Math.min(B2_INNER_W * 0.62, Math.max(120, (maxH - gaps) / sumInv));
-  const itemsAt = (columnW: number): PlacedPhoto[] => {
-    let y = 0;
-    return photos.map((photo) => {
-      const aspect = photo.width / Math.max(1, photo.height);
-      const height = columnW / aspect;
-      const placed: PlacedPhoto = {
-        storagePath: photo.storagePath,
-        x: 0,
-        y,
-        w: columnW,
-        h: height,
-        crop: { ...ZERO_CROP },
-        fit: "cover",
-        lead: false,
-      };
-      y += height + ROW_GAP;
-      return placed;
-    });
+type SpreadLeaf = { lines: PlacedLine[]; photos: PlacedPhoto[]; unfilled: number };
+
+function leafArea(leaf: SpreadLeaf): number {
+  return leaf.photos.reduce((sum, photo) => sum + photo.w * photo.h, 0);
+}
+
+/** Full-width rows, then text. The measured unfilled ratio decides whether the page reaches the footer. */
+function tryRowLeaf(photos: readonly B2Photo[], tokens: readonly Token[], ink: string): SpreadLeaf | null {
+  const text = joinTokens(tokens);
+  const choices: Array<1 | 2> = [];
+  const preferred = text ? columnsFor(text) : 2;
+  choices.push(preferred);
+  if (preferred === 1 && tokens.length > 40) choices.push(2);
+  if (preferred === 2) choices.push(1);
+  let best: SpreadLeaf | null = null;
+  let bestColumns: 1 | 2 = 2;
+  const keep = (leaf: SpreadLeaf | null, columns: 1 | 2) => {
+    if (!leaf) return;
+    if (!best) {
+      best = leaf;
+      bestColumns = columns;
+      return;
+    }
+    const cap = SPREAD_PAGE_UNFILLED_MAX + 0.02;
+    if (tokens.length > 70 && leaf.unfilled <= cap && best.unfilled <= cap && columns !== bestColumns) {
+      if (columns === 2) {
+        best = leaf;
+        bestColumns = columns;
+      }
+      return;
+    }
+    if (leaf.unfilled < best.unfilled - 1e-4) {
+      best = leaf;
+      bestColumns = columns;
+    }
   };
-  let items = itemsAt(width);
-  let height = Math.max(0, items.reduce((bottom, item) => Math.max(bottom, item.y + item.h), 0));
-  if (height > maxH + 0.6) {
-    const scale = maxH / height;
-    width *= scale;
-    items = itemsAt(width);
-    height = Math.max(0, items.reduce((bottom, item) => Math.max(bottom, item.y + item.h), 0));
+  for (const columns of choices) {
+    const minText = text ? textHeight(text, B2_BODY_SIZE, B2_INNER_W, columns) : 0;
+    if (minText == null || minText > B2_AVAIL + 0.5) continue;
+    if (photos.length === 0) {
+      const page = text
+        ? buildTextPage(text, ink, B2_BODY_TOP, B2_AVAIL, { x: B2_INNER_X, w: B2_INNER_W }, [B2_BODY_SIZE], columns)
+        : { lines: [] as PlacedLine[], fontSize: B2_BODY_SIZE };
+      if (!page) continue;
+      keep({ lines: page.lines, photos: [], unfilled: placedUnfilled([], page.lines) }, columns);
+      continue;
+    }
+    const budget = B2_AVAIL - minText - (text ? B2_GAP : 0);
+    if (budget < 72) continue;
+    let block: Block | null = null;
+    if (photos.some(isExtreme)) {
+      const natural = exactSlots(photos, (photo) => {
+        const aspect = photo.width / Math.max(1, photo.height);
+        return aspect < 0.5 ? B2_INNER_W * 0.46 : B2_INNER_W;
+      });
+      block = natural ? scaleBlockTo(natural, budget) : null;
+    } else {
+      const counts = magazineRowCounts(photos.length);
+      block = rowBlock(photos, counts, B2_INNER_W, NATIVE_STRETCH);
+      if (!block || block.height > budget + 0.6) {
+        block = fitStretch((stretch) => rowBlock(photos, counts, B2_INNER_W, stretch), budget);
+      }
+    }
+    if (!block) continue;
+    const placed = shiftBlock(block, B2_INNER_X, B2_BODY_TOP);
+    const textY = B2_BODY_TOP + block.height + (text ? B2_GAP : 0);
+    const flowed = text
+      ? flowText({
+          text,
+          x: B2_INNER_X,
+          y: textY,
+          w: B2_INNER_W,
+          h: Math.max(1, B2_CONTENT_BOTTOM - textY),
+          columns,
+          size: B2_BODY_SIZE,
+          fill: true,
+          color: ink,
+        })
+      : { lines: [] as PlacedLine[], used: 0 };
+    if (!flowed) continue;
+    keep({ lines: flowed.lines, photos: placed, unfilled: placedUnfilled(placed, flowed.lines) }, columns);
   }
-  if (!(height > 1) || width < 80) return null;
-  return { items, height };
+  return best;
 }
 
 /**
- * Photos on a spread span the content width at the real aspect when that fits.
- * A portrait that would be taller than the page is trimmed within 10% so the
- * block still spans the width. Text shares the page only when a readable
- * region remains; otherwise the letter continues on the next page.
+ * A full-width row wins over a side column when both reach the footer.
+ * The side column is for a portrait (or a stack) that cannot sit full width
+ * without pushing the letter off the page.
  */
-function spreadOpening(ordered: readonly B2Photo[]): {
-  photos: PlacedPhoto[];
-  text: { x: number; y: number; w: number; h: number } | null;
-} {
-  const top = B2_BODY_TOP;
-  if (ordered.length === 0) {
-    return { photos: [], text: { x: B2_INNER_X, y: top, w: B2_INNER_W, h: B2_AVAIL } };
-  }
-  const counts = magazineRowCounts(ordered.length);
-  const width = B2_INNER_W;
-  let block = ordered.some(isExtreme) ? null : rowBlock(ordered, counts, width, NATIVE_STRETCH);
-  if (block && block.height > B2_AVAIL) {
-    block = fitStretch((stretch) => rowBlock(ordered, counts, width, stretch), B2_AVAIL);
-  }
-  if (!block) block = flushColumn(ordered, B2_AVAIL);
-  if (!block) {
-    return { photos: [], text: { x: B2_INNER_X, y: top, w: B2_INNER_W, h: B2_AVAIL } };
-  }
-  const share = block.height <= B2_AVAIL * 0.62 && block.height + B2_GAP + B2_BODY_SIZE * 4 <= B2_AVAIL;
-  if (!share) {
-    const grown = ordered.some(isExtreme)
-      ? null
-      : fitStretch((stretch) => rowBlock(ordered, counts, width, stretch), B2_AVAIL);
-    if (grown && grown.height >= block.height - 0.5) block = grown;
-  }
-  const photos = shiftBlock(block, B2_INNER_X, top);
-  if (share) {
-    const textY = top + block.height + B2_GAP;
-    return {
-      photos,
-      text: { x: B2_INNER_X, y: textY, w: B2_INNER_W, h: Math.max(0, B2_CONTENT_BOTTOM - textY) },
-    };
-  }
-  const right = Math.max(...photos.map((photo) => photo.x + photo.w));
-  const left = Math.min(...photos.map((photo) => photo.x));
-  const beside = B2_INNER_X + B2_INNER_W - right - B2_GAP;
-  if (left - B2_INNER_X <= B2_INNER_W * PHOTO_SIDE_GAP_MAX && beside >= 150) {
-    return { photos, text: { x: right + B2_GAP, y: top, w: beside, h: B2_AVAIL } };
-  }
-  return { photos, text: null };
+function trySpreadLeaf(photos: readonly B2Photo[], tokens: readonly Token[], ink: string): SpreadLeaf | null {
+  const row = tryRowLeaf(photos, tokens, ink);
+  const cap = SPREAD_PAGE_UNFILLED_MAX + 0.02;
+  const wide = !!row && row.unfilled <= cap && leafArea(row) >= B2_INNER_W * 160;
+  const beside = !wide && photos.length === 1 && tokens.length > 0 ? fitBesidePage(photos, tokens, ink) : null;
+  if (!row || !beside) return row ?? beside;
+  const rowOk = row.unfilled <= cap;
+  const besideOk = beside.unfilled <= cap;
+  if (rowOk && leafArea(beside) < leafArea(row) * 0.8) return row;
+  if (rowOk !== besideOk) return rowOk ? row : beside;
+  const scale = Math.max(leafArea(row), leafArea(beside), 1);
+  if (Math.abs(leafArea(row) - leafArea(beside)) > scale * 0.2) return leafArea(row) >= leafArea(beside) ? row : beside;
+  return row.unfilled <= beside.unfilled ? row : beside;
 }
 
-function pageBlank(photos: readonly PlacedPhoto[], lines: readonly PlacedLine[], bands: readonly PageBand[] = []): number {
-  return regionUnfilledRatio(photos, lines, bands, B2_BODY_TOP, B2_CONTENT_BOTTOM);
+function photoBundles(photos: readonly B2Photo[], pageCount: number): B2Photo[][][] {
+  if (pageCount <= 1) return [[photos.slice()]];
+  if (pageCount === 2) {
+    const bundles: B2Photo[][][] = [];
+    for (let split = 0; split <= photos.length; split += 1) {
+      bundles.push([photos.slice(0, split), photos.slice(split)]);
+    }
+    return bundles;
+  }
+  const bundles: B2Photo[][][] = [];
+  for (let first = 0; first <= photos.length; first += 1) {
+    for (let second = 0; second <= photos.length - first; second += 1) {
+      bundles.push([photos.slice(0, first), photos.slice(first, first + second), photos.slice(first + second)]);
+    }
+  }
+  return bundles;
 }
 
+type SpreadPick = {
+  pages: SpreadLeaf[];
+  over: number;
+  bare: number;
+  area: number;
+  thin: number;
+  lead: number;
+  unfilled: number;
+};
+
+function rankSpread(pages: SpreadLeaf[]): SpreadPick {
+  const unfilled = Math.max(...pages.map((page) => page.unfilled));
+  const photoPages = pages.filter((page) => page.photos.length > 0);
+  const thin = photoPages.length === 0 ? 99 : Math.min(...photoPages.map((page) => page.lines.length));
+  const lead = pages.findIndex((page) => page.photos.length > 0);
+  return {
+    pages,
+    over: Math.max(0, unfilled - (SPREAD_PAGE_UNFILLED_MAX + 0.012)),
+    bare: photoPages.filter((page) => page.lines.length === 0).length,
+    area: pages.reduce((sum, page) => sum + leafArea(page), 0),
+    thin,
+    lead: lead < 0 ? 99 : lead,
+    unfilled,
+  };
+}
+
+/** Fewer holes, then no photo page without text, then a real photo size, then a caption that is more than a line. */
+function betterSpread(current: SpreadPick, next: SpreadPick): boolean {
+  if (next.over < current.over - 1e-4) return true;
+  if (current.over < next.over - 1e-4) return false;
+  if (next.bare !== current.bare) return next.bare < current.bare;
+  const scale = Math.max(current.area, next.area, 1);
+  if (next.area > current.area + scale * 0.2) return true;
+  if (current.area > next.area + scale * 0.2) return false;
+  if (current.thin < 3 && next.thin > current.thin) return true;
+  if (next.thin < 3 && current.thin > next.thin) return false;
+  if (next.lead !== current.lead) return next.lead < current.lead;
+  return next.unfilled < current.unfilled - 1e-4;
+}
+
+type HeightOf = (count: number) => number | null;
+
+function textHeights(tokens: readonly Token[], columns: 1 | 2): HeightOf {
+  const cache = new Map<number, number | null>();
+  return (count) => {
+    const n = Math.max(0, Math.min(tokens.length, Math.floor(count)));
+    if (n === 0) return 0;
+    const hit = cache.get(n);
+    if (hit !== undefined) return hit;
+    const height = textHeight(joinTokens(tokens.slice(0, n)), B2_BODY_SIZE, B2_INNER_W, columns);
+    cache.set(n, height);
+    return height;
+  };
+}
+
+function fitCached(heightOf: HeightOf, budget: number, limit: number): number {
+  let lo = 0;
+  let hi = limit;
+  let best = 0;
+  while (lo <= hi) {
+    const mid = Math.ceil((lo + hi) / 2);
+    if (mid === 0) {
+      lo = 1;
+      continue;
+    }
+    const needed = heightOf(mid);
+    if (needed != null && needed <= budget + 0.5) {
+      best = mid;
+      lo = mid + 1;
+    } else {
+      hi = mid - 1;
+    }
+  }
+  return best;
+}
+
+/** How tall the text band is once the photos sit at a full-width row. */
+function textBudget(photos: readonly B2Photo[]): number {
+  if (photos.length === 0) return B2_AVAIL;
+  if (photos.some(isExtreme)) return Math.max(96, B2_AVAIL * 0.46);
+  const counts = magazineRowCounts(photos.length);
+  const room = B2_AVAIL - 72;
+  let block = rowBlock(photos, counts, B2_INNER_W, NATIVE_STRETCH);
+  if (!block || block.height > room) {
+    block = fitStretch((stretch) => rowBlock(photos, counts, B2_INNER_W, stretch), room) ?? block;
+  }
+  if (!block) return Math.max(96, B2_AVAIL * 0.45);
+  return Math.max(48, B2_AVAIL - block.height - B2_GAP);
+}
+
+/** Token counts that fit the band and, at the loosest leading, still reach it. */
+function tokenWindow(photos: readonly B2Photo[], tokenCount: number, heights: readonly HeightOf[]): { min: number; max: number } {
+  const budget = textBudget(photos);
+  const slack = photos.length === 0 ? 28 : 18;
+  const target = Math.max(1, budget - slack);
+  let max = 0;
+  let min = tokenCount;
+  for (const heightOf of heights) {
+    const fit = fitCached(heightOf, budget, tokenCount);
+    max = Math.max(max, fit);
+    let lo = 1;
+    let hi = Math.max(1, fit);
+    let filled = fit;
+    while (lo <= hi) {
+      const mid = Math.floor((lo + hi) / 2);
+      const height = heightOf(mid);
+      if (height != null && height * LEADING_GROWTH >= target - 0.5) {
+        filled = mid;
+        hi = mid - 1;
+      } else {
+        lo = mid + 1;
+      }
+    }
+    min = Math.min(min, filled);
+  }
+  if (tokenCount === 0) return { min: 0, max: 0 };
+  return { min: Math.max(0, Math.min(min, max)), max };
+}
+
+function pointsBetween(start: number, end: number, parts: number): number[] {
+  if (end < start) return [];
+  const out: number[] = [];
+  const step = Math.max(1, Math.floor((end - start) / Math.max(1, parts)));
+  for (let value = start; value <= end; value += step) out.push(value);
+  if (out[out.length - 1] !== end) out.push(end);
+  return out;
+}
+
+/**
+ * Cuts where each page's text can reach the footer. A coarse grid is the
+ * fallback when the estimated windows do not overlap.
+ */
+function spreadCuts(groups: readonly (readonly B2Photo[])[], tokens: readonly Token[], heights: readonly HeightOf[]): number[][] {
+  const n = tokens.length;
+  if (groups.length === 2) {
+    const left = tokenWindow(groups[0] ?? [], n, heights);
+    const right = tokenWindow(groups[1] ?? [], n, heights);
+    const pad = Math.max(12, Math.floor(n * 0.04));
+    const cuts = new Set<number>([0, n]);
+    const from = Math.max(0, left.min, n - right.max);
+    const to = Math.min(n, left.max, n - right.min);
+    if (from <= to) {
+      for (const cut of pointsBetween(Math.max(0, from - pad), Math.min(n, to + pad), 16)) cuts.add(cut);
+    } else {
+      for (const cut of pointsBetween(0, n, 18)) cuts.add(cut);
+    }
+    return [...cuts].sort((a, b) => a - b).map((cut) => [cut]);
+  }
+  const windows = groups.map((group) => tokenWindow(group, n, heights));
+  const leftPoints = pointsBetween(windows[0]?.min ?? 0, windows[0]?.max ?? n, 6);
+  const midPoints = pointsBetween(windows[1]?.min ?? 0, windows[1]?.max ?? n, 6);
+  const right = windows[2] ?? { min: 0, max: n };
+  const cuts: number[][] = [];
+  const seen = new Set<string>();
+  const add = (first: number, second: number) => {
+    if (second < first || second > n) return;
+    const key = `${first}:${second}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    cuts.push([first, second]);
+  };
+  for (const first of leftPoints) {
+    for (const midCount of midPoints) {
+      const second = first + midCount;
+      const rightCount = n - second;
+      if (rightCount < right.min || rightCount > right.max) continue;
+      add(first, second);
+    }
+  }
+  if (cuts.length === 0) {
+    for (const first of pointsBetween(0, n, 8)) {
+      for (const second of pointsBetween(0, n, 8)) add(first, second);
+    }
+  }
+  add(0, 0);
+  add(0, n);
+  add(n, n);
+  return cuts;
+}
+
+function bundleSpread(
+  groups: readonly B2Photo[][],
+  tokens: readonly Token[],
+  ink: string,
+  heights: readonly HeightOf[],
+): SpreadLeaf[] | null {
+  if (groups.length === 1) {
+    const page = trySpreadLeaf(groups[0] ?? [], tokens, ink);
+    return page ? [page] : null;
+  }
+  let best: SpreadPick | null = null;
+  for (const cut of spreadCuts(groups, tokens, heights)) {
+    const slices =
+      groups.length === 2
+        ? [tokens.slice(0, cut[0] ?? 0), tokens.slice(cut[0] ?? 0)]
+        : [tokens.slice(0, cut[0] ?? 0), tokens.slice(cut[0] ?? 0, cut[1] ?? 0), tokens.slice(cut[1] ?? 0)];
+    const pages = groups.map((group, index) => trySpreadLeaf(group, slices[index] ?? [], ink));
+    if (!pages.every((page): page is SpreadLeaf => !!page)) continue;
+    const pick = rankSpread(pages);
+    if (!best || betterSpread(best, pick)) best = pick;
+  }
+  return best ? best.pages : null;
+}
+
+/**
+ * A spread only when one page cannot hold the letter. Photos and text are split
+ * so each page reaches the footer instead of leaving a photo page and an empty text page.
+ */
 function buildSpread(ordered: B2Photo[], text: string, ink: string, force: boolean): Built | null {
   const tokens = tokenize(text);
   if (!force && tokens.length < SPREAD_WORD_MIN) return null;
   if (tokens.length === 0 && ordered.length === 0) return null;
+  const capacity = Math.max(
+    1,
+    fitTokenCount(tokens, B2_AVAIL, tokens.length, B2_INNER_W, tokens.length > 70 ? 2 : 1),
+  );
+  let minPages = Math.max(1, Math.ceil(tokens.length / capacity));
+  if (tokens.length >= SPREAD_WORD_MIN) minPages = Math.max(2, minPages);
+  if (force && ordered.length > 0) minPages = Math.max(1, minPages);
 
-  const opening = spreadOpening(ordered);
-  const pages: Built["pages"] = [];
-  if (opening.photos.length > 0 && !opening.text) {
-    pages.push({ lines: [], photos: opening.photos });
-  }
-  let cursor = 0;
-  const minPages = tokens.length >= SPREAD_WORD_MIN ? 2 : 1;
-  let guard = 0;
-  while ((cursor < tokens.length || pages.length < minPages) && guard < 16) {
-    guard += 1;
-    if (cursor >= tokens.length) break;
-    const region =
-      pages.length === 0 && opening.text
-        ? opening.text
-        : { x: B2_INNER_X, y: B2_BODY_TOP, w: B2_INNER_W, h: B2_AVAIL };
-    const columns: 1 | 2 = region.w < 240 ? 1 : columnsFor(joinTokens(tokens.slice(cursor)));
-    const remaining = tokens.slice(cursor);
-    let limit = remaining.length;
-    if (minPages >= 2 && pages.length === 0 && remaining.length > 1) {
-      limit = Math.max(1, Math.min(limit, Math.ceil(tokens.length / 2)));
+  let chosen: SpreadLeaf[] | null = null;
+  const heightOf: HeightOf[] = [textHeights(tokens, 2), textHeights(tokens, 1)];
+  const attempt = (pages: number, strict: boolean) => {
+    let best: SpreadPick | null = null;
+    for (const groups of photoBundles(ordered, pages)) {
+      const laid = bundleSpread(groups, tokens, ink, heightOf);
+      if (!laid) continue;
+      const pick = rankSpread(laid);
+      if (!best || betterSpread(best, pick)) best = pick;
     }
-    let take = fitTokenCount(remaining, region.h, limit, region.w, columns);
-    if (take < 1) take = 1;
-    let flowed = buildTextPage(joinTokens(remaining.slice(0, take)), ink, region.y, region.h, region, [B2_BODY_SIZE], columns);
-    while (!flowed && take > 1) {
-      take -= 1;
-      flowed = buildTextPage(joinTokens(remaining.slice(0, take)), ink, region.y, region.h, region, [B2_BODY_SIZE], columns);
-    }
-    if (!flowed) return null;
-    const photos = pages.length === 0 ? opening.photos : [];
-    pages.push({ lines: flowed.lines, photos });
-    cursor += take;
+    if (!best) return null;
+    if (strict && best.over > 1e-9) return null;
+    return best.pages;
+  };
+
+  for (let pages = minPages; pages <= Math.min(4, minPages + 1); pages += 1) {
+    chosen = attempt(pages, true);
+    if (chosen) break;
   }
-  if (tokens.length > 0 && cursor < tokens.length) return null;
-  if (pages.length < minPages) return null;
-  if (pages.length === 0) return null;
-  const markedPages = pages.map((page) => ({
-    ...page,
+  if (!chosen) {
+    for (let pages = minPages; pages <= Math.min(4, Math.max(minPages, 2)); pages += 1) {
+      chosen = attempt(pages, false);
+      if (chosen) break;
+    }
+  }
+  if (!chosen || chosen.length === 0) return null;
+  const words = wordCount(chosen.flatMap((page) => page.lines).map((line) => line.text).join(" "));
+  if (tokens.length > 0 && words !== tokens.length) return null;
+  const photoCount = chosen.reduce((sum, page) => sum + page.photos.length, 0);
+  if (photoCount !== ordered.length) return null;
+  const markedPages = chosen.map((page) => ({
+    lines: page.lines,
     photos: markLead(page.photos, ordered).map(clampPhotoToPage),
   }));
   const fontSize = Math.min(
     B2_BODY_SIZE,
-    ...markedPages.flatMap((page) => page.lines.map((line) => line.size)),
+    ...markedPages.flatMap((page) => page.lines.map((line) => line.size).concat(B2_BODY_SIZE)),
   );
-  const blanks = markedPages.map((page) => pageBlank(page.photos, page.lines));
-  const blankRatio = blanks.reduce((sum, value) => sum + value, 0) / blanks.length;
+  const blankRatio = markedPages.reduce((sum, page) => sum + placedUnfilled(page.photos, page.lines), 0) / markedPages.length;
   const allPhotos = markedPages.flatMap((page) => page.photos);
   const allLines = markedPages.flatMap((page) => page.lines);
   return {
@@ -1557,17 +1928,16 @@ function candidateList(ordered: B2Photo[], text: string, ink: string): Built[] {
     built.push(buildPortraitFeature(hero, ordered, text, ink));
   }
   if (hero && ordered.length === 1 && aspect >= 0.95 && !extreme) {
-    built.push(
-      fitPhotosThenText({
-        templateId: "landscape-hero",
-        ordered,
-        text,
-        ink,
-        affinity: 1.25,
-        fonts: wordCount(text) < 80 ? DISPLAY_FONTS : BODY_FONTS,
-        block: (stretch) => rowBlock(ordered, [1], B2_INNER_W, stretch),
-      }),
-    );
+    const wide = fitPhotosThenText({
+      templateId: "landscape-hero",
+      ordered,
+      text,
+      ink,
+      affinity: 1.25,
+      fonts: wordCount(text) < 80 ? DISPLAY_FONTS : BODY_FONTS,
+      block: (stretch) => rowBlock(ordered, [1], B2_INNER_W, stretch),
+    });
+    built.push(wide ?? finishBeside("landscape-hero", ordered, text, ink, 1.2));
   }
   built.push(buildLetterbox(ordered, text, ink));
   if (ordered.length === 2 && !extreme) {
@@ -1780,28 +2150,6 @@ function coverAspect(photo: B2Photo, t: number): number {
 
 type Pack = { items: PlacedPhoto[]; width: number; height: number };
 
-const compositionCache = new Map<number, number[][]>();
-
-function compositions(count: number): number[][] {
-  const cached = compositionCache.get(count);
-  if (cached) return cached;
-  const out: number[][] = [];
-  const walk = (remain: number, acc: number[]) => {
-    if (remain === 0) {
-      out.push(acc.slice());
-      return;
-    }
-    for (let size = 1; size <= remain; size += 1) {
-      acc.push(size);
-      walk(remain - size, acc);
-      acc.pop();
-    }
-  };
-  if (count > 0) walk(count, []);
-  compositionCache.set(count, out);
-  return out;
-}
-
 function coverOrders(photos: readonly B2Photo[]): B2Photo[][] {
   const aspect = (photo: B2Photo) => photo.width / Math.max(1, photo.height);
   const given = photos.slice();
@@ -1868,47 +2216,6 @@ function layoutRows(photos: readonly B2Photo[], counts: number[], t: number, wid
   return { items, width: maxRight, height: y };
 }
 
-function layoutColumns(photos: readonly B2Photo[], counts: number[], t: number, height: number): Pack | null {
-  let x = 0;
-  let index = 0;
-  const items: PlacedPhoto[] = [];
-  let usedH = 0;
-  for (let column = 0; column < counts.length; column += 1) {
-    const count = counts[column]!;
-    const slice = photos.slice(index, index + count);
-    if (slice.length !== count) return null;
-    const aspects = slice.map((photo) => coverAspect(photo, t));
-    const gaps = ROW_GAP * (slice.length - 1);
-    const sumInv = aspects.reduce((total, aspect) => total + 1 / aspect, 0);
-    const colW = (height - gaps) / sumInv;
-    if (!(colW > 1) || !Number.isFinite(colW)) return null;
-    let y = 0;
-    for (let i = 0; i < slice.length; i += 1) {
-      const photo = slice[i]!;
-      const aspect = aspects[i]!;
-      const h = colW / aspect;
-      const crop = placeCrop(photo, aspect);
-      if (crop.letterbox || crop.maxSide > coverTrimCap(photo) + 0.002) return null;
-      items.push({
-        storagePath: photo.storagePath,
-        x,
-        y,
-        w: colW,
-        h,
-        crop,
-        fit: "cover",
-        lead: false,
-      });
-      y += h + (i === slice.length - 1 ? 0 : ROW_GAP);
-    }
-    usedH = Math.max(usedH, y);
-    x += colW + (column === counts.length - 1 ? 0 : ROW_GAP);
-    index += count;
-  }
-  if (index !== photos.length || items.length === 0) return null;
-  return { items, width: x, height: usedH };
-}
-
 function scalePack(pack: Pack, scale: number): Pack {
   return {
     width: pack.width * scale,
@@ -1931,97 +2238,118 @@ function packMeanCrop(pack: Pack): number {
   return pack.items.reduce((sum, item) => sum + item.crop.maxSide, 0) / pack.items.length;
 }
 
-/** Prefer a full collage. Spend trim only when it buys a filled edge. */
-function packScore(pack: Pack, maxW: number, maxH: number): number {
-  const area = packArea(pack);
-  const crop = packMeanCrop(pack);
-  const fillsH = pack.height >= maxH - 8;
-  const fillsW = pack.width >= maxW - 8;
-  const cropCost = fillsH && fillsW ? crop * 0.15 : crop * 2.4;
-  return area * (1 - cropCost);
+function packShare(pack: Pack): number {
+  const total = packArea(pack);
+  if (!(total > 0)) return 1;
+  return Math.max(...pack.items.map((item) => item.w * item.h)) / total;
 }
 
-function choosePack(candidates: Array<Pack | null>, maxW: number, maxH: number): Pack | null {
-  let best: Pack | null = null;
-  let bestScore = -Infinity;
-  for (const pack of candidates) {
-    if (!pack) continue;
-    if (pack.width > maxW + 0.8 || pack.height > maxH + 0.8) continue;
-    const score = packScore(pack, maxW, maxH);
-    if (score > bestScore + 1e-6) {
-      best = pack;
-      bestScore = score;
+/** Balanced row counts: no hero row, parts differ by at most one. */
+function balancedRowCounts(count: number): number[][] {
+  if (count <= 0) return [];
+  if (count <= 3) return [[count]];
+  const found: number[][] = [];
+  const seen = new Set<string>();
+  const add = (rows: number[]) => {
+    const key = rows.join(",");
+    if (seen.has(key) || rows.length === 0) return;
+    const lo = Math.min(...rows);
+    const hi = Math.max(...rows);
+    if (lo < 2 || hi > 4 || hi - lo > 1) return;
+    seen.add(key);
+    found.push(rows.slice());
+  };
+  const walk = (remain: number, acc: number[]) => {
+    if (acc.length > 4) return;
+    if (remain === 0) {
+      add(acc);
+      add(acc.slice().reverse());
+      return;
     }
-  }
-  return best;
+    const floor = acc.length === 0 ? 2 : acc[acc.length - 1]!;
+    for (let size = floor; size <= Math.min(4, remain); size += 1) {
+      acc.push(size);
+      walk(remain - size, acc);
+      acc.pop();
+    }
+  };
+  walk(count, []);
+  const magazine = magazineRowCounts(count);
+  add(magazine);
+  add(magazine.slice().reverse());
+  if (found.length === 0) add(magazineRowCounts(count));
+  return found;
 }
 
-function fitRows(photos: readonly B2Photo[], counts: number[], maxW: number, maxH: number): Pack | null {
-  const direct: Array<Pack | null> = [];
-  for (let step = 0; step <= 8; step += 1) direct.push(layoutRows(photos, counts, -1 + step / 4, maxW));
-  let lo = -1;
-  let hi = 1;
-  for (let i = 0; i < 12; i += 1) {
-    const mid = (lo + hi) / 2;
-    const pack = layoutRows(photos, counts, mid, maxW);
-    if (pack && pack.height <= maxH + 0.6) {
-      hi = mid;
-      direct.push(pack);
-    } else lo = mid;
+/** Deal widest photos into the lightest open row so row heights stay close. */
+function balancedPhotoOrder(photos: readonly B2Photo[], counts: number[]): B2Photo[] {
+  const aspect = (photo: B2Photo) => photo.width / Math.max(1, photo.height);
+  const sorted = photos.slice().sort((a, b) => aspect(b) - aspect(a) || a.storagePath.localeCompare(b.storagePath));
+  const rows: B2Photo[][] = counts.map(() => []);
+  const sums = counts.map(() => 0);
+  for (const photo of sorted) {
+    let best = -1;
+    let bestSum = Infinity;
+    for (let index = 0; index < rows.length; index += 1) {
+      if (rows[index]!.length >= counts[index]!) continue;
+      if (sums[index]! < bestSum - 1e-9) {
+        best = index;
+        bestSum = sums[index]!;
+      }
+    }
+    if (best < 0) break;
+    rows[best]!.push(photo);
+    sums[best]! += aspect(photo);
   }
-  const best = choosePack(direct, maxW, maxH);
-  if (best) return best;
-  const seed = layoutRows(photos, counts, 0, maxW) ?? layoutRows(photos, counts, 1, maxW);
-  if (!seed || !(seed.height > 1)) return null;
-  const scale = Math.min(1, maxW / seed.width, maxH / seed.height);
-  if (!(scale > 0.05)) return null;
-  return scalePack(seed, scale);
-}
-
-function fitColumns(photos: readonly B2Photo[], counts: number[], maxW: number, maxH: number): Pack | null {
-  const direct: Array<Pack | null> = [];
-  for (let step = 0; step <= 8; step += 1) direct.push(layoutColumns(photos, counts, -1 + step / 4, maxH));
-  let lo = -1;
-  let hi = 1;
-  for (let i = 0; i < 12; i += 1) {
-    const mid = (lo + hi) / 2;
-    const pack = layoutColumns(photos, counts, mid, maxH);
-    if (pack && pack.width <= maxW + 0.6) {
-      lo = mid;
-      direct.push(pack);
-    } else hi = mid;
-  }
-  const best = choosePack(direct, maxW, maxH);
-  if (best) return best;
-  const seed = layoutColumns(photos, counts, 0, maxH) ?? layoutColumns(photos, counts, -1, maxH);
-  if (!seed || !(seed.width > 1)) return null;
-  const scale = Math.min(1, maxW / seed.width, maxH / seed.height);
-  if (!(scale > 0.05)) return null;
-  return scalePack(seed, scale);
+  if (rows.reduce((sum, row) => sum + row.length, 0) !== photos.length) return photos.slice();
+  return rows.flat();
 }
 
 /**
- * Largest face-safe collage that fits the box. Cells with no stored face stay
- * within COVER_UNKNOWN_TRIM of the real aspect. Known faces use the 10% rule.
+ * Justified rows at each photo's own aspect. Unknown faces are not trimmed:
+ * a small even crop still cuts a face that sits on the edge. With 4 or more
+ * photos, a pack where one cell takes more than COVER_PHOTO_SHARE_MAX is refused
+ * when any balanced pack exists.
  */
 function bestPack(photos: readonly B2Photo[], maxW: number, maxH: number): Pack | null {
   if (photos.length === 0 || maxW < 48 || maxH < 48) return null;
-  let best: Pack | null = null;
-  let bestScore = -Infinity;
-  for (const order of coverOrders(photos)) {
-    for (const counts of compositions(order.length)) {
-      const packs = [fitRows(order, counts, maxW, maxH), fitColumns(order, counts, maxW, maxH)];
-      for (const pack of packs) {
-        if (!pack) continue;
-        const score = packScore(pack, maxW, maxH);
-        if (score > bestScore + 1e-6) {
-          best = pack;
-          bestScore = score;
-        }
-      }
+  let legal: Pack | null = null;
+  let legalScore = -Infinity;
+  let any: Pack | null = null;
+  let anyScore = -Infinity;
+  const consider = (pack: Pack | null) => {
+    if (!pack) return;
+    let fitted = pack;
+    if (fitted.height > maxH + 0.6) {
+      const scale = maxH / fitted.height;
+      if (!(scale > 0.18)) return;
+      fitted = scalePack(fitted, scale);
+    }
+    if (fitted.width > maxW + 0.8 || fitted.height > maxH + 0.8) return;
+    const share = packShare(fitted);
+    const crop = packMeanCrop(fitted);
+    const areas = fitted.items.map((item) => item.w * item.h);
+    const mean = areas.reduce((sum, area) => sum + area, 0) / areas.length;
+    const spread = areas.reduce((sum, area) => sum + Math.abs(area - mean) / Math.max(1, mean), 0) / areas.length;
+    const widthFill = Math.min(1, fitted.width / maxW);
+    const score = widthFill * 6 - crop * 14 - share * 2.4 - spread * 0.9 + Math.min(1, fitted.height / maxH) * 0.35;
+    if (score > anyScore + 1e-6) {
+      any = fitted;
+      anyScore = score;
+    }
+    if (photos.length >= 4 && share > COVER_PHOTO_SHARE_MAX + 0.005) return;
+    if (score > legalScore + 1e-6) {
+      legal = fitted;
+      legalScore = score;
+    }
+  };
+  for (const counts of balancedRowCounts(photos.length)) {
+    for (const order of coverOrders(photos)) {
+      consider(layoutRows(balancedPhotoOrder(order, counts), counts, 0, maxW));
+      consider(layoutRows(order, counts, 0, maxW));
     }
   }
-  return best;
+  return legal ?? any;
 }
 
 type CoverTocInput = {
@@ -2035,12 +2363,9 @@ function tocBlockHeight(lines: readonly PlacedLine[]): number {
   return Math.max(...lines.map((line) => line.y + line.h));
 }
 
-/** Contents lines in local coordinates. `fillH` grows type a little so a colour band is not a void. */
+/** Contents lines in local coordinates. Type stays at least COVER_TOC_MIN and grows to fill a band. */
 function coverTocBlock(input: CoverTocInput, boxW: number, mode: "list" | "mast" | "fill", fillH: number): PlacedLine[] {
-  const columns = mode === "mast" && input.toc.length >= 4 ? 2 : 1;
-  let size = mode === "list" ? 16 : mode === "mast" ? 13 : 14;
-  let gap = mode === "list" ? 10 : mode === "mast" ? 5 : 8;
-  const build = (fontSize: number, rowGap: number): PlacedLine[] => {
+  const build = (fontSize: number, rowGap: number, columns: 1 | 2): PlacedLine[] => {
     const lineH = fontSize + 6;
     const lines: PlacedLine[] = [];
     let y = 0;
@@ -2058,8 +2383,8 @@ function coverTocBlock(input: CoverTocInput, boxW: number, mode: "list" | "mast"
       });
     };
     if (input.toc.length > 0) {
-      let headSize = fontSize;
-      while (headSize > 9 && measureTextWidth(IN_THIS_ISSUE, headSize, "serifItalic") > boxW) headSize -= 0.5;
+      let headSize = Math.max(COVER_TOC_MIN, fontSize);
+      while (headSize > COVER_TOC_MIN && measureTextWidth(IN_THIS_ISSUE, headSize, "serifItalic") > boxW) headSize -= 0.5;
       push(IN_THIS_ISSUE, "serifItalic", 0, boxW, headSize);
       y += lineH + rowGap;
       const nameRows = Math.ceil(input.toc.length / columns);
@@ -2069,10 +2394,10 @@ function coverTocBlock(input: CoverTocInput, boxW: number, mode: "list" | "mast"
           const entry = input.toc[row * columns + col];
           if (!entry) continue;
           const page = String(entry.page);
-          const pageW = Math.max(10, measureTextWidth(page, fontSize, "sans"));
+          const pageW = Math.max(COVER_TOC_MIN, measureTextWidth(page, fontSize, "sans"));
           let nameSize = fontSize;
-          const room = Math.max(12, colW - pageW - 8);
-          while (nameSize > 8 && measureTextWidth(entry.name, nameSize, "serif") > room) nameSize -= 0.5;
+          const room = Math.max(16, colW - pageW - 8);
+          while (nameSize > COVER_TOC_MIN && measureTextWidth(entry.name, nameSize, "serif") > room) nameSize -= 0.5;
           const x = col * (colW + 18);
           push(entry.name, "serif", x, room, nameSize);
           push(page, "sans", x + colW - pageW, pageW, fontSize);
@@ -2086,32 +2411,42 @@ function coverTocBlock(input: CoverTocInput, boxW: number, mode: "list" | "mast"
     ].filter((note): note is { text: string; font: "serifItalic" } => !!note);
     for (const note of notes) {
       if (lines.length > 0) y += rowGap;
-      let noteSize = Math.max(10, fontSize - 2);
-      while (noteSize > 8 && measureTextWidth(note.text, noteSize, note.font) > boxW) noteSize -= 0.5;
+      let noteSize = Math.max(COVER_TOC_MIN, fontSize - 2);
+      while (noteSize > COVER_TOC_MIN && measureTextWidth(note.text, noteSize, note.font) > boxW) noteSize -= 0.5;
       push(note.text, note.font, 0, boxW, noteSize);
       y += lineH;
     }
     return lines;
   };
-  let lines = build(size, gap);
+  const limit = fillH > 40 ? fillH - 4 : mode === "mast" ? 150 : 360;
+  let columns: 1 | 2 = mode === "mast" && input.toc.length >= 4 ? 2 : 1;
+  if (columns === 1 && input.toc.length >= 4 && tocBlockHeight(build(COVER_TOC_MIN, 4, 1)) > limit) columns = 2;
+  let size = mode === "list" ? 16 : mode === "mast" ? Math.max(COVER_TOC_MIN, 13) : 15;
+  let gap = mode === "list" ? 10 : mode === "mast" ? 5 : 8;
+  let lines = build(size, gap, columns);
   let height = tocBlockHeight(lines);
   if (mode === "fill" && fillH > 40) {
     if (height > fillH - 4) {
-      while (height > fillH - 4 && size > 9) {
+      if (columns === 1 && input.toc.length >= 4) {
+        columns = 2;
+        lines = build(size, gap, columns);
+        height = tocBlockHeight(lines);
+      }
+      while (height > fillH - 4 && size > COVER_TOC_MIN) {
         size -= 0.5;
-        lines = build(size, gap);
+        lines = build(size, gap, columns);
         height = tocBlockHeight(lines);
       }
     } else if (height < fillH * 0.82) {
-      while (size < 22 && tocBlockHeight(build(size + 0.5, gap)) <= fillH - 6) size += 0.5;
-      while (gap < 28 && tocBlockHeight(build(size, gap + 1)) <= fillH - 6) gap += 1;
-      lines = build(size, gap);
+      while (size < 18 && tocBlockHeight(build(size + 0.5, gap, columns)) <= fillH - 6) size += 0.5;
+      while (gap < 22 && tocBlockHeight(build(size, gap + 1, columns)) <= fillH - 6) gap += 1;
+      lines = build(size, gap, columns);
     }
   } else if (fillH > 40 && height > fillH - 4) {
-    while (height > fillH - 4 && size > 9) {
+    while (height > fillH - 4 && size > COVER_TOC_MIN) {
       size -= 0.5;
       gap = Math.max(4, gap - 0.5);
-      lines = build(size, gap);
+      lines = build(size, gap, columns);
       height = tocBlockHeight(lines);
     }
   }
@@ -2191,7 +2526,12 @@ function placeCoverToc(
   for (const line of laid) lines.push({ ...line, x: line.x + box.x, y: line.y + y0, color: box.color });
 }
 
-const COVER_RAIL = 168;
+function tocFitsBand(input: CoverTocInput, bandH: number): boolean {
+  if (!(bandH > 36)) return false;
+  const lines = coverTocBlock(input, B2_INNER_W, "fill", bandH);
+  if (tocBlockHeight(lines) > bandH + 0.5) return false;
+  return lines.every((line) => line.size >= COVER_TOC_MIN - 0.01);
+}
 
 function buildCoverPage(input: {
   groupUpper: string;
@@ -2229,116 +2569,48 @@ function buildCoverPage(input: {
     return { lines, photos: [], bands };
   }
 
-  const leads = input.leads.slice(0, 8);
-  const shortMast = input.theme === "heritage" ? 92 : 78;
-  const photoTop = shortMast + 44;
-  const availH = B2_CONTENT_BOTTOM - photoTop;
-  type Candidate = {
-    area: number;
-    ok: boolean;
-    lines: PlacedLine[];
-    photos: PlacedPhoto[];
-    bands: PageBand[];
-  };
-  const candidates: Candidate[] = [];
-
-  const mastToc = coverTocBlock(tocInput, B2_INNER_W, "mast", 0);
-  const mastTocH = tocBlockHeight(mastToc);
-  const mastTitleY = input.theme === "heritage" ? 32 : 18;
-  const mastMonthY = mastTitleY + 40;
-  const mastTocY = mastMonthY + 28;
-  const tallMast = mastTocY + mastTocH + 16;
-  const mastBoxH = B2_CONTENT_BOTTOM - tallMast;
-  const mastPack = bestPack(leads, B2_PAGE_W, mastBoxH);
-  if (mastPack && mastBoxH > 80) {
-    const side = Math.max(0, (B2_PAGE_W - mastPack.width) / 2);
-    const lines = [
-      ...coverTitleLines(input, mastInk, mastTitleY, 32),
-      coverMonthLine(input.month, mastMonthY, mastInk),
-      ...mastToc.map((line) => ({ ...line, x: line.x + B2_INNER_X, y: line.y + mastTocY, color: mastInk })),
-    ];
-    candidates.push({
-      area: packArea(mastPack),
-      ok: mastPack.height >= mastBoxH - 8 && side <= B2_PAGE_W * 0.09 && side >= -1,
-      lines,
-      photos: shiftPack(mastPack, side, tallMast),
-      bands: [{ x: 0, y: 0, w: B2_PAGE_W, h: tallMast, fill }],
-    });
-  }
-
-  const railPack = bestPack(leads, B2_PAGE_W - COVER_RAIL, availH);
-  if (railPack && availH > 80) {
-    const lines = [
-      ...coverTitleLines(input, mastInk, input.theme === "heritage" ? 32 : 22, 32),
-      coverMonthLine(input.month, shortMast + 16, input.ink),
-    ];
-    const photoRight = railPack.width;
-    const bands: PageBand[] = [
-      { x: 0, y: 0, w: B2_PAGE_W, h: shortMast, fill },
-      { x: photoRight, y: photoTop, w: B2_PAGE_W - photoRight, h: availH, fill },
-    ];
-    if (railPack.height < availH - 2) {
-      bands.push({ x: 0, y: photoTop + railPack.height, w: B2_PAGE_W, h: availH - railPack.height, fill });
+  const heritage = input.theme === "heritage";
+  const titleY = heritage ? 30 : 16;
+  const monthY = titleY + 40;
+  const mastH = monthY + 28;
+  const photoTop = mastH;
+  const reserve = input.toc.length <= 4 ? 132 : input.toc.length <= 8 ? 188 : 210;
+  let pack = bestPack(input.leads, B2_PAGE_W, Math.max(96, B2_CONTENT_BOTTOM - photoTop - reserve));
+  if (pack) {
+    for (let step = 0; step < 8; step += 1) {
+      const bandH = B2_CONTENT_BOTTOM - (photoTop + pack.height);
+      if (tocFitsBand(tocInput, bandH)) break;
+      pack = scalePack(pack, 0.9);
     }
+  }
+  const lines = [...coverTitleLines(input, mastInk, titleY, 32), coverMonthLine(input.month, monthY, mastInk)];
+  const bands: PageBand[] = [{ x: 0, y: 0, w: B2_PAGE_W, h: mastH, fill }];
+  if (!pack) {
     placeCoverToc(lines, tocInput, {
-      x: photoRight + 16,
+      x: B2_INNER_X,
       y: photoTop,
-      w: Math.max(80, B2_PAGE_W - photoRight - 28),
-      h: availH,
+      w: B2_INNER_W,
+      h: B2_CONTENT_BOTTOM - photoTop,
+      color: input.ink,
+      mode: "list",
+    });
+    return { lines, photos: [], bands };
+  }
+  const photoX = Math.max(0, (B2_PAGE_W - pack.width) / 2);
+  const photoBottom = photoTop + pack.height;
+  const bandH = B2_CONTENT_BOTTOM - photoBottom;
+  if (bandH > 4) bands.push({ x: 0, y: photoBottom, w: B2_PAGE_W, h: bandH, fill });
+  if (tocFitsBand(tocInput, bandH) || bandH > 48) {
+    placeCoverToc(lines, tocInput, {
+      x: B2_INNER_X,
+      y: photoBottom,
+      w: B2_INNER_W,
+      h: bandH,
       color: mastInk,
       mode: "fill",
     });
-    candidates.push({
-      area: packArea(railPack),
-      ok: railPack.height >= availH - 8,
-      lines,
-      photos: shiftPack(railPack, 0, photoTop),
-      bands,
-    });
   }
-
-  const bandPack = bestPack(leads, B2_PAGE_W, Math.max(72, availH - 64));
-  if (bandPack) {
-    const photoX = Math.max(0, (B2_PAGE_W - bandPack.width) / 2);
-    const photoBottom = photoTop + bandPack.height;
-    const bandH = B2_CONTENT_BOTTOM - photoBottom;
-    const lines = [
-      ...coverTitleLines(input, mastInk, input.theme === "heritage" ? 32 : 22, 32),
-      coverMonthLine(input.month, shortMast + 16, input.ink),
-    ];
-    const bands: PageBand[] = [{ x: 0, y: 0, w: B2_PAGE_W, h: shortMast, fill }];
-    if (bandH > 8) bands.push({ x: 0, y: photoBottom, w: B2_PAGE_W, h: bandH, fill });
-    if (bandH > 36) {
-      placeCoverToc(lines, tocInput, {
-        x: B2_INNER_X,
-        y: photoBottom,
-        w: B2_INNER_W,
-        h: bandH,
-        color: mastInk,
-        mode: "fill",
-      });
-    }
-    candidates.push({
-      area: packArea(bandPack),
-      ok: bandPack.width >= B2_PAGE_W - 10 && bandH >= 56,
-      lines,
-      photos: shiftPack(bandPack, photoX, photoTop),
-      bands,
-    });
-  }
-
-  const ready = candidates.filter((item) => item.ok);
-  const pool = ready.length > 0 ? ready : candidates;
-  const chosen = pool.reduce<Candidate | null>((best, item) => (!best || item.area > best.area + 1 ? item : best), null);
-  if (!chosen) {
-    const mastH = shortMast;
-    return {
-      lines: [...coverTitleLines(input, mastInk, 22, 32), coverMonthLine(input.month, mastH + 16, input.ink)],
-      photos: [],
-      bands: [{ x: 0, y: 0, w: B2_PAGE_W, h: mastH, fill }],
-    };
-  }
-  return { lines: chosen.lines, photos: chosen.photos, bands: chosen.bands };
+  return { lines, photos: shiftPack(pack, photoX, photoTop), bands };
 }
 
 /**
@@ -2455,8 +2727,28 @@ export function layoutCapsuleDocument(input: {
     ...letterPages,
   ];
 
+  const headerStyles: HeaderStyle[] = [];
+  let headerCursor = 0;
+  for (let index = 0; index < rawPages.length; index += 1) {
+    const page = rawPages[index]!;
+    const previous = index > 0 ? rawPages[index - 1] : null;
+    const previousStyle = headerStyles[index - 1];
+    if (
+      page.personName &&
+      previous?.personName === page.personName &&
+      page.templateId === "spread" &&
+      previous.templateId === "spread" &&
+      previousStyle
+    ) {
+      headerStyles.push(previousStyle);
+      continue;
+    }
+    headerStyles.push(HEADER_STYLES[headerCursor % HEADER_STYLES.length]!);
+    headerCursor += 1;
+  }
+
   const pages: PagePlan[] = rawPages.map((page, index) => {
-    const headerStyle = HEADER_STYLES[index % HEADER_STYLES.length]!;
+    const headerStyle = headerStyles[index] ?? "rule";
     const colors = headerColors(headerStyle, ink, accent, paper);
     const lines = [...page.lines];
     if (page.personName) lines.unshift(placeName(page.personName, headerStyle, colors.text));

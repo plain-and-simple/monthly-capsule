@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  B2_AVAIL,
   B2_BODY_SIZE,
   B2_CONTENT_BOTTOM,
   B2_INNER_W,
@@ -8,12 +9,15 @@ import {
   B2_PAGE_W,
   B2_TEMPLATE_IDS,
   CENTRED_PHOTO_TEMPLATES,
+  COVER_PHOTO_SHARE_MAX,
+  COVER_TOC_MIN,
   COVER_UNKNOWN_TRIM,
   HEADER_STYLES,
   MAX_TRIM,
   MIN_FOOTER_GAP,
   PAGE_UNFILLED_MAX,
   PHOTO_SIDE_GAP_MAX,
+  SPREAD_PAGE_UNFILLED_MAX,
   SPREAD_WORD_MIN,
   TEMPLATE_REPEAT_PENALTY,
   auditPageContent,
@@ -270,6 +274,11 @@ describe("b2 page templates", () => {
     expect(pages.every((page) => page.templateId === "spread")).toBe(true);
     expect(bodyWords(pages)).toEqual(words(body));
     expectPhotosOnce(pages, shots);
+    const hero = pages[0]?.photos[0];
+    expect(hero?.w).toBeGreaterThan(B2_INNER_W * 0.7);
+    const textPage = pages.find((page) => page.photos.length === 0);
+    const textXs = new Set(textPage?.lines.filter((line) => line.role === "body").map((line) => Math.round(line.x)));
+    expect(textXs.size).toBeGreaterThanOrEqual(2);
     const last = pages[1]!.lines.filter((line) => line.role === "body").at(-1)!;
     expect(B2_CONTENT_BOTTOM - (last.y + last.h)).toBeLessThan(90);
     expectClean(plan.pages);
@@ -579,13 +588,26 @@ function photoBlockGaps(page: PagePlan): { left: number; right: number } | null 
   };
 }
 
-function columnTops(page: PagePlan): number[] {
+/** Tops of body columns whose vertical ranges overlap. A side column and the text under it do not. */
+function overlappingColumnTops(page: PagePlan): Array<[number, number]> {
   const body = page.lines.filter((line) => line.role === "body");
   const xs = [...new Set(body.map((line) => Math.round(line.x)))].sort((a, b) => a - b);
-  return xs
+  const groups = xs
     .map((x) => body.filter((line) => Math.round(line.x) === x))
     .filter((lines) => lines.length >= 2)
-    .map((lines) => Math.min(...lines.map((line) => line.y)));
+    .map((lines) => ({
+      top: Math.min(...lines.map((line) => line.y)),
+      bottom: Math.max(...lines.map((line) => line.y + line.h)),
+    }));
+  const pairs: Array<[number, number]> = [];
+  for (let i = 0; i < groups.length; i += 1) {
+    for (let j = i + 1; j < groups.length; j += 1) {
+      const a = groups[i]!;
+      const b = groups[j]!;
+      if (Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 24) pairs.push([a.top, b.top]);
+    }
+  }
+  return pairs;
 }
 
 describe("b2 polish fixtures", () => {
@@ -617,12 +639,16 @@ describe("b2 polish fixtures", () => {
     const aLeft = Math.min(...aPhotos.map((item) => item.x));
     const aRight = Math.max(...aPhotos.map((item) => item.x + item.w));
     expect(aRight - aLeft).toBeGreaterThan(B2_INNER_W * 0.9);
-    const bPhoto = personPages(fixtureB, "Wren").flatMap((page) => page.photos)[0]!;
-    expect(bPhoto.w).toBeGreaterThan(B2_INNER_W * 0.9);
+    const bPages = personPages(fixtureB, "Wren");
+    expect(bPages).toHaveLength(1);
+    const bPhoto = bPages.flatMap((page) => page.photos)[0]!;
     expect(bPhoto.h).toBeGreaterThan(bPhoto.w);
+    expect(bPhoto.w).toBeLessThan(B2_INNER_W * 0.85);
+    expect(bPhoto.h).toBeLessThan(B2_AVAIL * 0.9);
+    expect(pageUnfilledRatio(bPages[0]!)).toBeLessThanOrEqual(SPREAD_PAGE_UNFILLED_MAX + 0.005);
   });
 
-  it("starts both columns at the same top", () => {
+  it("starts overlapping columns at the same top", () => {
     const plans = [
       layout([{ body: countedProse(290, 4), photos: [portrait("a"), portrait("b"), portrait("c")] }]),
       layout([{ body: countedProse(300, 3), photos: [threeByFour("p")] }]),
@@ -632,10 +658,10 @@ describe("b2 polish fixtures", () => {
     for (const plan of plans) {
       expectClean(plan.pages);
       for (const page of personPages(plan, "Wren")) {
-        const tops = columnTops(page);
-        if (tops.length < 2) continue;
-        checked += 1;
-        expect(Math.abs(tops[0]! - tops[1]!)).toBeLessThan(0.6);
+        for (const [left, right] of overlappingColumnTops(page)) {
+          checked += 1;
+          expect(Math.abs(left - right)).toBeLessThan(0.6);
+        }
       }
     }
     expect(checked).toBeGreaterThan(0);
@@ -778,6 +804,163 @@ describe("b2 polish fixtures", () => {
     for (const placed of cover.photos) {
       const known = placed.storagePath === "faced";
       expect(placed.crop.maxSide).toBeLessThanOrEqual((known ? MAX_TRIM : COVER_UNKNOWN_TRIM) + 0.002);
+    }
+  });
+});
+
+const MEMBER_NAMES = ["Ada", "Bea", "Cyd", "Dee", "Eve", "Fay", "Gus", "Hal", "Ian", "Jan", "Kit", "Lou"];
+
+function mixedLead(index: number): B2Photo {
+  const shapes: Array<[number, number]> = [
+    [3024, 4032],
+    [1080, 1920],
+    [4032, 3024],
+    [1600, 1200],
+    [2000, 2000],
+    [1200, 1800],
+    [1800, 1200],
+  ];
+  const spec = shapes[index % shapes.length]!;
+  return photo(`lead-${index}`, spec[0], spec[1], [], index);
+}
+
+function expectContentsVisible(count: number) {
+  const letters = Array.from({ length: count }, (_, index) => ({
+    name: MEMBER_NAMES[index] ?? `N${index}`,
+    body: countedProse(36, 2),
+    photos: [mixedLead(index)],
+  }));
+  const plan = layout(letters);
+  const cover = plan.pages[0]!;
+  expect(cover.templateId).toBe("cover");
+  expectClean(plan.pages);
+  const coverLines = cover.lines.filter((line) => line.role === "cover");
+  expect(coverLines.filter((line) => line.text === "CEDAR STREET")).toHaveLength(1);
+  for (const letter of letters) {
+    const page = plan.pages.findIndex((item) => item.personName === letter.name) + 1;
+    const nameLine = coverLines.find((line) => line.text === letter.name);
+    expect(nameLine, letter.name).toBeTruthy();
+    const pageLine = coverLines.find(
+      (line) => line.text === String(page) && nameLine && Math.abs(line.y - nameLine.y) < 1 && line.x >= nameLine.x,
+    );
+    expect(pageLine, `${letter.name} page ${page}`).toBeTruthy();
+    for (const line of [nameLine!, pageLine!]) {
+      expect(line.size).toBeGreaterThanOrEqual(COVER_TOC_MIN);
+      expect(line.x).toBeGreaterThanOrEqual(-0.5);
+      expect(line.y).toBeGreaterThanOrEqual(0);
+      expect(line.x + line.w).toBeLessThanOrEqual(B2_PAGE_W + 0.5);
+      expect(line.y + line.h).toBeLessThanOrEqual(B2_CONTENT_BOTTOM + 0.5);
+    }
+  }
+  const footerTop = Math.min(...cover.lines.filter((line) => line.role === "footer").map((line) => line.y));
+  for (const line of coverLines) {
+    expect(line.y + line.h).toBeLessThanOrEqual(footerTop - 4);
+  }
+  if (count >= 4) {
+    const areas = cover.photos.map((item) => item.w * item.h);
+    const total = areas.reduce((sum, area) => sum + area, 0);
+    expect(Math.max(...areas) / total).toBeLessThanOrEqual(COVER_PHOTO_SHARE_MAX + 0.005);
+  }
+  for (const placed of cover.photos) {
+    expect(placed.crop.maxSide).toBeLessThan(0.005);
+    expect(Math.abs(placed.crop.l - placed.crop.r)).toBeLessThan(0.008);
+    expect(Math.abs(placed.crop.t - placed.crop.b)).toBeLessThan(0.008);
+  }
+  const reach = Math.max(...cover.photos.map((item) => item.y + item.h), ...cover.bands.map((band) => band.y + band.h));
+  expect(reach).toBeGreaterThanOrEqual(B2_CONTENT_BOTTOM - 4);
+}
+
+describe("b2 cover contents and weight", () => {
+  it("keeps every contents entry on the page, above the footer, at a readable size", () => {
+    for (const count of [1, 3, 7, 10, 12]) expectContentsVisible(count);
+  });
+
+  it("keeps a 7-lead mixed collage from giving one photo the page", () => {
+    const letters = Array.from({ length: 7 }, (_, index) => ({
+      name: MEMBER_NAMES[index]!,
+      body: countedProse(48, 2),
+      photos: [mixedLead(index)],
+    }));
+    const plan = layout(letters);
+    const cover = plan.pages[0]!;
+    const areas = cover.photos.map((item) => item.w * item.h);
+    const share = Math.max(...areas) / areas.reduce((sum, area) => sum + area, 0);
+    expect(cover.photos).toHaveLength(7);
+    expect(share).toBeLessThanOrEqual(COVER_PHOTO_SHARE_MAX);
+    expect(share).toBeGreaterThan(0.08);
+  });
+});
+
+describe("b2 letter length and photo count", () => {
+  const portrait = (id: string) => photo(id, 3024, 4032);
+
+  it("fits 250 to 350 words with one or three portraits on one filled page", () => {
+    for (const count of [250, 300, 350]) {
+      for (const photos of [1, 3]) {
+        const shots = Array.from({ length: photos }, (_, index) => portrait(`p-${count}-${photos}-${index}`));
+        const body = countedProse(count, 3);
+        const plan = layout([{ body, photos: shots }]);
+        const pages = personPages(plan, "Wren");
+        expect(pages, `${count} words / ${photos} photos`).toHaveLength(1);
+        expect(bodyWords(pages)).toEqual(words(body));
+        expectPhotosOnce(pages, shots);
+        expectClean(plan.pages);
+        const page = pages[0]!;
+        expect(pageUnfilledRatio(page)).toBeLessThanOrEqual(SPREAD_PAGE_UNFILLED_MAX + 0.005);
+        for (const line of page.lines) {
+          if (line.role === "body") expect(line.size).toBeGreaterThanOrEqual(B2_BODY_SIZE);
+        }
+        if (photos === 1) {
+          const shot = page.photos[0]!;
+          expect(shot.h).toBeGreaterThan(shot.w);
+          expect(shot.h).toBeLessThan(B2_AVAIL * 0.92);
+        } else {
+          const left = Math.min(...page.photos.map((item) => item.x));
+          const right = Math.max(...page.photos.map((item) => item.x + item.w));
+          expect(right - left).toBeGreaterThan(B2_INNER_W * 0.9);
+        }
+      }
+    }
+  });
+
+  it("keeps 250 to 350 words with six portraits filled, and spreads only when one page cannot", () => {
+    for (const count of [250, 300, 350]) {
+      const shots = Array.from({ length: 6 }, (_, index) => portrait(`s-${count}-${index}`));
+      const body = countedProse(count, 4);
+      const plan = layout([{ body, photos: shots }]);
+      const pages = personPages(plan, "Wren");
+      expect(pages, `${count} words`).toHaveLength(count >= 300 ? 2 : 1);
+      if (pages.length === 2) {
+        expect(pages.every((page) => page.templateId === "spread")).toBe(true);
+        expect(pages[0]?.headerStyle).toBe(pages[1]?.headerStyle);
+      }
+      expect(bodyWords(pages)).toEqual(words(body));
+      expectPhotosOnce(pages, shots);
+      expectClean(plan.pages);
+      const readingOrder = pages.flatMap((page) =>
+        page.photos
+          .slice()
+          .sort((a, b) => a.y - b.y || a.x - b.x)
+          .map((item) => item.storagePath),
+      );
+      expect(readingOrder, `${count} words`).toEqual(shots.map((item) => item.storagePath));
+      for (const page of pages) {
+        expect(pageUnfilledRatio(page), `${count} words`).toBeLessThanOrEqual(SPREAD_PAGE_UNFILLED_MAX + 0.005);
+        expect(page.photos.length).toBeGreaterThan(0);
+        expect(page.lines.some((line) => line.role === "body")).toBe(true);
+        if (page.photos.length >= 2) {
+          const left = Math.min(...page.photos.map((item) => item.x));
+          const right = Math.max(...page.photos.map((item) => item.x + item.w));
+          expect(right - left).toBeGreaterThan(B2_INNER_W * 0.9);
+        } else {
+          const shot = page.photos[0]!;
+          expect(shot.h).toBeGreaterThan(shot.w);
+          expect(shot.x).toBeLessThanOrEqual(B2_INNER_X + 1);
+        }
+        for (const line of page.lines) {
+          if (line.role === "body") expect(line.size).toBeGreaterThanOrEqual(B2_BODY_SIZE);
+        }
+      }
     }
   });
 });
