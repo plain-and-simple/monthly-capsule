@@ -22,6 +22,7 @@ import {
   SUBMIT_STILL_EDITABLE,
 } from "@/lib/copy";
 import { appendPhotos, photoBatchFit } from "@/lib/photo-files";
+import { detectPhotoFaces } from "@/lib/face-detect";
 import { PHOTO_COMPRESS_FAILED, compressPhotoFile } from "@/lib/photo-compress";
 import {
   LETTER_AUTOSAVE_MS,
@@ -39,6 +40,8 @@ type StagedPhoto = {
   name?: string;
   width?: number;
   height?: number;
+  /** New files only. Kept photos already stored their boxes. */
+  faces?: Array<{ x: number; y: number; w: number; h: number }>;
 };
 
 export function SubmitForm({
@@ -188,6 +191,7 @@ export function SubmitForm({
       const next = await Promise.all(
         kept.map(async (file) => {
           const photo = await compressPhotoFile(file);
+          const faces = await detectPhotoFaces(photo.blob);
           return {
             id: `${photo.name}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
             preview: URL.createObjectURL(photo.blob),
@@ -195,6 +199,7 @@ export function SubmitForm({
             name: photo.name,
             width: photo.width,
             height: photo.height,
+            faces,
           } satisfies StagedPhoto;
         }),
       );
@@ -263,13 +268,16 @@ export function SubmitForm({
         formData.set("body", posted);
         if (photosTouched) formData.set("photos_touched", "1");
         keptPaths.forEach((path) => formData.append("keep_path", path));
+        const newFaces: Array<Array<{ x: number; y: number; w: number; h: number }>> = [];
         photos.forEach((photo) => {
           if (!photo.blob || !photo.name) return;
           const file = new File([photo.blob], photo.name, {
             type: photo.blob.type || "image/jpeg",
           });
           formData.append("photos", file);
+          newFaces.push(photo.faces ?? []);
         });
+        if (newFaces.length > 0) formData.set("photo_faces", JSON.stringify(newFaces));
         return action(formData);
       }}
     >

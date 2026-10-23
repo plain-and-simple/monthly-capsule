@@ -204,7 +204,7 @@ export async function snapshotMonthArchive(
   if (included.length > 0) {
     const { data: photoRows } = await admin
       .from("photos")
-      .select("submission_id, storage_path, width, height, sort_order")
+      .select("submission_id, storage_path, width, height, sort_order, faces")
       .in(
         "submission_id",
         included.map((submission) => submission.id),
@@ -214,12 +214,14 @@ export async function snapshotMonthArchive(
     for (const photo of photoRows ?? []) {
       const submissionId = photo.submission_id as string;
       const list = photosBySubmission.get(submissionId) ?? [];
-      list.push({
+      const stored: CapsuleArchiveLetter["photos"][number] = {
         storage_path: photo.storage_path as string,
         width: photo.width as number,
         height: photo.height as number,
         sort_order: (photo.sort_order as number | null) ?? list.length,
-      });
+      };
+      if (photo.faces != null) stored.faces = photo.faces as CapsuleArchiveLetter["photos"][number]["faces"];
+      list.push(stored);
       photosBySubmission.set(submissionId, list);
     }
     for (const submission of included) {

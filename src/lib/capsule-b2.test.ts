@@ -1,0 +1,1092 @@
+import { describe, expect, it } from "vitest";
+import {
+  B2_AVAIL,
+  B2_BODY_LEADING,
+  B2_BODY_SIZE,
+  B2_CONTENT_BOTTOM,
+  B2_INNER_W,
+  B2_INNER_X,
+  B2_PAGE_H,
+  B2_PAGE_W,
+  B2_TEMPLATE_IDS,
+  CENTRED_PHOTO_TEMPLATES,
+  COVER_PHOTO_SHARE_MAX,
+  COVER_TOC_MIN,
+  COVER_UNKNOWN_TRIM,
+  HEADER_STYLES,
+  MAX_TRIM,
+  MIN_FOOTER_GAP,
+  PAGE_UNFILLED_MAX,
+  PHOTO_SIDE_GAP_MAX,
+  SPREAD_PAGE_UNFILLED_MAX,
+  SPREAD_WORD_MIN,
+  TEMPLATE_REPEAT_PENALTY,
+  auditPageContent,
+  bindPhotosToSlots,
+  bodyLinePitch,
+  faceFullyVisible,
+  heroScore,
+  layoutCapsuleDocument,
+  magazineRowCounts,
+  measureTextWidth,
+  orderPhotos,
+  pageUnfilledRatio,
+  parseFaceBoxes,
+  parsePhotoFacesList,
+  placeCrop,
+  scoreCandidate,
+  slotFitsPhoto,
+  wordCount,
+  type B2Photo,
+  type PagePlan,
+  type PlacedPhoto,
+} from "./capsule-b2";
+import { IN_THIS_ISSUE as ISSUE_COPY } from "./copy";
+import { capsuleThemeMeta, type CapsuleTheme } from "./capsule-theme";
+
+function photo(
+  id: string,
+  width: number,
+  height: number,
+  faces: B2Photo["faces"] = [],
+  order = 0,
+): B2Photo {
+  return { storagePath: id, width, height, faces, order };
+}
+
+function words(text: string): string[] {
+  return text.trim().split(/\s+/).filter(Boolean);
+}
+
+function bodyWords(pages: PagePlan[]): string[] {
+  return words(
+    pages
+      .flatMap((page) => page.lines.filter((line) => line.role === "body").map((line) => line.text))
+      .join(" "),
+  );
+}
+
+function personPages(plan: { pages: PagePlan[] }, name: string): PagePlan[] {
+  return plan.pages.filter((page) => page.personName === name);
+}
+
+function layout(letters: Array<{ name?: string; body: string; photos?: B2Photo[] }>, theme: CapsuleTheme = "classic") {
+  return layoutCapsuleDocument({
+    groupName: "Cedar Street",
+    monthLabel: "October 2026",
+    theme,
+    missedLine: "",
+    contributors: letters.length ? `Contributors: ${letters.map((letter) => letter.name ?? "Wren").join(", ")}` : "",
+    letters: letters.map((letter, index) => ({
+      preferredName: letter.name ?? "Wren",
+      body: letter.body,
+      photos: letter.photos ?? [],
+    })),
+  });
+}
+
+function expectClean(pages: PagePlan[]) {
+  for (const page of pages) {
+    expect(auditPageContent(page), page.templateId).toEqual([]);
+    for (const line of page.lines) {
+      if (line.role === "footer") continue;
+      const inkWidth = measureTextWidth(line.text, line.size, line.font);
+      expect(inkWidth).toBeLessThanOrEqual(line.w + 0.6);
+      expect(line.x).toBeGreaterThanOrEqual(-1);
+      expect(line.x + line.w).toBeLessThanOrEqual(B2_PAGE_W + 1);
+    }
+    for (const placed of page.photos) {
+      expect(placed.crop.maxSide).toBeLessThanOrEqual(MAX_TRIM + 0.002);
+      const source = pages
+        .flatMap((item) => item.photos)
+        .find((item) => item.storagePath === placed.storagePath);
+      expect(source).toBeTruthy();
+    }
+  }
+}
+
+function expectFacesKept(pages: PagePlan[], photos: B2Photo[]) {
+  for (const page of pages) {
+    for (const placed of page.photos) {
+      const source = photos.find((item) => item.storagePath === placed.storagePath);
+      expect(source).toBeTruthy();
+      for (const face of source!.faces) {
+        if (face.w * face.h < 0.003) continue;
+        expect(faceFullyVisible(face, placed.crop), placed.storagePath).toBe(true);
+      }
+      if (placed.crop.letterbox || placed.fit === "contain") {
+        expect(placed.crop.maxSide).toBe(0);
+      }
+    }
+  }
+}
+
+function expectPhotosOnce(pages: PagePlan[], photos: B2Photo[]) {
+  const seen = pages.flatMap((page) => page.photos.map((photo) => photo.storagePath));
+  expect(seen.slice().sort()).toEqual(photos.map((item) => item.storagePath).sort());
+}
+
+const LETTER = "The plum tree finally did something this year after we almost gave up on it. A second thought about the porch light.";
+
+describe("b2 scorer and crops", () => {
+  it("lists 14 scored templates and cycles header styles", () => {
+    expect(B2_TEMPLATE_IDS).toHaveLength(14);
+    expect(new Set(B2_TEMPLATE_IDS).size).toBe(14);
+    expect(HEADER_STYLES).toEqual(["rule", "block", "serif"]);
+  });
+
+  it("penalizes repeating the previous template and prefers a person lead", () => {
+    const base = {
+      blankRatio: 0.1,
+      fontSize: 13,
+      meanCrop: 0.02,
+      heroIsLargest: true,
+      objectIsBiggest: false,
+      hasPerson: true,
+      templateId: "duo",
+      affinity: 1,
+    };
+    const fresh = scoreCandidate({ ...base, previousTemplateId: null });
+    const repeat = scoreCandidate({ ...base, previousTemplateId: "duo" });
+    expect(fresh - repeat).toBeCloseTo(TEMPLATE_REPEAT_PENALTY, 5);
+    const objectLead = scoreCandidate({
+      ...base,
+      previousTemplateId: null,
+      objectIsBiggest: true,
+      heroIsLargest: false,
+    });
+    expect(fresh).toBeGreaterThan(objectLead);
+
+    const person = photo("person", 800, 1200, [{ x: 0.3, y: 0.2, w: 0.3, h: 0.3 }], 1);
+    const object = photo("object", 1600, 900, [], 0);
+    expect(heroScore(person)).toBeGreaterThan(heroScore(object));
+    expect(orderPhotos([object, person])[0]?.storagePath).toBe("person");
+    const tiny = photo("speck", 800, 800, [{ x: 0.1, y: 0.1, w: 0.04, h: 0.04 }]);
+    expect(heroScore(tiny)).toBeLessThan(heroScore(object) + 0.01);
+  });
+
+  it("trims at most 10% per side and never cuts a face", () => {
+    const plain = photo("plain", 1000, 800);
+    const wider = placeCrop(plain, plain.width / plain.height * 0.86);
+    expect(wider.letterbox).toBe(false);
+    expect(wider.l).toBeLessThanOrEqual(MAX_TRIM + 1e-6);
+    expect(wider.r).toBeLessThanOrEqual(MAX_TRIM + 1e-6);
+    expect(wider.l + wider.r).toBeGreaterThan(0.05);
+
+    const faced = photo("faced", 1000, 800, [{ x: 0.05, y: 0.2, w: 0.4, h: 0.45 }]);
+    const crop = placeCrop(faced, (faced.width / faced.height) * 0.9);
+    expect(crop.maxSide).toBeLessThanOrEqual(MAX_TRIM + 1e-6);
+    expect(faceFullyVisible(faced.faces[0]!, crop)).toBe(true);
+
+    const wideFace = photo("wide", 1000, 800, [{ x: 0.02, y: 0.2, w: 0.92, h: 0.4 }]);
+    const blocked = placeCrop(wideFace, (wideFace.width / wideFace.height) * 0.7);
+    expect(blocked.letterbox).toBe(true);
+    expect(blocked.maxSide).toBe(0);
+    expect(faceFullyVisible(wideFace.faces[0]!, blocked)).toBe(true);
+  });
+
+  it("rejects garbage face boxes and reads the hidden submit list", () => {
+    expect(parseFaceBoxes([{ x: 0.2, y: 0.2, w: 0.2, h: 0.2 }, { x: "no" }, null])).toEqual([
+      { x: 0.2, y: 0.2, w: 0.2, h: 0.2 },
+    ]);
+    expect(parsePhotoFacesList(JSON.stringify([[{ x: 0.1, y: 0.2, w: 0.3, h: 0.4 }], []]))).toEqual([
+      [{ x: 0.1, y: 0.2, w: 0.3, h: 0.4 }],
+      [],
+    ]);
+    expect(parsePhotoFacesList("not-json")).toEqual([]);
+  });
+
+  it("packs magazine rows without a trailing single from 4 through 8", () => {
+    expect(magazineRowCounts(4)).toEqual([2, 2]);
+    expect(magazineRowCounts(5)).toEqual([3, 2]);
+    expect(magazineRowCounts(6)).toEqual([3, 3]);
+    expect(magazineRowCounts(7)).toEqual([4, 3]);
+    expect(magazineRowCounts(8)).toEqual([4, 4]);
+  });
+});
+
+describe("b2 page templates", () => {
+  it("gives a letter with no photos its own text page", () => {
+    const plan = layout([{ body: LETTER }]);
+    const pages = personPages(plan, "Wren");
+    expect(pages).toHaveLength(1);
+    expect(pages[0]?.templateId).toBe("text-only");
+    expect(pages[0]?.photos).toHaveLength(0);
+    expect(bodyWords(pages)).toEqual(words(LETTER));
+    expect(pages[0]?.lines.some((line) => line.role === "footer" && line.text.includes("Cedar Street"))).toBe(true);
+    expect(pages[0]?.lines.some((line) => line.role === "footer" && line.text === "2")).toBe(true);
+    expectClean(plan.pages);
+  });
+
+  it("sets a one-line letter in large type", () => {
+    const plan = layout([{ body: "Hello October." }]);
+    const page = personPages(plan, "Wren")[0]!;
+    expect(page.templateId).toBe("one-line");
+    const line = page.lines.find((item) => item.role === "body")!;
+    expect(line.size).toBeGreaterThanOrEqual(28);
+    expect(line.text).toBe("Hello October.");
+    expectClean(plan.pages);
+  });
+
+  it("places one photo, prefers a portrait slot, and keeps the letter", () => {
+    const shot = photo("p", 800, 1200, [{ x: 0.3, y: 0.15, w: 0.35, h: 0.28 }]);
+    const body = `${LETTER} ${LETTER} ${LETTER}`;
+    const plan = layout([{ body, photos: [shot] }]);
+    const page = personPages(plan, "Wren")[0]!;
+    expect(page.templateId).toBe("portrait-feature");
+    expectPhotosOnce(personPages(plan, "Wren"), [shot]);
+    expect(page.photos[0]!.h).toBeGreaterThan(page.photos[0]!.w);
+    expect(bodyWords(personPages(plan, "Wren"))).toEqual(words(body));
+    expectFacesKept(personPages(plan, "Wren"), [shot]);
+    expectClean(plan.pages);
+  });
+
+  it("uses a wide lead for a landscape photo", () => {
+    const shot = photo("land", 1600, 900);
+    const plan = layout([{ body: LETTER, photos: [shot] }]);
+    const page = personPages(plan, "Wren")[0]!;
+    expect(["landscape-hero", "feature-band", "announce"]).toContain(page.templateId);
+    expect(page.photos[0]!.w).toBeGreaterThan(page.photos[0]!.h);
+    expect(page.photos[0]!.w).toBeGreaterThan(B2_INNER_W * 0.7);
+    expectPhotosOnce([page], [shot]);
+    expectClean(plan.pages);
+  });
+
+  it("shows every photo for a 7-photo and an 8-photo letter", () => {
+    for (const count of [7, 8]) {
+      const shots = Array.from({ length: count }, (_, index) =>
+        photo(`g${index}`, index % 2 === 0 ? 900 : 800, index % 2 === 0 ? 1200 : 1000, [], index),
+      );
+      const plan = layout([{ body: "A short note about the walk and the pictures that came home with us today.", photos: shots }]);
+      const pages = personPages(plan, "Wren");
+      expect(pages[0]?.templateId).toBe("gallery");
+      expectPhotosOnce(pages, shots);
+      expectClean(plan.pages);
+    }
+  });
+
+  it("turns a 900-word letter into a two-page spread and keeps every word", () => {
+    const body = Array.from({ length: 900 }, (_, index) => `word${index}`).join(" ");
+    expect(wordCount(body)).toBe(900);
+    expect(wordCount(body)).toBeGreaterThanOrEqual(SPREAD_WORD_MIN);
+    const shots = [photo("s", 1400, 900)];
+    const plan = layout([{ body, photos: shots }]);
+    const pages = personPages(plan, "Wren");
+    expect(pages.length).toBeGreaterThanOrEqual(2);
+    expect(pages.every((page) => page.templateId === "spread")).toBe(true);
+    expect(bodyWords(pages)).toEqual(words(body));
+    expectPhotosOnce(pages, shots);
+    const hero = pages[0]?.photos[0];
+    expect(hero?.w).toBeGreaterThan(B2_INNER_W * 0.7);
+    const textPage = pages.find((page) => page.photos.length === 0);
+    const textXs = new Set(textPage?.lines.filter((line) => line.role === "body").map((line) => Math.round(line.x)));
+    expect(textXs.size).toBeGreaterThanOrEqual(2);
+    const last = pages[1]!.lines.filter((line) => line.role === "body").at(-1)!;
+    expect(B2_CONTENT_BOTTOM - (last.y + last.h)).toBeLessThan(90);
+    expectClean(plan.pages);
+  });
+
+  it("letterboxes a phone screenshot and a panorama instead of cropping past 10%", () => {
+    const phone = photo("phone", 900, 1950);
+    const pano = photo("pano", 3200, 800);
+    expect(phone.width / phone.height).toBeLessThan(0.5);
+    expect(pano.width / pano.height).toBeGreaterThan(2.4);
+    for (const shot of [phone, pano]) {
+      const plan = layout([{ body: LETTER, photos: [shot] }]);
+      const page = personPages(plan, "Wren")[0]!;
+      expect(page.templateId).toBe("letterbox");
+      const placed = page.photos[0]!;
+      expect(placed.crop.maxSide).toBeLessThanOrEqual(0.002);
+      const slotAspect = placed.w / placed.h;
+      const realAspect = shot.width / shot.height;
+      expect(slotAspect).toBeCloseTo(realAspect, 1);
+      expectClean(plan.pages);
+    }
+  });
+
+  it("does not repeat a close template on the next person", () => {
+    const shots = Array.from({ length: 6 }, (_, index) => photo(`r${index}`, 1000, 1000, [], index));
+    const plan = layout([
+      { name: "Ada", body: "A short note about the walk and the six pictures that came home with us.", photos: shots },
+      {
+        name: "Bea",
+        body: "Another short note about the walk and the six pictures that came home with us.",
+        photos: shots.map((item, index) => photo(`b${index}`, 1000, 1000, [], index)),
+      },
+    ]);
+    const ada = personPages(plan, "Ada")[0]!;
+    const bea = personPages(plan, "Bea")[0]!;
+    expect(ada.templateId).not.toBe(bea.templateId);
+    expect(["grid-rows", "gallery"]).toContain(ada.templateId);
+    expect(["grid-rows", "gallery"]).toContain(bea.templateId);
+    expectClean(plan.pages);
+  });
+
+  it("varies the header on adjacent pages and maps theme colors", () => {
+    const plan = layout([
+      { name: "Ada", body: LETTER },
+      { name: "Bea", body: LETTER },
+    ]);
+    expect(plan.pages.map((page) => page.headerStyle)).toEqual(["rule", "block", "serif"]);
+    const classic = capsuleThemeMeta("classic");
+    expect(plan.pages[0]?.paper).toBe(classic.colors[0]);
+    expect(plan.pages[1]?.headerFill).toBe(classic.colors[2]);
+    expect(plan.pages[0]?.lines.some((line) => line.text === "CEDAR STREET")).toBe(true);
+    expect(plan.pages[0]?.lines.filter((line) => line.role === "cover" && line.text === "CEDAR STREET")).toHaveLength(1);
+    expect(plan.pages[0]?.lines.some((line) => line.role === "cover" && line.text === "Cedar Street")).toBe(false);
+    expect(plan.pages[0]?.lines.some((line) => line.text === ISSUE_COPY)).toBe(true);
+    expect(plan.pages[0]?.lines.some((line) => line.role === "cover" && line.text === "Ada")).toBe(true);
+    expect(plan.pages[0]?.lines.some((line) => line.role === "cover" && line.text === "2")).toBe(true);
+
+    const minimal = layout([{ body: LETTER }], "minimal");
+    expect(minimal.pages[1]?.headerFill).toBe(capsuleThemeMeta("minimal").colors[1]);
+    expect(minimal.pages[1]?.headerFill).not.toBe(capsuleThemeMeta("minimal").colors[2]);
+
+    const heritage = layout([{ body: "Hello October." }], "heritage");
+    expect(heritage.pages[0]?.lines.some((line) => line.text === "A keepsake")).toBe(true);
+
+    const empty = layout([]);
+    expect(empty.pages).toHaveLength(1);
+    expect(empty.pages[0]?.lines.some((line) => line.text === "No letters this month.")).toBe(true);
+    expectClean(plan.pages);
+    expectClean(minimal.pages);
+    expectClean(heritage.pages);
+    expectClean(empty.pages);
+  });
+
+  it("puts each person on their own pages with no overlap and the lead on a person", () => {
+    const object = photo("cup", 1600, 1000, [], 0);
+    const person = photo("ada", 900, 1200, [{ x: 0.28, y: 0.12, w: 0.4, h: 0.36 }], 1);
+    const plan = layout([
+      { name: "Ada", body: LETTER, photos: [object, person] },
+      { name: "Bea", body: "Next person writes one line only.", photos: [photo("bea", 1000, 800)] },
+    ]);
+    const ada = personPages(plan, "Ada");
+    const bea = personPages(plan, "Bea");
+    expect(ada.length).toBeGreaterThan(0);
+    expect(bea.length).toBeGreaterThan(0);
+    expect(ada.every((page) => page !== bea[0])).toBe(true);
+    const lead = ada.flatMap((page) => page.photos).find((item) => item.lead);
+    expect(lead?.storagePath).toBe("ada");
+    expect(lead?.crop.letterbox).toBe(false);
+    const adaPlaced = ada.flatMap((page) => page.photos);
+    const fittingLarger = adaPlaced.filter(
+      (item) => slotFitsPhoto(person, item.w, item.h) && item.w * item.h > (lead?.w ?? 0) * (lead?.h ?? 0) + 1,
+    );
+    expect(fittingLarger).toHaveLength(0);
+    expectPhotosOnce(ada, [object, person]);
+    expectFacesKept(ada, [object, person]);
+    for (const line of ada.flatMap((page) => page.lines).filter((line) => line.role !== "footer")) {
+      expect(line.y + line.h).toBeLessThanOrEqual(B2_CONTENT_BOTTOM + 1.5);
+      expect(line.x).toBeGreaterThanOrEqual(B2_INNER_X - 2);
+    }
+    expectClean(plan.pages);
+  });
+});
+
+describe("b2 cover", () => {
+  it("shows the group name once, a contents list with real page numbers, and a lead collage", () => {
+    const adaShots = [
+      photo("ada-lead", 900, 1200, [{ x: 0.3, y: 0.15, w: 0.35, h: 0.3 }], 0),
+      photo("ada-wide", 1600, 900, [], 1),
+    ];
+    const beaShot = photo("bea-lead", 1400, 900);
+    const long = Array.from({ length: 900 }, (_, index) => `word${index}`).join(" ");
+    const plan = layout([
+      { name: "Ada", body: long, photos: adaShots },
+      { name: "Bea", body: LETTER, photos: [beaShot] },
+    ]);
+    const cover = plan.pages[0]!;
+    expect(cover.templateId).toBe("cover");
+    const coverText = cover.lines.filter((line) => line.role === "cover").map((line) => line.text);
+    expect(coverText.filter((text) => text === "CEDAR STREET")).toHaveLength(1);
+    expect(coverText).not.toContain("Cedar Street");
+    expect(coverText).toContain(ISSUE_COPY);
+    const adaPage = plan.pages.findIndex((page) => page.personName === "Ada") + 1;
+    const beaPage = plan.pages.findIndex((page) => page.personName === "Bea") + 1;
+    expect(adaPage).toBe(2);
+    expect(beaPage).toBeGreaterThan(adaPage);
+    expect(personPages(plan, "Ada").length).toBeGreaterThanOrEqual(2);
+    expect(coverText).toContain("Ada");
+    expect(coverText).toContain(String(adaPage));
+    expect(coverText).toContain("Bea");
+    expect(coverText).toContain(String(beaPage));
+    expect(cover.photos.map((item) => item.storagePath).sort()).toEqual(["ada-lead", "bea-lead"].sort());
+    for (const placed of cover.photos) {
+      expect(placed.crop.maxSide).toBeLessThanOrEqual(MAX_TRIM + 0.002);
+      expect(placed.crop.letterbox).toBe(false);
+    }
+    expectFacesKept([cover], [adaShots[0]!, beaShot]);
+    expectClean(plan.pages);
+  });
+
+  it("still makes a filled cover when nobody sent a photo", () => {
+    const plan = layout([
+      { name: "Ada", body: LETTER },
+      { name: "Bea", body: "Hello October." },
+    ]);
+    const cover = plan.pages[0]!;
+    expect(cover.photos).toHaveLength(0);
+    expect(cover.bands.length).toBeGreaterThan(0);
+    expect(cover.lines.some((line) => line.role === "cover" && line.text === "CEDAR STREET")).toBe(true);
+    expect(cover.lines.some((line) => line.text === ISSUE_COPY)).toBe(true);
+    expect(pageUnfilledRatio(cover)).toBeLessThan(0.72);
+    expectClean(plan.pages);
+  });
+});
+
+describe("b2 lead assignment invariants", () => {
+  function mildMixes(): B2Photo[][] {
+    const faces = [{ x: 0.28, y: 0.14, w: 0.36, h: 0.3 }];
+    const shapes: Array<[string, number, number, B2Photo["faces"]]> = [
+      ["p", 800, 1200, faces],
+      ["l", 1600, 900, []],
+      ["s", 1000, 1000, []],
+      ["t", 900, 1500, faces],
+      ["w", 1800, 1000, []],
+      ["q", 1100, 900, []],
+    ];
+    const mixes: B2Photo[][] = [];
+    for (let n = 1; n <= 6; n += 1) {
+      for (let offset = 0; offset < shapes.length; offset += 1) {
+        mixes.push(
+          Array.from({ length: n }, (_, index) => {
+            const spec = shapes[(offset + index) % shapes.length]!;
+            return photo(`${spec[0]}${n}-${offset}-${index}`, spec[1], spec[2], spec[3], index);
+          }),
+        );
+      }
+    }
+    mixes.push([photo("face-p", 850, 1300, faces, 0), photo("obj-l", 1700, 950, [], 1)]);
+    mixes.push([photo("obj-l2", 1700, 950, [], 0), photo("face-p2", 850, 1300, faces, 1)]);
+    return mixes;
+  }
+
+  it("never letterboxes a mild photo when a fitting arrangement exists", () => {
+    for (const shots of mildMixes()) {
+      const plan = layout([{ body: `${LETTER} ${LETTER}`, photos: shots }]);
+      const pages = personPages(plan, "Wren");
+      expectPhotosOnce(pages, shots);
+      expectFacesKept(pages, shots);
+      expectClean(plan.pages);
+      for (const placed of pages.flatMap((page) => page.photos)) {
+        expect(placed.crop.maxSide, placed.storagePath).toBeLessThanOrEqual(MAX_TRIM + 0.002);
+        const source = shots.find((item) => item.storagePath === placed.storagePath)!;
+        if (placed.crop.letterbox || placed.fit === "contain") {
+          const slots = pages.flatMap((page) => page.photos);
+          const anyFit = slots.some((slot) => slotFitsPhoto(source, slot.w, slot.h));
+          expect(anyFit, placed.storagePath).toBe(false);
+        }
+      }
+      const lead = pages.flatMap((page) => page.photos).find((item) => item.lead);
+      if (lead) {
+        const source = shots.find((item) => item.storagePath === lead.storagePath);
+        expect(source).toBeTruthy();
+        if (source && !lead.crop.letterbox) {
+          expect(slotFitsPhoto(source, lead.w, lead.h)).toBe(true);
+        }
+      }
+    }
+  });
+
+  it("keeps the lead in a fitting slot instead of swapping into a mismatched large frame", () => {
+    const portrait = photo("tall", 800, 1200, [{ x: 0.3, y: 0.18, w: 0.32, h: 0.28 }], 1);
+    const wide = photo("wide", 1800, 900, [], 0);
+    const slots: PlacedPhoto[] = [
+      {
+        storagePath: "tall",
+        x: 0,
+        y: 0,
+        w: 180,
+        h: 270,
+        crop: placeCrop(portrait, 180 / 270),
+        fit: "cover",
+        lead: false,
+      },
+      {
+        storagePath: "wide",
+        x: 190,
+        y: 0,
+        w: 360,
+        h: 180,
+        crop: placeCrop(wide, 360 / 180),
+        fit: "cover",
+        lead: false,
+      },
+    ];
+    const bound = bindPhotosToSlots(slots, orderPhotos([wide, portrait]));
+    const lead = bound.find((item) => item.lead)!;
+    expect(lead.storagePath).toBe("tall");
+    expect(lead.crop.letterbox).toBe(false);
+    expect(slotFitsPhoto(portrait, lead.w, lead.h)).toBe(true);
+    expect(bound.every((item) => item.crop.letterbox === false)).toBe(true);
+  });
+});
+
+describe("b2 fill and footer", () => {
+  it("keeps unfilled area down on typical short and long letters", () => {
+    const short = LETTER;
+    const long = Array.from({ length: 220 }, (_, index) => `word${index}`).join(" ");
+    const one = [photo("one", 1200, 800)];
+    const three = [
+      photo("a", 900, 1200, [{ x: 0.3, y: 0.2, w: 0.3, h: 0.28 }], 0),
+      photo("b", 1400, 900, [], 1),
+      photo("c", 1000, 1000, [], 2),
+    ];
+    const fixtures = [
+      layout([{ body: short, photos: one }]),
+      layout([{ body: short, photos: three }]),
+      layout([{ body: long, photos: [] }]),
+    ];
+    for (const plan of fixtures) {
+      expectClean(plan.pages);
+      for (const page of plan.pages) {
+        if (page.templateId === "cover") continue;
+        // A text page ends when the letter ends. Line pitch stays 18pt, so a
+        // 220-word paragraph cannot be stretched down to the footer.
+        const cap = page.templateId === "text-only" ? 0.5 : PAGE_UNFILLED_MAX;
+        expect(pageUnfilledRatio(page), page.templateId).toBeLessThanOrEqual(cap);
+        if (page.templateId === "text-only") {
+          const body = page.lines.filter((line) => line.role === "body");
+          for (let i = 1; i < body.length; i += 1) {
+            if (Math.abs(body[i]!.x - body[i - 1]!.x) > 0.6) continue;
+            const delta = body[i]!.y - body[i - 1]!.y;
+            if (delta > B2_BODY_LEADING + 1) continue;
+            expect(delta).toBeCloseTo(B2_BODY_LEADING, 4);
+          }
+        }
+        const last = page.lines.filter((line) => line.role === "body").at(-1);
+        if (last) {
+          expect(B2_PAGE_H - 30 - (last.y + last.h)).toBeGreaterThanOrEqual(MIN_FOOTER_GAP - 0.6);
+        }
+      }
+    }
+  });
+
+  it("uses cream name ink on a green block header", () => {
+    const plan = layout([
+      { name: "Ada", body: LETTER },
+      { name: "Bea", body: LETTER },
+    ]);
+    const block = plan.pages.find((page) => page.headerStyle === "block" && page.personName);
+    expect(block).toBeTruthy();
+    const name = block!.lines.find((line) => line.role === "name")!;
+    expect(name.color).toBe(block!.headerInk);
+    expect(name.color).not.toBe(block!.ink);
+    expect(block!.headerFill).toBe("#2f5b4c");
+    expect(name.color).toBe("#fffdf7");
+  });
+});
+
+function countedProse(count: number, paragraphs: number): string {
+  const sentence = "The porch light stayed on through the rain and the street looked softer than it does in June.";
+  const bank = sentence.split(/\s+/);
+  const all: string[] = [];
+  while (all.length < count) all.push(bank[all.length % bank.length]!);
+  const size = Math.ceil(all.length / paragraphs);
+  const parts: string[] = [];
+  for (let index = 0; index < paragraphs; index += 1) {
+    const slice = all.slice(index * size, (index + 1) * size);
+    if (slice.length) parts.push(slice.join(" "));
+  }
+  return parts.join("\n\n");
+}
+
+function photoBlockGaps(page: PagePlan): { left: number; right: number } | null {
+  if (page.photos.length === 0) return null;
+  const left = Math.min(...page.photos.map((item) => item.x));
+  const right = Math.max(...page.photos.map((item) => item.x + item.w));
+  return {
+    left: (left - B2_INNER_X) / B2_INNER_W,
+    right: (B2_INNER_X + B2_INNER_W - right) / B2_INNER_W,
+  };
+}
+
+/** Tops of body columns whose vertical ranges overlap. A side column and the text under it do not. */
+function overlappingColumnTops(page: PagePlan): Array<[number, number]> {
+  const body = page.lines.filter((line) => line.role === "body");
+  const xs = [...new Set(body.map((line) => Math.round(line.x)))].sort((a, b) => a - b);
+  const groups = xs
+    .map((x) => body.filter((line) => Math.round(line.x) === x))
+    .filter((lines) => lines.length >= 2)
+    .map((lines) => ({
+      top: Math.min(...lines.map((line) => line.y)),
+      bottom: Math.max(...lines.map((line) => line.y + line.h)),
+    }));
+  const pairs: Array<[number, number]> = [];
+  for (let i = 0; i < groups.length; i += 1) {
+    for (let j = i + 1; j < groups.length; j += 1) {
+      const a = groups[i]!;
+      const b = groups[j]!;
+      if (Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 24) pairs.push([a.top, b.top]);
+    }
+  }
+  return pairs;
+}
+
+describe("b2 polish fixtures", () => {
+  const portrait = (id: string, faces: B2Photo["faces"] = []) => photo(id, 1080, 1920, faces);
+  const threeByFour = (id: string) => photo(id, 3024, 4032);
+
+  it("keeps fixture photos full-width or flush, at the standard body size", () => {
+    const fixtureA = layout([
+      { body: countedProse(290, 4), photos: [portrait("a"), portrait("b"), portrait("c")] },
+    ]);
+    const fixtureB = layout([{ body: countedProse(300, 3), photos: [threeByFour("p")] }]);
+    for (const plan of [fixtureA, fixtureB]) {
+      expectClean(plan.pages);
+      for (const page of personPages(plan, "Wren")) {
+        for (const line of page.lines) {
+          if (line.role === "body") expect(line.size).toBeGreaterThanOrEqual(B2_BODY_SIZE);
+        }
+        const gaps = photoBlockGaps(page);
+        if (!gaps) continue;
+        const centred = CENTRED_PHOTO_TEMPLATES.includes(page.templateId);
+        if (!centred) {
+          expect(gaps.left > PHOTO_SIDE_GAP_MAX && gaps.right > PHOTO_SIDE_GAP_MAX, page.templateId).toBe(false);
+        }
+      }
+    }
+    expect(bodyWords(personPages(fixtureA, "Wren"))).toEqual(words(countedProse(290, 4)));
+    expect(bodyWords(personPages(fixtureB, "Wren"))).toEqual(words(countedProse(300, 3)));
+    const aPhotos = personPages(fixtureA, "Wren").flatMap((page) => page.photos);
+    const aLeft = Math.min(...aPhotos.map((item) => item.x));
+    const aRight = Math.max(...aPhotos.map((item) => item.x + item.w));
+    expect(aRight - aLeft).toBeGreaterThan(B2_INNER_W * 0.9);
+    const bPages = personPages(fixtureB, "Wren");
+    expect(bPages).toHaveLength(1);
+    const bPhoto = bPages.flatMap((page) => page.photos)[0]!;
+    expect(bPhoto.h).toBeGreaterThan(bPhoto.w);
+    expect(bPhoto.w).toBeLessThan(B2_INNER_W * 0.85);
+    expect(bPhoto.h).toBeLessThan(B2_AVAIL * 0.9);
+    expect(pageUnfilledRatio(bPages[0]!)).toBeLessThanOrEqual(SPREAD_PAGE_UNFILLED_MAX + 0.005);
+  });
+
+  it("starts overlapping columns at the same top", () => {
+    const plans = [
+      layout([{ body: countedProse(290, 4), photos: [portrait("a"), portrait("b"), portrait("c")] }]),
+      layout([{ body: countedProse(300, 3), photos: [threeByFour("p")] }]),
+      layout([{ body: countedProse(180, 3), photos: [] }]),
+    ];
+    let checked = 0;
+    for (const plan of plans) {
+      expectClean(plan.pages);
+      for (const page of personPages(plan, "Wren")) {
+        for (const [left, right] of overlappingColumnTops(page)) {
+          checked += 1;
+          expect(Math.abs(left - right)).toBeLessThan(0.6);
+        }
+      }
+    }
+    expect(checked).toBeGreaterThan(0);
+  });
+
+  it("does not shrink body type below the standard size", () => {
+    const mixed = [
+      photo("p", 1080, 1920),
+      photo("l", 1600, 1200),
+      photo("s", 1200, 1200),
+      photo("t", 900, 1400, [{ x: 0.3, y: 0.18, w: 0.32, h: 0.28 }]),
+      photo("w", 1800, 1100),
+    ];
+    const plans = [
+      layout([{ body: countedProse(230, 4), photos: mixed }]),
+      layout([{ body: countedProse(290, 4), photos: [portrait("a"), portrait("b"), portrait("c")] }]),
+      layout([{ body: countedProse(80, 2), photos: [photo("land", 1600, 1000)] }]),
+      layout([{ body: "Hello October." }]),
+    ];
+    for (const plan of plans) {
+      expectClean(plan.pages);
+      for (const line of plan.pages.flatMap((page) => page.lines)) {
+        if (line.role !== "body") continue;
+        expect(line.size).toBeGreaterThanOrEqual(B2_BODY_SIZE);
+      }
+    }
+    const longPage = personPages(plans[0]!, "Wren").find((page) => page.lines.some((line) => line.role === "body"));
+    expect(longPage?.lines.find((line) => line.role === "body")?.size).toBe(B2_BODY_SIZE);
+  });
+
+  it("fills a short letter under one wide photo", () => {
+    const wide = layout([
+      {
+        body: "The porch light stayed on through the rain and the street looked softer than June.",
+        photos: [photo("wide", 1600, 1200)],
+      },
+    ]);
+    const cinematic = layout([
+      { body: countedProse(36, 2), photos: [photo("cine", 1920, 1080)] },
+    ]);
+    for (const plan of [wide, cinematic]) {
+      expectClean(plan.pages);
+      const page = personPages(plan, "Wren")[0]!;
+      expect(pageUnfilledRatio(page)).toBeLessThanOrEqual(0.16);
+      const reach = Math.max(
+        ...page.photos.map((item) => item.y + item.h),
+        ...page.bands.map((band) => band.y + band.h),
+      );
+      expect(reach).toBeGreaterThanOrEqual(B2_CONTENT_BOTTOM - 8);
+      const source = plan === wide
+        ? "The porch light stayed on through the rain and the street looked softer than June."
+        : countedProse(36, 2);
+      expect(bodyWords(personPages(plan, "Wren"))).toEqual(words(source));
+    }
+  });
+
+  it("does not float a photo block with empty space on both sides", () => {
+    const aspects: Array<[number, number]> = [
+      [9, 16],
+      [3, 4],
+      [1, 1],
+      [4, 3],
+      [3, 2],
+      [16, 9],
+    ];
+    const lengths = [24, 90, 220];
+    for (const [w, h] of aspects) {
+      for (const count of [1, 2, 3]) {
+        for (const length of lengths) {
+          const shots = Array.from({ length: count }, (_, index) =>
+            photo(`s-${w}x${h}-${count}-${length}-${index}`, 800 * w, 800 * h, [], index),
+          );
+          const plan = layout([{ body: countedProse(length, length > 40 ? 3 : 1), photos: shots }]);
+          expectClean(plan.pages);
+          expect(bodyWords(personPages(plan, "Wren"))).toEqual(words(countedProse(length, length > 40 ? 3 : 1)));
+          for (const page of personPages(plan, "Wren")) {
+            const gaps = photoBlockGaps(page);
+            if (!gaps) continue;
+            const floating = gaps.left > PHOTO_SIDE_GAP_MAX && gaps.right > PHOTO_SIDE_GAP_MAX;
+            if (floating) {
+              expect(CENTRED_PHOTO_TEMPLATES, page.templateId).toContain(page.templateId);
+            }
+          }
+        }
+      }
+    }
+    const phone = layout([{ body: countedProse(80, 2), photos: [photo("phone", 900, 1950)] }]);
+    const phonePage = personPages(phone, "Wren").find((page) => page.photos.length)!;
+    expect(phonePage.templateId).toBe("letterbox");
+    expect(CENTRED_PHOTO_TEMPLATES).toEqual(["letterbox"]);
+    const gaps = photoBlockGaps(phonePage)!;
+    expect(gaps.left).toBeGreaterThan(PHOTO_SIDE_GAP_MAX);
+    expect(gaps.right).toBeGreaterThan(PHOTO_SIDE_GAP_MAX);
+  });
+
+  it("fills the cover and keeps unknown-face trim tiny and centred", () => {
+    const mixes: B2Photo[][] = [
+      [photo("p34", 3000, 4000)],
+      [photo("p916", 1080, 1920)],
+      [photo("l43", 4000, 3000)],
+      [photo("sq", 2000, 2000)],
+      [photo("a", 3000, 4000), photo("b", 1600, 900)],
+      [photo("c1", 3000, 4000), photo("c2", 1080, 1920), photo("c3", 4000, 3000), photo("c4", 2000, 2000)],
+    ];
+    for (const shots of mixes) {
+      const plan = layout(
+        shots.map((shot, index) => ({
+          name: ["Ada", "Bea", "Cyd", "Dee"][index] ?? "Wren",
+          body: countedProse(40, 2),
+          photos: [shot],
+        })),
+      );
+      const cover = plan.pages[0]!;
+      expectClean(plan.pages);
+      const reach = Math.max(
+        ...cover.photos.map((item) => item.y + item.h),
+        ...cover.bands.map((band) => band.y + band.h),
+      );
+      expect(reach).toBeGreaterThanOrEqual(B2_CONTENT_BOTTOM - 4);
+      for (const placed of cover.photos) {
+        expect(placed.crop.maxSide).toBeLessThanOrEqual(COVER_UNKNOWN_TRIM + 0.002);
+        expect(Math.abs(placed.crop.l - placed.crop.r)).toBeLessThan(0.008);
+        expect(Math.abs(placed.crop.t - placed.crop.b)).toBeLessThan(0.008);
+        expect(placed.crop.letterbox).toBe(false);
+      }
+    }
+
+    const face = { x: 0.3, y: 0.16, w: 0.34, h: 0.3 };
+    const faced = photo("faced", 2000, 2000, [face]);
+    const plan = layout([
+      { name: "Ada", body: countedProse(40, 2), photos: [photo("p", 3000, 4000), faced] },
+      { name: "Bea", body: countedProse(40, 2), photos: [photo("l", 4000, 3000)] },
+    ]);
+    const cover = plan.pages[0]!;
+    expectClean(plan.pages);
+    expectFacesKept([cover], [faced, photo("p", 3000, 4000), photo("l", 4000, 3000)]);
+    const placedFace = cover.photos.find((item) => item.storagePath === "faced");
+    expect(placedFace).toBeTruthy();
+    expect(faceFullyVisible(face, placedFace!.crop)).toBe(true);
+    for (const placed of cover.photos) {
+      const known = placed.storagePath === "faced";
+      expect(placed.crop.maxSide).toBeLessThanOrEqual((known ? MAX_TRIM : COVER_UNKNOWN_TRIM) + 0.002);
+    }
+  });
+});
+
+const MEMBER_NAMES = ["Ada", "Bea", "Cyd", "Dee", "Eve", "Fay", "Gus", "Hal", "Ian", "Jan", "Kit", "Lou"];
+
+function mixedLead(index: number): B2Photo {
+  const shapes: Array<[number, number]> = [
+    [3024, 4032],
+    [1080, 1920],
+    [4032, 3024],
+    [1600, 1200],
+    [2000, 2000],
+    [1200, 1800],
+    [1800, 1200],
+  ];
+  const spec = shapes[index % shapes.length]!;
+  return photo(`lead-${index}`, spec[0], spec[1], [], index);
+}
+
+function expectContentsVisible(count: number) {
+  const letters = Array.from({ length: count }, (_, index) => ({
+    name: MEMBER_NAMES[index] ?? `N${index}`,
+    body: countedProse(36, 2),
+    photos: [mixedLead(index)],
+  }));
+  const plan = layout(letters);
+  const cover = plan.pages[0]!;
+  expect(cover.templateId).toBe("cover");
+  expectClean(plan.pages);
+  const coverLines = cover.lines.filter((line) => line.role === "cover");
+  expect(coverLines.filter((line) => line.text === "CEDAR STREET")).toHaveLength(1);
+  for (const letter of letters) {
+    const page = plan.pages.findIndex((item) => item.personName === letter.name) + 1;
+    const nameLine = coverLines.find((line) => line.text === letter.name);
+    expect(nameLine, letter.name).toBeTruthy();
+    const pageLine = coverLines.find(
+      (line) => line.text === String(page) && nameLine && Math.abs(line.y - nameLine.y) < 1 && line.x >= nameLine.x,
+    );
+    expect(pageLine, `${letter.name} page ${page}`).toBeTruthy();
+    for (const line of [nameLine!, pageLine!]) {
+      expect(line.size).toBeGreaterThanOrEqual(COVER_TOC_MIN);
+      expect(line.x).toBeGreaterThanOrEqual(-0.5);
+      expect(line.y).toBeGreaterThanOrEqual(0);
+      expect(line.x + line.w).toBeLessThanOrEqual(B2_PAGE_W + 0.5);
+      expect(line.y + line.h).toBeLessThanOrEqual(B2_CONTENT_BOTTOM + 0.5);
+    }
+  }
+  const footerTop = Math.min(...cover.lines.filter((line) => line.role === "footer").map((line) => line.y));
+  for (const line of coverLines) {
+    expect(line.y + line.h).toBeLessThanOrEqual(footerTop - 4);
+  }
+  if (count >= 4) {
+    const areas = cover.photos.map((item) => item.w * item.h);
+    const total = areas.reduce((sum, area) => sum + area, 0);
+    expect(Math.max(...areas) / total).toBeLessThanOrEqual(COVER_PHOTO_SHARE_MAX + 0.005);
+  }
+  for (const placed of cover.photos) {
+    expect(placed.crop.maxSide).toBeLessThan(0.005);
+    expect(Math.abs(placed.crop.l - placed.crop.r)).toBeLessThan(0.008);
+    expect(Math.abs(placed.crop.t - placed.crop.b)).toBeLessThan(0.008);
+  }
+  const reach = Math.max(...cover.photos.map((item) => item.y + item.h), ...cover.bands.map((band) => band.y + band.h));
+  expect(reach).toBeGreaterThanOrEqual(B2_CONTENT_BOTTOM - 4);
+}
+
+describe("b2 cover contents and weight", () => {
+  it("keeps every contents entry on the page, above the footer, at a readable size", () => {
+    for (const count of [1, 3, 7, 10, 12]) expectContentsVisible(count);
+  });
+
+  it("keeps a 7-lead mixed collage from giving one photo the page", () => {
+    const letters = Array.from({ length: 7 }, (_, index) => ({
+      name: MEMBER_NAMES[index]!,
+      body: countedProse(48, 2),
+      photos: [mixedLead(index)],
+    }));
+    const plan = layout(letters);
+    const cover = plan.pages[0]!;
+    const areas = cover.photos.map((item) => item.w * item.h);
+    const share = Math.max(...areas) / areas.reduce((sum, area) => sum + area, 0);
+    expect(cover.photos).toHaveLength(7);
+    expect(share).toBeLessThanOrEqual(COVER_PHOTO_SHARE_MAX);
+    expect(share).toBeGreaterThan(0.08);
+  });
+});
+
+describe("b2 letter length and photo count", () => {
+  const portrait = (id: string) => photo(id, 3024, 4032);
+
+  it("fits 250 to 350 words with one or three portraits on one filled page", () => {
+    for (const count of [250, 300, 350]) {
+      for (const photos of [1, 3]) {
+        const shots = Array.from({ length: photos }, (_, index) => portrait(`p-${count}-${photos}-${index}`));
+        const body = countedProse(count, 3);
+        const plan = layout([{ body, photos: shots }]);
+        const pages = personPages(plan, "Wren");
+        expect(pages, `${count} words / ${photos} photos`).toHaveLength(1);
+        expect(bodyWords(pages)).toEqual(words(body));
+        expectPhotosOnce(pages, shots);
+        expectClean(plan.pages);
+        const page = pages[0]!;
+        // Photos are already as large as a true aspect (or a 10% trim) allows.
+        // Leftover space stays empty instead of stretching the 18pt body pitch.
+        expect(pageUnfilledRatio(page)).toBeLessThanOrEqual(0.25);
+        for (const line of page.lines) {
+          if (line.role === "body") expect(line.size).toBeGreaterThanOrEqual(B2_BODY_SIZE);
+        }
+        if (photos === 1) {
+          const shot = page.photos[0]!;
+          expect(shot.h).toBeGreaterThan(shot.w);
+          expect(shot.h).toBeLessThan(B2_AVAIL * 0.92);
+        } else {
+          const left = Math.min(...page.photos.map((item) => item.x));
+          const right = Math.max(...page.photos.map((item) => item.x + item.w));
+          expect(right - left).toBeGreaterThan(B2_INNER_W * 0.9);
+        }
+      }
+    }
+  });
+
+  it("keeps 250 to 350 words with six portraits filled, and spreads only when one page cannot", () => {
+    for (const count of [250, 300, 350]) {
+      const shots = Array.from({ length: 6 }, (_, index) => portrait(`s-${count}-${index}`));
+      const body = countedProse(count, 4);
+      const plan = layout([{ body, photos: shots }]);
+      const pages = personPages(plan, "Wren");
+      expect(pages, `${count} words`).toHaveLength(count >= 300 ? 2 : 1);
+      if (pages.length === 2) {
+        expect(pages.every((page) => page.templateId === "spread")).toBe(true);
+        expect(pages[0]?.headerStyle).toBe(pages[1]?.headerStyle);
+      }
+      expect(bodyWords(pages)).toEqual(words(body));
+      expectPhotosOnce(pages, shots);
+      expectClean(plan.pages);
+      const readingOrder = pages.flatMap((page) =>
+        page.photos
+          .slice()
+          .sort((a, b) => a.y - b.y || a.x - b.x)
+          .map((item) => item.storagePath),
+      );
+      expect(readingOrder, `${count} words`).toEqual(shots.map((item) => item.storagePath));
+      for (const page of pages) {
+        expect(pageUnfilledRatio(page), `${count} words`).toBeLessThanOrEqual(SPREAD_PAGE_UNFILLED_MAX + 0.005);
+        expect(page.photos.length).toBeGreaterThan(0);
+        expect(page.lines.some((line) => line.role === "body")).toBe(true);
+        if (page.photos.length >= 2) {
+          const left = Math.min(...page.photos.map((item) => item.x));
+          const right = Math.max(...page.photos.map((item) => item.x + item.w));
+          expect(right - left).toBeGreaterThan(B2_INNER_W * 0.9);
+        } else {
+          const shot = page.photos[0]!;
+          expect(shot.h).toBeGreaterThan(shot.w);
+          expect(shot.x).toBeLessThanOrEqual(B2_INNER_X + 1);
+        }
+        for (const line of page.lines) {
+          if (line.role === "body") expect(line.size).toBeGreaterThanOrEqual(B2_BODY_SIZE);
+        }
+      }
+    }
+  });
+});
+
+function expectEvenBodyPitch(pages: PagePlan[], source: string) {
+  const body = pages.flatMap((page, pageIndex) =>
+    page.lines.filter((line) => line.role === "body").map((line) => ({ line, pageIndex })),
+  );
+  const paragraphs = source
+    .replace(/\r\n/g, "\n")
+    .trim()
+    .split(/\n\n/)
+    .map((paragraph) => paragraph.split(/\s+/).filter(Boolean))
+    .filter((words) => words.length > 0);
+  let index = 0;
+  for (const words of paragraphs) {
+    let previous: { line: PagePlan["lines"][number]; pageIndex: number } | null = null;
+    let left = words;
+    while (left.length > 0) {
+      const current = body[index];
+      expect(current, `missing a line for "${left.slice(0, 5).join(" ")}"`).toBeTruthy();
+      const lineWords = current!.line.text.split(/\s+/).filter(Boolean);
+      expect(lineWords.length, current!.line.text).toBeGreaterThan(0);
+      expect(lineWords.join(" ")).toBe(left.slice(0, lineWords.length).join(" "));
+      left = left.slice(lineWords.length);
+      if (
+        previous &&
+        previous.pageIndex === current!.pageIndex &&
+        Math.abs(previous.line.x - current!.line.x) < 0.6
+      ) {
+        const delta = current!.line.y - previous.line.y;
+        const pitch = current!.line.size === B2_BODY_SIZE ? B2_BODY_LEADING : bodyLinePitch(current!.line.size);
+        expect(delta, current!.line.text).toBeCloseTo(pitch, 4);
+      }
+      previous = current!;
+      index += 1;
+    }
+  }
+  expect(index).toBe(body.length);
+}
+
+describe("b2 body line pitch", () => {
+  const portrait = (id: string) => photo(id, 3024, 4032);
+
+  it("keeps the standard pitch in every column, including a 330-word portrait and the length fixtures", () => {
+    const cases: Array<{ source: string; photos: B2Photo[] }> = [
+      { source: countedProse(330, 4), photos: [portrait("p330")] },
+    ];
+    for (const count of [250, 300, 350]) {
+      for (const photos of [1, 3, 6]) {
+        cases.push({
+          source: countedProse(count, photos === 6 ? 4 : 3),
+          photos: Array.from({ length: photos }, (_, index) => portrait(`p-${count}-${photos}-${index}`)),
+        });
+      }
+    }
+    const sweep: Array<{ source: string; photos: B2Photo[] }> = [
+      { source: countedProse(140, 3), photos: [] },
+      { source: "Hello October.", photos: [] },
+      { source: countedProse(24, 1), photos: [photo("ann", 1250, 1100)] },
+      { source: countedProse(70, 2), photos: [photo("phone", 900, 1950)] },
+      { source: countedProse(70, 2), photos: [photo("pano", 3200, 800)] },
+      { source: countedProse(180, 3), photos: [photo("d1", 1400, 1000), photo("d2", 1300, 1000)] },
+      {
+        source: countedProse(36, 2),
+        photos: [photo("s1", 900, 1400), photo("s2", 860, 1300), photo("s3", 940, 1500)],
+      },
+      { source: countedProse(50, 2), photos: [photo("stack", 1380, 1200), photo("stack2", 1000, 900)] },
+      {
+        source: countedProse(90, 2),
+        photos: [photo("h", 1400, 1200), photo("h2", 1200, 900), photo("h3", 1100, 800)],
+      },
+      {
+        source: countedProse(80, 2),
+        photos: [photo("m1", 900, 1500), photo("m2", 1200, 900), photo("m3", 1000, 1000), photo("m4", 1100, 800)],
+      },
+      {
+        source: countedProse(120, 3),
+        photos: [photo("r1", 1200, 900), photo("r2", 1100, 900), photo("r3", 1000, 1000), photo("r4", 1400, 1000)],
+      },
+      {
+        source: countedProse(24, 1),
+        photos: Array.from({ length: 8 }, (_, index) => photo(`gal${index}`, 1000, 1200, [], index)),
+      },
+      { source: countedProse(900, 6), photos: [photo("spread", 1600, 1000)] },
+      { source: countedProse(40, 2), photos: [photo("band", 2200, 1000)] },
+      { source: countedProse(48, 2), photos: [photo("sq", 1400, 1400)] },
+    ];
+    const seen = new Set<string>();
+    for (const item of [...cases, ...sweep]) {
+      const plan = layout([{ body: item.source, photos: item.photos }]);
+      expectClean(plan.pages);
+      const pages = personPages(plan, "Wren");
+      expectEvenBodyPitch(pages, item.source);
+      for (const page of plan.pages) seen.add(page.templateId);
+      if (wordCount(item.source) >= 80) {
+        for (const line of pages.flatMap((page) => page.lines)) {
+          if (line.role === "body") expect(line.size, item.photos.map((shot) => shot.storagePath).join(",")).toBe(B2_BODY_SIZE);
+        }
+      }
+    }
+    const feature = layout([{ body: countedProse(330, 4), photos: [portrait("lead")] }]);
+    const featurePage = personPages(feature, "Wren")[0]!;
+    expect(featurePage.templateId).toBe("portrait-feature");
+    expect(featurePage.photos[0]!.h).toBeGreaterThan(featurePage.photos[0]!.w);
+    const columns = new Set(
+      featurePage.lines.filter((line) => line.role === "body").map((line) => Math.round(line.x)),
+    );
+    expect(columns.size).toBeGreaterThanOrEqual(2);
+    for (const id of B2_TEMPLATE_IDS) expect(seen, id).toContain(id);
+  });
+});
+

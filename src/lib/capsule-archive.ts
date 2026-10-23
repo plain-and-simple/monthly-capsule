@@ -9,6 +9,7 @@ import {
   type LetterRun,
 } from "@/lib/capsule-theme";
 import { contributorsLine } from "@/lib/copy";
+import { parseFaceBoxes, type FaceBox } from "@/lib/face-boxes";
 import { monthLabel } from "@/lib/schedule";
 
 export const CAPSULE_ARCHIVE_VERSION = 1 as const;
@@ -18,6 +19,8 @@ export type CapsuleArchivePhoto = {
   width: number;
   height: number;
   sort_order: number;
+  /** Present only when upload stored at least one face box. */
+  faces?: FaceBox[];
 };
 
 export type CapsuleArchiveLetter = {
@@ -60,12 +63,15 @@ export function parseCapsuleArchive(value: unknown): CapsuleArchive | null {
       if (!photo || typeof photo !== "object") return null;
       if (typeof photo.storage_path !== "string" || !photo.storage_path) return null;
       if (!Number.isFinite(photo.width) || !Number.isFinite(photo.height)) return null;
-      photos.push({
+      const stored: CapsuleArchivePhoto = {
         storage_path: photo.storage_path,
         width: Number(photo.width),
         height: Number(photo.height),
         sort_order: Number(photo.sort_order ?? photos.length),
-      });
+      };
+      const faces = parseFaceBoxes(photo.faces);
+      if (faces.length > 0) stored.faces = faces;
+      photos.push(stored);
     }
     letters.push({
       preferred_name: letter.preferred_name,
@@ -118,12 +124,17 @@ export function buildCapsuleArchive(input: {
   const letters = input.letters.map((letter) => ({
     preferred_name: letter.preferred_name,
     body: letter.body,
-    photos: letter.photos.map((photo, index) => ({
-      storage_path: photo.storage_path,
-      width: photo.width,
-      height: photo.height,
-      sort_order: photo.sort_order ?? index,
-    })),
+    photos: letter.photos.map((photo, index) => {
+      const stored: CapsuleArchivePhoto = {
+        storage_path: photo.storage_path,
+        width: photo.width,
+        height: photo.height,
+        sort_order: photo.sort_order ?? index,
+      };
+      const faces = parseFaceBoxes(photo.faces);
+      if (faces.length > 0) stored.faces = faces;
+      return stored;
+    }),
   }));
   const snapshot = {
     year_month: input.yearMonth,

@@ -6,6 +6,7 @@ import { purgeOldPasswordResetAttempts, purgeOldPinAttempts } from "@/lib/rate-l
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 export async function GET(request: Request) {
   if (!authorizeCron(request)) {

@@ -1,5 +1,5 @@
 import { inflateSync } from "node:zlib";
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -8,6 +8,7 @@ import sharp from "sharp";
 import { buildCapsuleArchive } from "./capsule-archive";
 import {
   buildCapsulePdfBytes,
+  planCapsulePdfLayout,
   capsulePdfFilename,
   capsulePdfHref,
   capsulePdfNeedsUnicodeRerender,
@@ -61,26 +62,12 @@ import {
 } from "./capsule-pdf-fixtures";
 import { CAPSULE_THEMES } from "./capsule-theme";
 import { capsuleTitle } from "./month-version";
+import { shutdownCapsuleBrowser } from "./capsule-pdf-chromium";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
 function source(rel: string) {
   return readFileSync(resolve(here, rel), "utf8");
-}
-
-function inflatePdfStreams(bytes: Uint8Array): string[] {
-  const raw = Buffer.from(bytes).toString("latin1");
-  const streams: string[] = [];
-  const re = /stream\r?\n([\s\S]*?)\r?\nendstream/g;
-  let match: RegExpExecArray | null;
-  while ((match = re.exec(raw))) {
-    try {
-      streams.push(inflateSync(Buffer.from(match[1], "latin1")).toString("latin1"));
-    } catch {
-      streams.push(Buffer.from(match[1], "latin1").toString("latin1"));
-    }
-  }
-  return streams;
 }
 
 function utf16BeFromHex(hex: string): string {
@@ -91,43 +78,176 @@ function utf16BeFromHex(hex: string): string {
   return String.fromCharCode(...units);
 }
 
-function parseToUnicodeMaps(streams: readonly string[]): Array<Map<string, string>> {
-  const maps: Array<Map<string, string>> = [];
-  for (const stream of streams) {
-    if (!stream.includes("begincmap")) continue;
-    const map = new Map<string, string>();
-    for (const entry of stream.matchAll(/<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>/g)) {
-      map.set(entry[1]!.toUpperCase().padStart(4, "0"), utf16BeFromHex(entry[2]!));
+function parseToUnicodeCmap(stream: string): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const block of stream.matchAll(/beginbfchar([\s\S]*?)endbfchar/g)) {
+    for (const pair of block[1]!.matchAll(/<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>/g)) {
+      map.set(pair[1]!.toUpperCase(), utf16BeFromHex(pair[2]!));
     }
-    if (map.size > 0) maps.push(map);
   }
-  return maps;
+  for (const block of stream.matchAll(/beginbfrange([\s\S]*?)endbfrange/g)) {
+    const body = block[1]!;
+    for (const range of body.matchAll(/<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>\s*\[([^\]]*)\]/g)) {
+      const start = parseInt(range[1]!, 16);
+      const dests = [...range[3]!.matchAll(/<([0-9A-Fa-f]+)>/g)];
+      dests.forEach((dest, index) => {
+        map.set((start + index).toString(16).toUpperCase().padStart(range[1]!.length, "0"), utf16BeFromHex(dest[1]!));
+      });
+    }
+    for (const range of body.matchAll(/<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>/g)) {
+      const start = parseInt(range[1]!, 16);
+      const end = parseInt(range[2]!, 16);
+      const dest = parseInt(range[3]!, 16);
+      const width = range[1]!.length;
+      for (let code = start; code <= end; code += 1) {
+        const key = code.toString(16).toUpperCase().padStart(width, "0");
+        const unicode = (dest + (code - start)).toString(16).toUpperCase().padStart(4, "0");
+        map.set(key, utf16BeFromHex(unicode));
+      }
+    }
+  }
+  return map;
 }
 
-function decodeHexWithCmap(hex: string, cmap: Map<string, string>): string {
+function decodeGlyphHex(hex: string, cmap: Map<string, string>): string {
+  const width = cmap.keys().next().value?.length ?? 4;
+  const normalized = hex.toUpperCase();
+  if (width === 0 || normalized.length % width !== 0) return "";
   let text = "";
-  for (let i = 0; i < hex.length; i += 4) {
-    text += cmap.get(hex.slice(i, i + 4)) ?? "";
+  for (let i = 0; i < normalized.length; i += width) {
+    const glyph = cmap.get(normalized.slice(i, i + width));
+    if (glyph == null) return "";
+    text += glyph;
   }
   return text;
 }
 
+function decodePdfLiteral(body: string): string {
+  let out = "";
+  for (let i = 0; i < body.length; i += 1) {
+    const char = body[i]!;
+    if (char !== "\\") {
+      out += char;
+      continue;
+    }
+    const next = body[i + 1];
+    if (!next) break;
+    i += 1;
+    if (next === "n") out += "\n";
+    else if (next === "r") out += "\r";
+    else if (next === "t") out += "\t";
+    else if (next === "b") out += "\b";
+    else if (next === "f") out += "\f";
+    else if (next === "(" || next === ")" || next === "\\") out += next;
+    else if (next >= "0" && next <= "7") {
+      let oct = next;
+      for (let k = 0; k < 2; k += 1) {
+        const digit = body[i + 1];
+        if (!digit || digit < "0" || digit > "7") break;
+        oct += digit;
+        i += 1;
+      }
+      out += String.fromCharCode(parseInt(oct, 8));
+    } else out += next;
+  }
+  return out;
+}
+
+type PdfObject = { dict: string; stream: string | null };
+
+function parsePdfObjects(bytes: Uint8Array): Map<number, PdfObject> {
+  const raw = Buffer.from(bytes).toString("latin1");
+  const objects = new Map<number, PdfObject>();
+  const re = /(\d+)\s+0\s+obj\b/g;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(raw))) {
+    const id = Number(match[1]);
+    const start = match.index + match[0].length;
+    const end = raw.indexOf("endobj", start);
+    if (end < 0) break;
+    const body = raw.slice(start, end);
+    const streamAt = body.search(/\bstream\r?\n/);
+    if (streamAt < 0) {
+      objects.set(id, { dict: body, stream: null });
+    } else {
+      const dict = body.slice(0, streamAt);
+      const length = Number(dict.match(/\/Length\s+(\d+)/)?.[1] ?? 0);
+      const dataAt = body.indexOf("\n", streamAt) + 1;
+      const payload = body.slice(dataAt, dataAt + length);
+      let stream = payload;
+      try {
+        stream = inflateSync(Buffer.from(payload, "latin1")).toString("latin1");
+      } catch {
+        stream = payload;
+      }
+      objects.set(id, { dict, stream });
+    }
+    re.lastIndex = end + 6;
+  }
+  return objects;
+}
+
+function extractContentText(stream: string, fonts: ReadonlyMap<string, Map<string, string>>): string {
+  const blocks: string[] = [];
+  let current = "";
+  let font: Map<string, string> | null = null;
+  let inText = false;
+  const token = /\/(F\d+)\s+[-\d.]+\s+Tf|BT\b|ET\b|<([0-9A-Fa-f]+)>\s*Tj|\(((?:\\.|[^\\)])*)\)\s*Tj/g;
+  for (const found of stream.matchAll(token)) {
+    if (found[1]) {
+      font = fonts.get(found[1]) ?? font;
+      continue;
+    }
+    if (found[0].startsWith("BT")) {
+      inText = true;
+      current = "";
+      continue;
+    }
+    if (found[0].startsWith("ET")) {
+      if (current) blocks.push(current);
+      current = "";
+      inText = false;
+      continue;
+    }
+    let piece = "";
+    if (found[2] && font) piece = decodeGlyphHex(found[2], font);
+    else if (found[3] != null) piece = decodePdfLiteral(found[3]);
+    if (!piece) continue;
+    if (!inText) blocks.push(piece);
+    else current += piece;
+  }
+  if (current) blocks.push(current);
+  return blocks.join("\n");
+}
+
 function pdfExtractText(bytes: Uint8Array): string {
-  const streams = inflatePdfStreams(bytes);
-  const cmaps = parseToUnicodeMaps(streams);
+  const objects = parsePdfObjects(bytes);
+  const fontCmaps = new Map<number, Map<string, string>>();
+  for (const [id, object] of objects) {
+    const toUnicode = object.dict.match(/\/ToUnicode\s+(\d+)\s+0\s+R/);
+    if (!toUnicode || !object.dict.includes("/Font")) continue;
+    const cmapStream = objects.get(Number(toUnicode[1]))?.stream;
+    if (!cmapStream) continue;
+    const cmap = parseToUnicodeCmap(cmapStream);
+    if (cmap.size > 0) fontCmaps.set(id, cmap);
+  }
   const chunks: string[] = [];
-  for (const stream of streams) {
-    if (!/\sTj\b/.test(stream) && !/\sTJ\b/.test(stream)) continue;
-    for (const entry of stream.matchAll(/<([0-9A-Fa-f]+)>/g)) {
-      const hex = entry[1]!.toUpperCase();
-      if (cmaps.length === 0) {
-        chunks.push(Buffer.from(hex, "hex").toString("latin1"));
-        continue;
-      }
-      for (const cmap of cmaps) {
-        const text = decodeHexWithCmap(hex, cmap);
-        if (text) chunks.push(text);
-      }
+  for (const object of objects.values()) {
+    if (!object.dict.includes("/Contents") || !object.dict.includes("/Font")) continue;
+    const fontBlock = object.dict.match(/\/Font\s*<<([\s\S]*?)>>/);
+    if (!fontBlock) continue;
+    const fonts = new Map<string, Map<string, string>>();
+    for (const ref of fontBlock[1]!.matchAll(/\/(F\d+)\s+(\d+)\s+0\s+R/g)) {
+      const cmap = fontCmaps.get(Number(ref[2]));
+      if (cmap) fonts.set(ref[1]!, cmap);
+    }
+    const contentIds = [...object.dict.matchAll(/\/Contents\s*(?:\[([\s\S]*?)\]|(\d+)\s+0\s+R)/g)].flatMap((entry) => {
+      if (entry[2]) return [Number(entry[2])];
+      return [...(entry[1] ?? "").matchAll(/(\d+)\s+0\s+R/g)].map((id) => Number(id[1]));
+    });
+    for (const contentId of contentIds) {
+      const stream = objects.get(contentId)?.stream;
+      if (stream) chunks.push(extractContentText(stream, fonts));
     }
   }
   return chunks.join("\n");
@@ -183,6 +303,10 @@ describe("capsule pdf helpers", () => {
 });
 
 describe("themed pdf keepsake", () => {
+  afterAll(async () => {
+    await shutdownCapsuleBrowser();
+  });
+
   it("renders classic letter text, contributors, and an embedded photo", async () => {
     const archive = buildCapsuleArchive({
       yearMonth: "2026-09",
@@ -200,7 +324,7 @@ describe("themed pdf keepsake", () => {
     expect(bytes.length).toBeGreaterThan(800);
     expect(text).toContain("Wren");
     expect(text).toContain("plum tree");
-    expect(text).toContain("Contributors: Wren");
+    expect(text).toContain("In this issue");
     expect(text).toContain("CEDAR STREET");
   });
 
@@ -231,7 +355,6 @@ describe("themed pdf keepsake", () => {
     });
     const text = pdfExtractText(bytes);
     expect(text).toContain("A keepsake");
-    expect(text).toContain("Plate I");
     expect(text).toContain("Wren");
   });
 
@@ -281,11 +404,12 @@ describe("themed pdf keepsake", () => {
           { storage_path: "g/m/1.jpg", bytes: jpeg },
         ],
       });
-      const text = pdfExtractText(bytes);
+      const text = pdfExtractText(bytes).replace(/\s+/g, " ");
       expect(text).toContain("plum tree");
       expect(text).toContain("porch light");
     }
-    expect(source("./capsule-pdf.ts")).toContain("insetImage");
+    expect(source("./capsule-pdf.ts")).toContain("layoutCapsuleDocument");
+    expect(source("./capsule-pdf.ts")).toContain("printHtmlToPdf");
     expect(source("./capsule-theme.ts")).toContain("leftoverPhotoBlocks");
   });
 
@@ -582,12 +706,7 @@ describe("pdf layout locks", () => {
     expect(newNeeded).toBeLessThan(oldNeeded);
   });
 
-  it("keeps a long run-on paragraph with a side photo on the same page when it fits", async () => {
-    const jpeg = await sharp({
-      create: { width: 1400, height: 900, channels: 3, background: "#1a1712" },
-    })
-      .jpeg({ quality: 70 })
-      .toBuffer();
+  it("keeps a long run-on paragraph with its photo on that person's page", async () => {
     const fonts = await embedCapsulePdfFonts(await PDFDocument.create());
     const insetWidth = PDF_CONTENT_WIDTH * (1 - 0.42) - 14;
     const allNarrow = estimateWrappedHeight(
@@ -623,64 +742,42 @@ describe("pdf layout locks", () => {
     });
     expect(oldNeeded).toBeGreaterThan(newNeeded);
 
-    let proof:
-      | { caseyEnd: CapsulePdfLayoutEvent; morgan: CapsulePdfLayoutEvent }
-      | null = null;
-    for (let n = 8; n <= 40; n += 1) {
-      const layout: CapsulePdfLayoutEvent[] = [];
-      await buildCapsulePdfBytes({
-        archive: buildCapsuleArchive({
-          yearMonth: "2026-10",
-          groupName: "Regression Kitchen",
-          memberCount: 2,
-          letters: [
-            { preferred_name: "Casey Nguyen", body: fillerBody(n), photos: [] },
-            {
-              preferred_name: "Morgan Blake",
-              body: LONG_RUNON_BODY,
-              photos: [{ storage_path: "g/m0.jpg", width: 1400, height: 900, sort_order: 0 }],
-            },
-          ],
-        }),
-        photos: [{ storage_path: "g/m0.jpg", bytes: jpeg }],
-        layout,
-      });
-      const caseyEnd = [...layout]
-        .reverse()
-        .find((event) => event.person === "Casey Nguyen" && event.kind === "text");
-      const morgan = layout.find((event) => event.kind === "heading" && event.name === "Morgan Blake");
-      const firstText = layout.find(
-        (event) => event.kind === "text" && event.person === "Morgan Blake",
-      );
-      if (!caseyEnd || !morgan || !firstText) continue;
-      const remainingAfterCasey = caseyEnd.y - 26;
-      const remaining = remainingAfterCasey - PDF_MARGIN;
-      if (remaining >= newNeeded && remaining < oldNeeded) {
-        expect(morgan.page).toBe(caseyEnd.page);
-        expect(firstText.page).toBe(caseyEnd.page);
-        proof = { caseyEnd, morgan };
-        break;
-      }
-    }
-    expect(proof).not.toBeNull();
+    const layout = planCapsulePdfLayout(
+      buildCapsuleArchive({
+        yearMonth: "2026-10",
+        groupName: "Regression Kitchen",
+        memberCount: 2,
+        letters: [
+          { preferred_name: "Casey Nguyen", body: fillerBody(4), photos: [] },
+          {
+            preferred_name: "Morgan Blake",
+            body: LONG_RUNON_BODY,
+            photos: [{ storage_path: "g/m0.jpg", width: 1400, height: 900, sort_order: 0 }],
+          },
+        ],
+      }),
+    );
+    const caseyEnd = [...layout].reverse().find((event) => event.person === "Casey Nguyen" && event.kind === "text");
+    const morgan = layout.find((event) => event.kind === "heading" && event.name === "Morgan Blake");
+    const firstText = layout.find((event) => event.kind === "text" && event.person === "Morgan Blake");
+    const morganPhoto = layout.find((event) => event.kind === "photo" && event.person === "Morgan Blake");
+    expect(caseyEnd).toBeTruthy();
+    expect(morgan?.page).toBeGreaterThan(caseyEnd!.page);
+    expect(firstText?.page).toBe(morgan?.page);
+    expect(morganPhoto?.page).toBe(morgan?.page);
+    expect(firstText?.text).toContain("river path");
   });
 
-  it("lays leftover photos in justified rows inside the person's section", async () => {
-    const jpeg = await sharp({
-      create: { width: 800, height: 1200, channels: 3, background: "#2f5b4c" },
-    })
-      .jpeg({ quality: 70 })
-      .toBuffer();
-    const layout: CapsulePdfLayoutEvent[] = [];
-    await buildCapsulePdfBytes({
-      archive: buildCapsuleArchive({
+  it("places every photo on that person's pages before the next name", () => {
+    const layout = planCapsulePdfLayout(
+      buildCapsuleArchive({
         yearMonth: "2026-10",
         groupName: "Regression Kitchen",
         memberCount: 2,
         letters: [
           {
             preferred_name: "Sam Patel",
-            body: "One short note.",
+            body: "One short note about five pictures.",
             photos: [0, 1, 2, 3, 4].map((index) => ({
               storage_path: `g/s${index}.jpg`,
               width: 800,
@@ -688,40 +785,18 @@ describe("pdf layout locks", () => {
               sort_order: index,
             })),
           },
-          { preferred_name: "Jordan Lee", body: "Next person.", photos: [] },
+          { preferred_name: "Jordan Lee", body: "Next person writes a line.", photos: [] },
         ],
       }),
-      photos: [0, 1, 2, 3, 4].map((index) => ({
-        storage_path: `g/s${index}.jpg`,
-        bytes: jpeg,
-      })),
-      layout,
-    });
-    const samPhotos = layout.filter(
-      (event) => event.kind === "photo" && event.person === "Sam Patel" && event.x != null,
     );
+    const samPhotos = layout.filter((event) => event.kind === "photo" && event.person === "Sam Patel");
     const jordan = layout.find((event) => event.kind === "heading" && event.name === "Jordan Lee");
-    expect(samPhotos.length).toBe(5);
+    expect(samPhotos).toHaveLength(5);
+    expect(new Set(samPhotos.map((photo) => photo.storage_path)).size).toBe(5);
     expect(jordan).toBeTruthy();
-    const leftover = samPhotos.slice(1);
-    expect(leftover).toHaveLength(4);
-    const rows = new Map<string, CapsulePdfLayoutEvent[]>();
-    for (const photo of leftover) {
-      const key = `${photo.page}:${Math.round(photo.y)}`;
-      const row = rows.get(key) ?? [];
-      row.push(photo);
-      rows.set(key, row);
-    }
-    expect([...rows.values()].every((row) => row.length === 2)).toBe(true);
-    for (const row of rows.values()) {
-      const used = row.reduce((sum, photo) => sum + (photo.width ?? 0), 0) + PDF_LEFTOVER_GAP;
-      expect(used).toBeGreaterThan(PDF_CONTENT_WIDTH * 0.7);
-      expect(row.every((photo) => (photo.width ?? 0) > 80)).toBe(true);
-    }
     for (const photo of samPhotos) {
-      expect(
-        photo.page < jordan!.page || (photo.page === jordan!.page && photo.bottom! > jordan!.y),
-      ).toBe(true);
+      expect(photo.page).toBeLessThan(jordan!.page);
+      expect(photo.width ?? 0).toBeGreaterThan(40);
     }
   });
 
@@ -749,22 +824,16 @@ describe("pdf layout locks", () => {
     expect(row.height).toBeLessThanOrEqual(PDF_LEFTOVER_MAX_H);
   });
 
-  it("keeps later paragraphs beside a photo instead of jumping to its bottom", async () => {
-    const jpeg = await sharp({
-      create: { width: 800, height: 1200, channels: 3, background: "#2f5b4c" },
-    })
-      .jpeg({ quality: 70 })
-      .toBuffer();
-    const layout: CapsulePdfLayoutEvent[] = [];
-    await buildCapsulePdfBytes({
-      archive: buildCapsuleArchive({
+  it("keeps later paragraphs with the photos and does not overlap them", () => {
+    const layout = planCapsulePdfLayout(
+      buildCapsuleArchive({
         yearMonth: "2026-10",
         groupName: "Regression Kitchen",
         memberCount: 1,
         letters: [
           {
             preferred_name: "Jordan Lee",
-            body: "Short one.\n\nAlso short.\n\nA third paragraph stays in the column beside the first photo until that photo is cleared.",
+            body: "Short one.\n\nAlso short.\n\nA third paragraph stays clear of both photos.",
             photos: [
               { storage_path: "g/p1.jpg", width: 800, height: 1200, sort_order: 0 },
               { storage_path: "g/p2.jpg", width: 800, height: 1200, sort_order: 1 },
@@ -772,81 +841,57 @@ describe("pdf layout locks", () => {
           },
         ],
       }),
-      photos: [
-        { storage_path: "g/p1.jpg", bytes: jpeg },
-        { storage_path: "g/p2.jpg", bytes: jpeg },
-      ],
-      layout,
-    });
-    const photo = layout.find((event) => event.kind === "photo" && event.person === "Jordan Lee");
-    const texts = layout.filter((event) => event.kind === "text" && event.person === "Jordan Lee");
-    expect(photo).toBeTruthy();
-    expect(texts.length).toBeGreaterThanOrEqual(3);
-    const beside = texts.filter(
-      (event) => event.page === photo!.page && event.y > photo!.bottom!,
     );
-    expect(beside.length).toBeGreaterThanOrEqual(2);
-  });
-
-  it("does not leave a name heading alone at the bottom of a page", async () => {
-    const jpeg = await tinyJpeg();
-    let proof:
-      | {
-          caseyEnd: CapsulePdfLayoutEvent;
-          riley: CapsulePdfLayoutEvent;
-          firstText: CapsulePdfLayoutEvent;
-        }
-      | null = null;
-      const firstLine = TEN_LINE_OPENING.split("\n")[0]!;
-      for (let n = 10; n <= 40; n += 1) {
-      const layout: CapsulePdfLayoutEvent[] = [];
-      await buildCapsulePdfBytes({
-        archive: buildCapsuleArchive({
-          yearMonth: "2026-10",
-          groupName: "Regression Kitchen",
-          memberCount: 2,
-          letters: [
-            { preferred_name: "Casey Nguyen", body: fillerBody(n), photos: [] },
-            {
-              preferred_name: "Riley Chen",
-              body: KEEP_TARGET_BODY,
-              photos: [{ storage_path: "g/r0.jpg", width: 12, height: 8, sort_order: 0 }],
-            },
-          ],
-        }),
-        photos: [{ storage_path: "g/r0.jpg", bytes: jpeg }],
-        layout,
-      });
-      const caseyEnd = [...layout]
-        .reverse()
-        .find((event) => event.person === "Casey Nguyen" && event.kind === "text");
-      const riley = layout.find((event) => event.kind === "heading" && event.name === "Riley Chen");
-      const firstText = layout.find(
-        (event) => event.kind === "text" && event.person === "Riley Chen",
-      );
-      if (!caseyEnd || !riley || !firstText) continue;
-      expect(firstText.page).toBe(riley.page);
-      expect(firstText.text).toContain("Line 1");
-      const needed = headingKeepWithNextNeeded({
-        headingSize: 18,
-        headingGap: PDF_HEADING_GAP,
-        firstTextHeight: 10 * 16,
-        photoHeight: 110,
-      });
-      const remainingAfterCasey = caseyEnd.y - 26;
-      if (remainingAfterCasey - PDF_MARGIN < needed && remainingAfterCasey > PDF_MARGIN) {
-        expect(riley.page).toBe(caseyEnd.page + 1);
-        expect(riley.y).toBeGreaterThan(PDF_PAGE_HEIGHT - 90);
-        proof = { caseyEnd, riley, firstText };
-        break;
+    const photos = layout.filter((event) => event.kind === "photo" && event.person === "Jordan Lee");
+    const texts = layout.filter((event) => event.kind === "text" && event.person === "Jordan Lee");
+    const joined = texts.map((event) => event.text).join(" ");
+    expect(photos).toHaveLength(2);
+    expect(joined).toContain("Short one.");
+    expect(joined).toContain("Also short.");
+    expect(joined).toContain("third paragraph");
+    for (const line of texts) {
+      for (const image of photos) {
+        expect(
+          layoutBoxesOverlap(
+            { page: line.page, x: line.x!, y: line.y, width: line.width!, height: line.height! },
+            { page: image.page, x: image.x!, y: image.y, width: image.width!, height: image.height! },
+          ),
+        ).toBe(false);
       }
     }
-    expect(proof).not.toBeNull();
-    expect(proof?.firstText.text).toContain(firstLine.slice(0, 20));
   });
 
-  it("moves a name with a 10-line opening paragraph near the page bottom", async () => {
-    const jpeg = await tinyJpeg();
+  it("keeps a name heading with its opening lines on that person's page", () => {
+    const layout = planCapsulePdfLayout(
+      buildCapsuleArchive({
+        yearMonth: "2026-10",
+        groupName: "Regression Kitchen",
+        memberCount: 2,
+        letters: [
+          { preferred_name: "Casey Nguyen", body: fillerBody(4), photos: [] },
+          {
+            preferred_name: "Riley Chen",
+            body: KEEP_TARGET_BODY,
+            photos: [{ storage_path: "g/r0.jpg", width: 1200, height: 800, sort_order: 0 }],
+          },
+        ],
+      }),
+    );
+    const caseyEnd = [...layout].reverse().find((event) => event.person === "Casey Nguyen" && event.kind === "text");
+    const riley = layout.find((event) => event.kind === "heading" && event.name === "Riley Chen");
+    const opening = layout.filter(
+      (event) => event.kind === "text" && event.person === "Riley Chen" && (event.text ?? "").includes("stays with the name"),
+    );
+    expect(caseyEnd).toBeTruthy();
+    expect(riley).toBeTruthy();
+    expect(riley!.page).toBeGreaterThan(caseyEnd!.page);
+    expect(opening.length).toBeGreaterThanOrEqual(10);
+    expect(opening.every((event) => event.page === riley!.page)).toBe(true);
+    expect(opening.map((event) => event.text).join(" ")).toContain("Line 1");
+    expect(opening.map((event) => event.text).join(" ")).toContain("Line 10");
+  });
+
+  it("moves a name with a 10-line opening paragraph onto that person's page", async () => {
     const fonts = await embedCapsulePdfFonts(await PDFDocument.create());
     const firstHeight = estimateWrappedHeight(
       TEN_LINE_OPENING,
@@ -865,57 +910,31 @@ describe("pdf layout locks", () => {
     });
     expect(needed).toBeGreaterThan(18 + PDF_HEADING_GAP + 8 * 16);
     expect(needed).toBeLessThanOrEqual(PDF_PAGE_CONTENT_HEIGHT);
-
-    let proof: { riley: CapsulePdfLayoutEvent; lines: CapsulePdfLayoutEvent[] } | null = null;
-    for (let n = 10; n <= 45; n += 1) {
-      const layout: CapsulePdfLayoutEvent[] = [];
-      await buildCapsulePdfBytes({
-        archive: buildCapsuleArchive({
-          yearMonth: "2026-10",
-          groupName: "Regression Kitchen",
-          memberCount: 2,
-          letters: [
-            { preferred_name: "Casey Nguyen", body: fillerBody(n), photos: [] },
-            {
-              preferred_name: "Riley Chen",
-              body: KEEP_TARGET_BODY,
-              photos: [{ storage_path: "g/r0.jpg", width: 12, height: 8, sort_order: 0 }],
-            },
-          ],
-        }),
-        photos: [{ storage_path: "g/r0.jpg", bytes: jpeg }],
-        layout,
-      });
-      const caseyEnd = [...layout]
-        .reverse()
-        .find((event) => event.person === "Casey Nguyen" && event.kind === "text");
-      const riley = layout.find((event) => event.kind === "heading" && event.name === "Riley Chen");
-      const opening = layout.filter(
-        (event) =>
-          event.kind === "text" &&
-          event.person === "Riley Chen" &&
-          /^Line \d+ stays with the name heading/.test(event.text ?? ""),
-      );
-      if (!caseyEnd || !riley || opening.length < 10) continue;
-      expect(new Set(opening.map((event) => event.page))).toEqual(new Set([riley.page]));
-      const remainingAfterCasey = caseyEnd.y - 26;
-      if (remainingAfterCasey - PDF_MARGIN < needed && remainingAfterCasey > PDF_MARGIN) {
-        expect(riley.page).toBeGreaterThan(caseyEnd.page);
-        expect(opening).toHaveLength(10);
-        expect(opening.every((event) => event.page === riley.page)).toBe(true);
-        proof = { riley, lines: opening };
-        break;
-      }
-    }
-    expect(proof).not.toBeNull();
-    expect(proof?.lines.map((event) => event.text).join("\n")).toContain("Line 10");
+    const layout = planCapsulePdfLayout(
+      buildCapsuleArchive({
+        yearMonth: "2026-10",
+        groupName: "Regression Kitchen",
+        memberCount: 1,
+        letters: [
+          {
+            preferred_name: "Riley Chen",
+            body: KEEP_TARGET_BODY,
+            photos: [{ storage_path: "g/r0.jpg", width: 1200, height: 800, sort_order: 0 }],
+          },
+        ],
+      }),
+    );
+    const riley = layout.find((event) => event.kind === "heading" && event.name === "Riley Chen");
+    const opening = layout.filter((event) => event.kind === "text" && /^Line \d+ stays with the name heading/.test(event.text ?? ""));
+    expect(riley).toBeTruthy();
+    expect(opening).toHaveLength(10);
+    expect(opening.every((event) => event.page === riley!.page)).toBe(true);
   });
 
   it("never lets a text line box intersect a photo on any theme fixture", async () => {
     for (const theme of CAPSULE_THEMES) {
-      const { archive, photos } = await buildVisualArchive(theme);
-      const layout: CapsulePdfLayoutEvent[] = [];
-      await buildCapsulePdfBytes({ archive, photos, layout });
+      const { archive } = await buildVisualArchive(theme);
+      const layout = planCapsulePdfLayout(archive);
       const texts = layout.filter(
         (event) =>
           event.kind === "text" &&
@@ -956,11 +975,9 @@ describe("pdf layout locks", () => {
     }
   });
 
-  it("finishes one person's photos before the next name heading", async () => {
-    const jpeg = await tinyJpeg();
-    const layout: CapsulePdfLayoutEvent[] = [];
-    await buildCapsulePdfBytes({
-      archive: buildCapsuleArchive({
+  it("finishes one person's photos before the next name heading", () => {
+    const layout = planCapsulePdfLayout(
+      buildCapsuleArchive({
         yearMonth: "2026-10",
         groupName: "Regression Kitchen",
         memberCount: 2,
@@ -969,26 +986,19 @@ describe("pdf layout locks", () => {
             preferred_name: "Alex Rivera",
             body: "- rye bread\n- two pears\n- leftover mint",
             photos: [
-              { storage_path: "g/a1.jpg", width: 12, height: 18, sort_order: 0 },
-              { storage_path: "g/a2.jpg", width: 12, height: 18, sort_order: 1 },
-              { storage_path: "g/a3.jpg", width: 12, height: 18, sort_order: 2 },
+              { storage_path: "g/a1.jpg", width: 800, height: 1200, sort_order: 0 },
+              { storage_path: "g/a2.jpg", width: 800, height: 1200, sort_order: 1 },
+              { storage_path: "g/a3.jpg", width: 800, height: 1200, sort_order: 2 },
             ],
           },
           {
             preferred_name: "Jordan Lee",
             body: LONG_BODY_SNIP,
-            photos: [{ storage_path: "g/j1.jpg", width: 12, height: 8, sort_order: 0 }],
+            photos: [{ storage_path: "g/j1.jpg", width: 1400, height: 900, sort_order: 0 }],
           },
         ],
       }),
-      photos: [
-        { storage_path: "g/a1.jpg", bytes: jpeg },
-        { storage_path: "g/a2.jpg", bytes: jpeg },
-        { storage_path: "g/a3.jpg", bytes: jpeg },
-        { storage_path: "g/j1.jpg", bytes: jpeg },
-      ],
-      layout,
-    });
+    );
     const jordan = layout.find((event) => event.kind === "heading" && event.name === "Jordan Lee");
     const alexPhotos = layout.filter(
       (event) => event.kind === "photo" && event.person === "Alex Rivera",
@@ -1028,7 +1038,7 @@ describe("pdf layout locks", () => {
     expect(capsulePdfFilename("Regression Kitchen", "2026-10", 1)).toBe("regression-kitchen-2026-10.pdf");
     expect(capsuleTitle("October 2026", 1)).toBe("October 2026");
     expect(capsuleTitle("October 2026", 1)).not.toContain("v2");
-    expect(CAPSULE_PDF_PRODUCER).toBe("monthly-capsule-layout/2");
+    expect(CAPSULE_PDF_PRODUCER).toBe("monthly-capsule-b2/1");
     expect(source("./capsule-pdf-store.ts")).toContain("upsert: true");
     expect(source("./capsule-pdf-store.ts")).toContain("capsulePdfNeedsUnicodeRerender");
     expect(source("./capsule-pdf-store.ts")).not.toContain("planForceOpen");

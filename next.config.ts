@@ -14,7 +14,15 @@ const nextConfig: NextConfig = {
   // serverExternalPackages keeps the decoder out of the webpack graph; tracing
   // includes put the files on the lambda disk. Missing either path returns
   // "Could not compress that photo" for iPhone HEIC on production.
-  serverExternalPackages: ["sharp", "heic-convert", "heic-decode", "libheif-js", "@pdf-lib/fontkit"],
+  serverExternalPackages: [
+    "sharp",
+    "heic-convert",
+    "heic-decode",
+    "libheif-js",
+    "@pdf-lib/fontkit",
+    "puppeteer-core",
+    "@sparticuz/chromium-min",
+  ],
   outputFileTracingIncludes: {
     "/*": [
       "./node_modules/libheif-js/**/*",

@@ -3,3 +3,6 @@ https://github.com/liberationfonts/liberation-fonts/releases/tag/2.1.5
 
 Noto Emoji (variable, OFL) — SIL Open Font License 1.1 (NotoEmoji-OFL.txt)
 https://github.com/google/fonts/tree/main/ofl/notoemoji
+
+Noto Color Emoji COLRv1 (OFL) — SIL Open Font License 1.1 (NotoEmoji-OFL.txt)
+https://github.com/googlefonts/noto-emoji/blob/main/2D/fonts/Noto-COLRv1.ttf

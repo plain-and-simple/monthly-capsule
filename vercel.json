@@ -1,4 +1,18 @@
 {
+  "functions": {
+    "src/app/api/cron/compile/route.ts": {
+      "memory": 1024,
+      "maxDuration": 60
+    },
+    "src/app/(app)/g/[uuid]/capsule/[yearMonth]/pdf/route.ts": {
+      "memory": 1024,
+      "maxDuration": 60
+    },
+    "src/app/(app)/g/[uuid]/capsule/[yearMonth]/[edition]/pdf/route.ts": {
+      "memory": 1024,
+      "maxDuration": 60
+    }
+  },
   "crons": [
     {
       "path": "/api/cron/compile",
