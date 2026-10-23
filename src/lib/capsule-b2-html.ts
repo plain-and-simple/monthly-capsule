@@ -94,29 +94,42 @@ const EMOJI_UNICODE_RANGE = [
   "U+1F000-1FAFF",
 ].join(",");
 
-export function renderCapsuleHtml(plan: DocumentPlan, images: ReadonlyMap<string, string>): string {
-  const pages = plan.pages.map((page) => renderPage(page, images)).join("");
-  return `<!doctype html><html><head><meta charset="utf-8"><style>${css()}</style></head><body>${pages}</body></html>`;
+function planHasEmoji(plan: DocumentPlan): boolean {
+  for (const page of plan.pages) {
+    for (const line of page.lines) {
+      for (const char of line.text) {
+        const code = char.codePointAt(0) ?? 0;
+        if (isEmojiCodePoint(code) && code !== 0x200d && !(code >= 0xfe00 && code <= 0xfe0f)) return true;
+      }
+    }
+  }
+  return false;
 }
 
-function css(): string {
+export function renderCapsuleHtml(plan: DocumentPlan, images: ReadonlyMap<string, string>): string {
+  const pages = plan.pages.map((page) => renderPage(page, images)).join("");
+  return `<!doctype html><html><head><meta charset="utf-8"><style>${css(planHasEmoji(plan))}</style></head><body>${pages}</body></html>`;
+}
+
+function css(emoji: boolean): string {
+  const emojiStack = emoji ? ",CapsuleEmoji,emoji" : "";
   return [
     fontFace("CapsuleSerif", "LiberationSerif-Regular.ttf"),
     fontFace("CapsuleSerifBold", "LiberationSerif-Bold.ttf"),
     fontFace("CapsuleSerifItalic", "LiberationSerif-Italic.ttf"),
     fontFace("CapsuleSans", "LiberationSans-Regular.ttf"),
-    fontFace("CapsuleEmoji", "Noto-COLRv1.ttf", EMOJI_UNICODE_RANGE),
+    emoji ? fontFace("CapsuleEmoji", "Noto-COLRv1.ttf", EMOJI_UNICODE_RANGE) : "",
     `@page{size:8.5in 11in;margin:0}`,
     `*{box-sizing:border-box}`,
     `html,body{margin:0;padding:0;-webkit-print-color-adjust:exact;print-color-adjust:exact}`,
     `.page{position:relative;width:${px(B2_PAGE_W)}px;height:${px(B2_PAGE_H)}px;overflow:hidden;break-after:page;page-break-after:always}`,
     `.page:last-child{break-after:auto;page-break-after:auto}`,
     `.ln{position:absolute;white-space:pre;line-height:1;font-kerning:none;font-feature-settings:"kern" 0,"liga" 0;overflow:hidden}`,
-    `.ff-r{font-family:CapsuleSerif,CapsuleEmoji,emoji,serif}`,
-    `.ff-b{font-family:CapsuleSerifBold,CapsuleEmoji,emoji,serif}`,
-    `.ff-i{font-family:CapsuleSerifItalic,CapsuleEmoji,emoji,serif}`,
-    `.ff-s{font-family:CapsuleSans,CapsuleEmoji,emoji,sans-serif}`,
-    `.em{font-family:CapsuleEmoji,emoji;font-variant-emoji:emoji}`,
+    `.ff-r{font-family:CapsuleSerif${emojiStack},serif}`,
+    `.ff-b{font-family:CapsuleSerifBold${emojiStack},serif}`,
+    `.ff-i{font-family:CapsuleSerifItalic${emojiStack},serif}`,
+    `.ff-s{font-family:CapsuleSans${emojiStack},sans-serif}`,
+    emoji ? `.em{font-family:CapsuleEmoji,emoji;font-variant-emoji:emoji}` : `.em{font-variant-emoji:emoji}`,
     `.ph{position:absolute;overflow:hidden}`,
     `.ph img{width:100%;height:100%;display:block}`,
     `.band{position:absolute}`,

@@ -55,6 +55,8 @@ describe("b2 html fonts", () => {
     expect(html).toContain(`color:${name.color}`);
     expect(name.color).toBe("#fffdf7");
     expect(html).toContain(`background:${block.headerFill}`);
+    expect(html).not.toContain("Noto-COLRv1");
+    expect(html).not.toContain("CapsuleEmoji");
   });
 
   it("centres the serif accent under the name", () => {

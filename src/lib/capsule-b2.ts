@@ -119,11 +119,29 @@ export const BLANK_PENALTY = 22;
 export const LETTERBOX_PENALTY = 8;
 export const HEADER_STYLES: readonly HeaderStyle[] = ["rule", "block", "serif"];
 export const PAGE_UNFILLED_MAX = 0.42;
+/** Body copy never goes below this. Short letters may use larger display sizes. */
+export const B2_BODY_SIZE = 14;
+/**
+ * Cover cells with no stored face stay this close to the real aspect.
+ * Older uploads have no boxes; a tiny centred trim is the whole allowance.
+ */
+export const COVER_UNKNOWN_TRIM = 0.03;
+/** A photo block may not float with more than this fraction of the content width empty on both sides. */
+export const PHOTO_SIDE_GAP_MAX = 0.08;
+/**
+ * `letterbox` is the only template that centres a photo inside the content width.
+ * A phone screenshot or panorama keeps its real aspect; spanning the content width
+ * would crop more than 10% on a side. Every other template is full width or flush
+ * to one edge (text or a band occupies the other side).
+ */
+export const CENTRED_PHOTO_TEMPLATES: readonly string[] = ["letterbox"];
 
-const BODY_FONTS = [14, 13.5, 13, 12.5, 12, 11.5, 11, 10.5];
-const DISPLAY_FONTS = [22, 20, 18, 16, 15, 14, 13, 12, 11, 10.5];
+const BODY_FONTS = [B2_BODY_SIZE];
+const DISPLAY_FONTS = [22, 20, 18, 16, 15, B2_BODY_SIZE];
 const ONE_LINE_FONTS = [46, 40, 36, 32, 28, 24];
 const ROW_GAP = 8;
+/** Stretch inside a symmetric 10% trim range that lands on the photo's real aspect. */
+const NATIVE_STRETCH = 0.2 / 0.45;
 
 type FontFace = {
   unitsPerEm: number;
@@ -327,7 +345,7 @@ export function scoreCandidate(input: {
 }): number {
   let score = input.affinity;
   score -= input.blankRatio * BLANK_PENALTY;
-  score -= Math.max(0, 12.5 - input.fontSize) * 1.2;
+  score -= Math.max(0, B2_BODY_SIZE - input.fontSize) * 8;
   score -= input.meanCrop * 4;
   score -= (input.letterboxCount ?? 0) * LETTERBOX_PENALTY;
   if (input.heroIsLargest) score += 1.5;
@@ -451,11 +469,13 @@ function flowText(input: FlowInput): { lines: PlacedLine[]; used: number } | nul
     let columnStart = input.y;
     let bottom = input.y;
     for (const line of flat) {
-      const extra = line.paraBreakBefore ? paraGap : 0;
+      let extra = line.paraBreakBefore ? paraGap : 0;
       if (column < columns - 1 && y + extra + lineHeight - columnStart > target + 0.2 && y > columnStart) {
         column += 1;
         y = input.y;
         columnStart = input.y;
+        // A paragraph gap belongs between paragraphs, not above the first line of a column.
+        extra = 0;
       }
       y += extra;
       if (y + lineHeight > input.y + input.h + 0.75) return null;
@@ -897,7 +917,6 @@ function fitPhotosThenText(input: {
   const columns = input.columns ?? columnsFor(input.text);
   const fonts = input.fonts;
   let best: Built | null = null;
-  let bestScore = -Infinity;
   for (const size of fonts) {
     const needed = textHeight(input.text, size, B2_INNER_W, columns);
     if (needed == null) continue;
@@ -924,11 +943,14 @@ function fitPhotosThenText(input: {
       : { lines: [], used: 0 };
     if (!flowed) continue;
     const built = finishSingle(input.templateId, input.ordered, photos, flowed.lines, size, input.affinity);
-    const score = -built.blankRatio * 20 + built.fontSize * 0.12 - built.letterboxCount * 8;
-    if (score > bestScore + 1e-9) {
+    if (
+      !best ||
+      built.letterboxCount < best.letterboxCount ||
+      (built.letterboxCount === best.letterboxCount && built.fontSize > best.fontSize)
+    ) {
       best = built;
-      bestScore = score;
     }
+    if (best.letterboxCount === 0) break;
   }
   return best;
 }
@@ -1182,13 +1204,12 @@ function buildMosaic(ordered: B2Photo[], text: string, ink: string): Built | nul
   photos.push(...rightStack.items);
   let blockH = heroH;
   if (below.length > 0) {
-    const row = rowBlock(below, [below.length], B2_INNER_W, 0.35);
+    const row = fitStretch((stretch) => rowBlock(below, [below.length], B2_INNER_W, stretch), 150);
     if (!row) return null;
-    const capped = row.height > 150 ? scaleBlockTo(row, 150) : row;
-    for (const item of capped.items) {
+    for (const item of row.items) {
       photos.push({ ...item, y: item.y + blockH + ROW_GAP });
     }
-    blockH += ROW_GAP + capped.height;
+    blockH += ROW_GAP + row.height;
   }
   return fitPhotosThenText({
     templateId: "tall-mosaic",
@@ -1242,6 +1263,8 @@ function buildFeatureBand(ordered: B2Photo[], text: string, ink: string): Built 
 
 function buildOneLine(ordered: B2Photo[], text: string, ink: string): Built | null {
   if (!isOneLine(text)) return null;
+  // Extreme aspects belong to letterbox, which is allowed to centre them.
+  if (ordered.some(isExtreme)) return null;
   const trimmed = text.trim();
   if (ordered.length === 0) {
     for (const size of ONE_LINE_FONTS) {
@@ -1269,12 +1292,12 @@ function buildOneLine(ordered: B2Photo[], text: string, ink: string): Built | nu
     if (width > B2_INNER_W) continue;
     const textH = size * 1.25;
     const photoBudget = B2_AVAIL - textH - B2_GAP;
-    const natural = exactSlots(ordered, (photo) => {
-      const aspect = photo.width / Math.max(1, photo.height);
-      return aspect < 0.5 ? B2_INNER_W * 0.42 : B2_INNER_W;
-    });
-    if (!natural) continue;
-    const fitted = scaleBlockTo(natural, photoBudget);
+    // Full content width. Scaling a tall photo down to centre it leaves empty sides.
+    const fitted = fitStretch(
+      (stretch) => rowBlock(ordered, magazineRowCounts(ordered.length), B2_INNER_W, stretch),
+      photoBudget,
+    );
+    if (!fitted) continue;
     const photos = shiftBlock(fitted, B2_INNER_X, B2_BODY_TOP);
     const textY = B2_BODY_TOP + fitted.height + B2_GAP;
     if (textY + textH > B2_CONTENT_BOTTOM + 0.5) continue;
@@ -1294,17 +1317,24 @@ function buildOneLine(ordered: B2Photo[], text: string, ink: string): Built | nu
   return null;
 }
 
-function buildTextPage(text: string, ink: string, templateId: B2TemplateId, affinity: number, top = B2_BODY_TOP, height = B2_AVAIL): { lines: PlacedLine[]; fontSize: number } | null {
-  const fonts = wordCount(text) < 80 ? DISPLAY_FONTS : BODY_FONTS;
-  const columns = columnsFor(text);
+function buildTextPage(
+  text: string,
+  ink: string,
+  top = B2_BODY_TOP,
+  height = B2_AVAIL,
+  box: { x: number; w: number } = { x: B2_INNER_X, w: B2_INNER_W },
+  fonts: readonly number[] = wordCount(text) < 80 ? DISPLAY_FONTS : BODY_FONTS,
+  columns: 1 | 2 = columnsFor(text),
+): { lines: PlacedLine[]; fontSize: number } | null {
+  const columnCount: 1 | 2 = box.w < 240 ? 1 : columns;
   for (const size of fonts) {
     const flowed = flowText({
       text,
-      x: B2_INNER_X,
+      x: box.x,
       y: top,
-      w: B2_INNER_W,
+      w: box.w,
       h: height,
-      columns,
+      columns: columnCount,
       size,
       fill: true,
       color: ink,
@@ -1319,12 +1349,18 @@ function buildTextPage(text: string, ink: string, templateId: B2TemplateId, affi
 
 function buildTextOnly(text: string, ink: string): Built | null {
   if (isOneLine(text) || wordCount(text) >= SPREAD_WORD_MIN) return null;
-  const page = buildTextPage(text, ink, "text-only", 1.4);
+  const page = buildTextPage(text, ink);
   if (!page) return null;
   return finishSingle("text-only", [], [], page.lines, page.fontSize, 1.4);
 }
 
-function fitTokenCount(tokens: readonly Token[], height: number, limit: number): number {
+function fitTokenCount(
+  tokens: readonly Token[],
+  height: number,
+  limit: number,
+  width: number,
+  columns: 1 | 2,
+): number {
   let lo = 0;
   let hi = Math.min(limit, tokens.length);
   let best = 0;
@@ -1335,7 +1371,7 @@ function fitTokenCount(tokens: readonly Token[], height: number, limit: number):
       continue;
     }
     const chunk = joinTokens(tokens.slice(0, mid));
-    const needed = textHeight(chunk, 10.5, B2_INNER_W, columnsFor(chunk));
+    const needed = textHeight(chunk, B2_BODY_SIZE, width, width < 240 ? 1 : columns);
     if (needed != null && needed <= height + 0.5) {
       best = mid;
       lo = mid + 1;
@@ -1346,61 +1382,152 @@ function fitTokenCount(tokens: readonly Token[], height: number, limit: number):
   return best;
 }
 
+/** Flush-left stack at the real aspect. Used when a full-width row cannot be reached inside the trim limit. */
+function flushColumn(photos: readonly B2Photo[], maxH: number): Block | null {
+  if (photos.length === 0) return null;
+  const aspects = photos.map((photo) => photo.width / Math.max(1, photo.height));
+  const gaps = ROW_GAP * Math.max(0, photos.length - 1);
+  const sumInv = aspects.reduce((sum, aspect) => sum + 1 / Math.max(0.05, aspect), 0);
+  let width = Math.min(B2_INNER_W * 0.62, Math.max(120, (maxH - gaps) / sumInv));
+  const itemsAt = (columnW: number): PlacedPhoto[] => {
+    let y = 0;
+    return photos.map((photo) => {
+      const aspect = photo.width / Math.max(1, photo.height);
+      const height = columnW / aspect;
+      const placed: PlacedPhoto = {
+        storagePath: photo.storagePath,
+        x: 0,
+        y,
+        w: columnW,
+        h: height,
+        crop: { ...ZERO_CROP },
+        fit: "cover",
+        lead: false,
+      };
+      y += height + ROW_GAP;
+      return placed;
+    });
+  };
+  let items = itemsAt(width);
+  let height = Math.max(0, items.reduce((bottom, item) => Math.max(bottom, item.y + item.h), 0));
+  if (height > maxH + 0.6) {
+    const scale = maxH / height;
+    width *= scale;
+    items = itemsAt(width);
+    height = Math.max(0, items.reduce((bottom, item) => Math.max(bottom, item.y + item.h), 0));
+  }
+  if (!(height > 1) || width < 80) return null;
+  return { items, height };
+}
+
+/**
+ * Photos on a spread span the content width at the real aspect when that fits.
+ * A portrait that would be taller than the page is trimmed within 10% so the
+ * block still spans the width. Text shares the page only when a readable
+ * region remains; otherwise the letter continues on the next page.
+ */
+function spreadOpening(ordered: readonly B2Photo[]): {
+  photos: PlacedPhoto[];
+  text: { x: number; y: number; w: number; h: number } | null;
+} {
+  const top = B2_BODY_TOP;
+  if (ordered.length === 0) {
+    return { photos: [], text: { x: B2_INNER_X, y: top, w: B2_INNER_W, h: B2_AVAIL } };
+  }
+  const counts = magazineRowCounts(ordered.length);
+  const width = B2_INNER_W;
+  let block = ordered.some(isExtreme) ? null : rowBlock(ordered, counts, width, NATIVE_STRETCH);
+  if (block && block.height > B2_AVAIL) {
+    block = fitStretch((stretch) => rowBlock(ordered, counts, width, stretch), B2_AVAIL);
+  }
+  if (!block) block = flushColumn(ordered, B2_AVAIL);
+  if (!block) {
+    return { photos: [], text: { x: B2_INNER_X, y: top, w: B2_INNER_W, h: B2_AVAIL } };
+  }
+  const share = block.height <= B2_AVAIL * 0.62 && block.height + B2_GAP + B2_BODY_SIZE * 4 <= B2_AVAIL;
+  if (!share) {
+    const grown = ordered.some(isExtreme)
+      ? null
+      : fitStretch((stretch) => rowBlock(ordered, counts, width, stretch), B2_AVAIL);
+    if (grown && grown.height >= block.height - 0.5) block = grown;
+  }
+  const photos = shiftBlock(block, B2_INNER_X, top);
+  if (share) {
+    const textY = top + block.height + B2_GAP;
+    return {
+      photos,
+      text: { x: B2_INNER_X, y: textY, w: B2_INNER_W, h: Math.max(0, B2_CONTENT_BOTTOM - textY) },
+    };
+  }
+  const right = Math.max(...photos.map((photo) => photo.x + photo.w));
+  const left = Math.min(...photos.map((photo) => photo.x));
+  const beside = B2_INNER_X + B2_INNER_W - right - B2_GAP;
+  if (left - B2_INNER_X <= B2_INNER_W * PHOTO_SIDE_GAP_MAX && beside >= 150) {
+    return { photos, text: { x: right + B2_GAP, y: top, w: beside, h: B2_AVAIL } };
+  }
+  return { photos, text: null };
+}
+
+function pageBlank(photos: readonly PlacedPhoto[], lines: readonly PlacedLine[], bands: readonly PageBand[] = []): number {
+  return regionUnfilledRatio(photos, lines, bands, B2_BODY_TOP, B2_CONTENT_BOTTOM);
+}
+
 function buildSpread(ordered: B2Photo[], text: string, ink: string, force: boolean): Built | null {
   const tokens = tokenize(text);
   if (!force && tokens.length < SPREAD_WORD_MIN) return null;
+  if (tokens.length === 0 && ordered.length === 0) return null;
 
-  let photoBlock: Block | null = null;
-  if (ordered.length > 0) {
-    const rows = ordered.some(isExtreme)
-      ? null
-      : rowBlock(ordered, magazineRowCounts(ordered.length), B2_INNER_W, 0.85);
-    const exact = exactSlots(ordered, (photo) => {
-      const aspect = photo.width / Math.max(1, photo.height);
-      return aspect < 0.5 ? B2_INNER_W * 0.34 : B2_INNER_W;
-    });
-    const base = rows ?? exact;
-    if (base) photoBlock = scaleBlockTo(base, Math.min(B2_AVAIL * 0.4, 250));
-  }
-
+  const opening = spreadOpening(ordered);
   const pages: Built["pages"] = [];
+  if (opening.photos.length > 0 && !opening.text) {
+    pages.push({ lines: [], photos: opening.photos });
+  }
   let cursor = 0;
   const minPages = tokens.length >= SPREAD_WORD_MIN ? 2 : 1;
   let guard = 0;
-  while (cursor < tokens.length && guard < 16) {
+  while ((cursor < tokens.length || pages.length < minPages) && guard < 16) {
     guard += 1;
-    const first = pages.length === 0;
-    const top = first && photoBlock ? B2_BODY_TOP + photoBlock.height + B2_GAP : B2_BODY_TOP;
-    const height = Math.max(24, B2_CONTENT_BOTTOM - top);
+    if (cursor >= tokens.length) break;
+    const region =
+      pages.length === 0 && opening.text
+        ? opening.text
+        : { x: B2_INNER_X, y: B2_BODY_TOP, w: B2_INNER_W, h: B2_AVAIL };
+    const columns: 1 | 2 = region.w < 240 ? 1 : columnsFor(joinTokens(tokens.slice(cursor)));
     const remaining = tokens.slice(cursor);
     let limit = remaining.length;
-    if (minPages >= 2 && first && remaining.length > 1) {
+    if (minPages >= 2 && pages.length === 0 && remaining.length > 1) {
       limit = Math.max(1, Math.min(limit, Math.ceil(tokens.length / 2)));
     }
-    let take = fitTokenCount(remaining, height, limit);
+    let take = fitTokenCount(remaining, region.h, limit, region.w, columns);
     if (take < 1) take = 1;
-    let flowed = buildTextPage(joinTokens(remaining.slice(0, take)), ink, "spread", 0, top, height);
+    let flowed = buildTextPage(joinTokens(remaining.slice(0, take)), ink, region.y, region.h, region, [B2_BODY_SIZE], columns);
     while (!flowed && take > 1) {
       take -= 1;
-      flowed = buildTextPage(joinTokens(remaining.slice(0, take)), ink, "spread", 0, top, height);
+      flowed = buildTextPage(joinTokens(remaining.slice(0, take)), ink, region.y, region.h, region, [B2_BODY_SIZE], columns);
     }
     if (!flowed) return null;
-    pages.push({
-      lines: flowed.lines,
-      photos: first && photoBlock ? shiftBlock(photoBlock, B2_INNER_X, B2_BODY_TOP) : [],
-    });
+    const photos = pages.length === 0 ? opening.photos : [];
+    pages.push({ lines: flowed.lines, photos });
     cursor += take;
   }
-  if (cursor < tokens.length || pages.length < minPages) return null;
-  const fontSize = Math.min(...pages.flatMap((page) => page.lines.map((line) => line.size).concat(12)));
+  if (tokens.length > 0 && cursor < tokens.length) return null;
+  if (pages.length < minPages) return null;
+  if (pages.length === 0) return null;
   const markedPages = pages.map((page) => ({
     ...page,
     photos: markLead(page.photos, ordered).map(clampPhotoToPage),
   }));
+  const fontSize = Math.min(
+    B2_BODY_SIZE,
+    ...markedPages.flatMap((page) => page.lines.map((line) => line.size)),
+  );
+  const blanks = markedPages.map((page) => pageBlank(page.photos, page.lines));
+  const blankRatio = blanks.reduce((sum, value) => sum + value, 0) / blanks.length;
   const allPhotos = markedPages.flatMap((page) => page.photos);
   const allLines = markedPages.flatMap((page) => page.lines);
   return {
-    ...statsFor(allPhotos, allLines, ordered, fontSize, force ? 0.2 : 1.6, "spread"),
+    ...statsFor(allPhotos, allLines, ordered, fontSize || B2_BODY_SIZE, force ? 0.35 : 1.6, "spread"),
+    blankRatio: clamp(blankRatio, 0, 1),
     pages: markedPages,
   };
 }
@@ -1420,13 +1547,9 @@ function candidateList(ordered: B2Photo[], text: string, ink: string): Built[] {
         text,
         ink,
         affinity: 1.7,
-        fonts: [18, 16, 15, 14, 13, 12],
+        fonts: [22, 20, 18, 16, B2_BODY_SIZE],
         columns: 1,
-        block: () => {
-          const slotW = Math.min(B2_INNER_W * 0.78, B2_AVAIL * 0.55 * aspect);
-          const natural = exactSlots(ordered, () => slotW);
-          return natural ? scaleBlockTo(natural, B2_AVAIL * 0.62) : null;
-        },
+        block: (stretch) => rowBlock(ordered, [1], B2_INNER_W, stretch),
       }),
     );
   }
@@ -1634,21 +1757,441 @@ function placeFooter(pageNumber: number, groupName: string, month: string, ink: 
   ];
 }
 
-function coverCollage(leads: readonly B2Photo[], budget: number, top: number): PlacedPhoto[] {
-  if (leads.length === 0 || budget < 48) return [];
-  const used = leads.slice(0, 8);
-  const counts = magazineRowCounts(used.length);
-  const block = fitStretch((stretch) => rowBlock(used, counts, B2_INNER_W, stretch), budget);
-  if (block) return bindPhotosToSlots(shiftBlock(block, B2_INNER_X, top), used);
-  const natural = exactSlots(used, (photo) => {
-    const aspect = photo.width / Math.max(1, photo.height);
-    if (used.length === 1) return aspect < 0.5 ? B2_INNER_W * 0.46 : B2_INNER_W;
-    if (aspect < 0.5) return B2_INNER_W * 0.4;
-    return B2_INNER_W;
-  });
-  if (!natural) return [];
-  return bindPhotosToSlots(shiftBlock(scaleBlockTo(natural, budget), B2_INNER_X, top), used);
+function coverTrimCap(photo: B2Photo): number {
+  return realFaces(photo).length === 0 ? COVER_UNKNOWN_TRIM : MAX_TRIM;
 }
+
+function coverRange(photo: B2Photo): [number, number] {
+  const aspect = photo.width / Math.max(1, photo.height);
+  if (realFaces(photo).length === 0) {
+    const keep = 1 - COVER_UNKNOWN_TRIM * 2;
+    return [aspect * keep, aspect / keep];
+  }
+  return aspectRange(photo);
+}
+
+/** t = -1 is the tallest legal cell, t = 0 is the real aspect, t = 1 is the shortest. */
+function coverAspect(photo: B2Photo, t: number): number {
+  const [minAspect, maxAspect] = coverRange(photo);
+  const native = clamp(photo.width / Math.max(1, photo.height), minAspect, maxAspect);
+  if (t >= 0) return native + (maxAspect - native) * Math.min(1, t);
+  return native + (minAspect - native) * Math.min(1, -t);
+}
+
+type Pack = { items: PlacedPhoto[]; width: number; height: number };
+
+const compositionCache = new Map<number, number[][]>();
+
+function compositions(count: number): number[][] {
+  const cached = compositionCache.get(count);
+  if (cached) return cached;
+  const out: number[][] = [];
+  const walk = (remain: number, acc: number[]) => {
+    if (remain === 0) {
+      out.push(acc.slice());
+      return;
+    }
+    for (let size = 1; size <= remain; size += 1) {
+      acc.push(size);
+      walk(remain - size, acc);
+      acc.pop();
+    }
+  };
+  if (count > 0) walk(count, []);
+  compositionCache.set(count, out);
+  return out;
+}
+
+function coverOrders(photos: readonly B2Photo[]): B2Photo[][] {
+  const aspect = (photo: B2Photo) => photo.width / Math.max(1, photo.height);
+  const given = photos.slice();
+  const asc = photos.slice().sort((a, b) => aspect(a) - aspect(b) || a.storagePath.localeCompare(b.storagePath));
+  const desc = asc.slice().reverse();
+  const alt: B2Photo[] = [];
+  const used = new Set<string>();
+  for (let i = 0; i < photos.length; i += 1) {
+    const source = i % 2 === 0 ? asc : desc;
+    const next = source.find((photo) => !used.has(photo.storagePath));
+    if (!next) break;
+    used.add(next.storagePath);
+    alt.push(next);
+  }
+  const seen = new Set<string>();
+  const orders: B2Photo[][] = [];
+  for (const order of [given, asc, desc, alt]) {
+    const key = order.map((photo) => photo.storagePath).join("\0");
+    if (seen.has(key)) continue;
+    seen.add(key);
+    orders.push(order);
+  }
+  return orders;
+}
+
+function layoutRows(photos: readonly B2Photo[], counts: number[], t: number, width: number): Pack | null {
+  let y = 0;
+  let index = 0;
+  const items: PlacedPhoto[] = [];
+  let maxRight = 0;
+  for (let row = 0; row < counts.length; row += 1) {
+    const count = counts[row]!;
+    const slice = photos.slice(index, index + count);
+    if (slice.length !== count) return null;
+    const aspects = slice.map((photo) => coverAspect(photo, t));
+    const gaps = ROW_GAP * (slice.length - 1);
+    const sum = aspects.reduce((total, aspect) => total + aspect, 0);
+    const height = (width - gaps) / sum;
+    if (!(height > 1) || !Number.isFinite(height)) return null;
+    let x = 0;
+    for (let i = 0; i < slice.length; i += 1) {
+      const photo = slice[i]!;
+      const aspect = aspects[i]!;
+      const boxW = aspect * height;
+      const crop = placeCrop(photo, aspect);
+      if (crop.letterbox || crop.maxSide > coverTrimCap(photo) + 0.002) return null;
+      items.push({
+        storagePath: photo.storagePath,
+        x,
+        y,
+        w: boxW,
+        h: height,
+        crop,
+        fit: "cover",
+        lead: false,
+      });
+      x += boxW + (i === slice.length - 1 ? 0 : ROW_GAP);
+    }
+    maxRight = Math.max(maxRight, x);
+    y += height + (row === counts.length - 1 ? 0 : ROW_GAP);
+    index += count;
+  }
+  if (index !== photos.length || items.length === 0) return null;
+  return { items, width: maxRight, height: y };
+}
+
+function layoutColumns(photos: readonly B2Photo[], counts: number[], t: number, height: number): Pack | null {
+  let x = 0;
+  let index = 0;
+  const items: PlacedPhoto[] = [];
+  let usedH = 0;
+  for (let column = 0; column < counts.length; column += 1) {
+    const count = counts[column]!;
+    const slice = photos.slice(index, index + count);
+    if (slice.length !== count) return null;
+    const aspects = slice.map((photo) => coverAspect(photo, t));
+    const gaps = ROW_GAP * (slice.length - 1);
+    const sumInv = aspects.reduce((total, aspect) => total + 1 / aspect, 0);
+    const colW = (height - gaps) / sumInv;
+    if (!(colW > 1) || !Number.isFinite(colW)) return null;
+    let y = 0;
+    for (let i = 0; i < slice.length; i += 1) {
+      const photo = slice[i]!;
+      const aspect = aspects[i]!;
+      const h = colW / aspect;
+      const crop = placeCrop(photo, aspect);
+      if (crop.letterbox || crop.maxSide > coverTrimCap(photo) + 0.002) return null;
+      items.push({
+        storagePath: photo.storagePath,
+        x,
+        y,
+        w: colW,
+        h,
+        crop,
+        fit: "cover",
+        lead: false,
+      });
+      y += h + (i === slice.length - 1 ? 0 : ROW_GAP);
+    }
+    usedH = Math.max(usedH, y);
+    x += colW + (column === counts.length - 1 ? 0 : ROW_GAP);
+    index += count;
+  }
+  if (index !== photos.length || items.length === 0) return null;
+  return { items, width: x, height: usedH };
+}
+
+function scalePack(pack: Pack, scale: number): Pack {
+  return {
+    width: pack.width * scale,
+    height: pack.height * scale,
+    items: pack.items.map((item) => ({
+      ...item,
+      x: item.x * scale,
+      y: item.y * scale,
+      w: item.w * scale,
+      h: item.h * scale,
+    })),
+  };
+}
+
+function packArea(pack: Pack): number {
+  return pack.items.reduce((sum, item) => sum + item.w * item.h, 0);
+}
+
+function packMeanCrop(pack: Pack): number {
+  return pack.items.reduce((sum, item) => sum + item.crop.maxSide, 0) / pack.items.length;
+}
+
+/** Prefer a full collage. Spend trim only when it buys a filled edge. */
+function packScore(pack: Pack, maxW: number, maxH: number): number {
+  const area = packArea(pack);
+  const crop = packMeanCrop(pack);
+  const fillsH = pack.height >= maxH - 8;
+  const fillsW = pack.width >= maxW - 8;
+  const cropCost = fillsH && fillsW ? crop * 0.15 : crop * 2.4;
+  return area * (1 - cropCost);
+}
+
+function choosePack(candidates: Array<Pack | null>, maxW: number, maxH: number): Pack | null {
+  let best: Pack | null = null;
+  let bestScore = -Infinity;
+  for (const pack of candidates) {
+    if (!pack) continue;
+    if (pack.width > maxW + 0.8 || pack.height > maxH + 0.8) continue;
+    const score = packScore(pack, maxW, maxH);
+    if (score > bestScore + 1e-6) {
+      best = pack;
+      bestScore = score;
+    }
+  }
+  return best;
+}
+
+function fitRows(photos: readonly B2Photo[], counts: number[], maxW: number, maxH: number): Pack | null {
+  const direct: Array<Pack | null> = [];
+  for (let step = 0; step <= 8; step += 1) direct.push(layoutRows(photos, counts, -1 + step / 4, maxW));
+  let lo = -1;
+  let hi = 1;
+  for (let i = 0; i < 12; i += 1) {
+    const mid = (lo + hi) / 2;
+    const pack = layoutRows(photos, counts, mid, maxW);
+    if (pack && pack.height <= maxH + 0.6) {
+      hi = mid;
+      direct.push(pack);
+    } else lo = mid;
+  }
+  const best = choosePack(direct, maxW, maxH);
+  if (best) return best;
+  const seed = layoutRows(photos, counts, 0, maxW) ?? layoutRows(photos, counts, 1, maxW);
+  if (!seed || !(seed.height > 1)) return null;
+  const scale = Math.min(1, maxW / seed.width, maxH / seed.height);
+  if (!(scale > 0.05)) return null;
+  return scalePack(seed, scale);
+}
+
+function fitColumns(photos: readonly B2Photo[], counts: number[], maxW: number, maxH: number): Pack | null {
+  const direct: Array<Pack | null> = [];
+  for (let step = 0; step <= 8; step += 1) direct.push(layoutColumns(photos, counts, -1 + step / 4, maxH));
+  let lo = -1;
+  let hi = 1;
+  for (let i = 0; i < 12; i += 1) {
+    const mid = (lo + hi) / 2;
+    const pack = layoutColumns(photos, counts, mid, maxH);
+    if (pack && pack.width <= maxW + 0.6) {
+      lo = mid;
+      direct.push(pack);
+    } else hi = mid;
+  }
+  const best = choosePack(direct, maxW, maxH);
+  if (best) return best;
+  const seed = layoutColumns(photos, counts, 0, maxH) ?? layoutColumns(photos, counts, -1, maxH);
+  if (!seed || !(seed.width > 1)) return null;
+  const scale = Math.min(1, maxW / seed.width, maxH / seed.height);
+  if (!(scale > 0.05)) return null;
+  return scalePack(seed, scale);
+}
+
+/**
+ * Largest face-safe collage that fits the box. Cells with no stored face stay
+ * within COVER_UNKNOWN_TRIM of the real aspect. Known faces use the 10% rule.
+ */
+function bestPack(photos: readonly B2Photo[], maxW: number, maxH: number): Pack | null {
+  if (photos.length === 0 || maxW < 48 || maxH < 48) return null;
+  let best: Pack | null = null;
+  let bestScore = -Infinity;
+  for (const order of coverOrders(photos)) {
+    for (const counts of compositions(order.length)) {
+      const packs = [fitRows(order, counts, maxW, maxH), fitColumns(order, counts, maxW, maxH)];
+      for (const pack of packs) {
+        if (!pack) continue;
+        const score = packScore(pack, maxW, maxH);
+        if (score > bestScore + 1e-6) {
+          best = pack;
+          bestScore = score;
+        }
+      }
+    }
+  }
+  return best;
+}
+
+type CoverTocInput = {
+  missed: string;
+  empty: boolean;
+  toc: ReadonlyArray<{ name: string; page: number }>;
+};
+
+function tocBlockHeight(lines: readonly PlacedLine[]): number {
+  if (lines.length === 0) return 0;
+  return Math.max(...lines.map((line) => line.y + line.h));
+}
+
+/** Contents lines in local coordinates. `fillH` grows type a little so a colour band is not a void. */
+function coverTocBlock(input: CoverTocInput, boxW: number, mode: "list" | "mast" | "fill", fillH: number): PlacedLine[] {
+  const columns = mode === "mast" && input.toc.length >= 4 ? 2 : 1;
+  let size = mode === "list" ? 16 : mode === "mast" ? 13 : 14;
+  let gap = mode === "list" ? 10 : mode === "mast" ? 5 : 8;
+  const build = (fontSize: number, rowGap: number): PlacedLine[] => {
+    const lineH = fontSize + 6;
+    const lines: PlacedLine[] = [];
+    let y = 0;
+    const push = (text: string, font: FontStyle, x: number, w: number, nextSize = fontSize) => {
+      lines.push({
+        text,
+        x,
+        y,
+        w,
+        h: lineH,
+        size: nextSize,
+        font,
+        color: "#000",
+        role: "cover",
+      });
+    };
+    if (input.toc.length > 0) {
+      let headSize = fontSize;
+      while (headSize > 9 && measureTextWidth(IN_THIS_ISSUE, headSize, "serifItalic") > boxW) headSize -= 0.5;
+      push(IN_THIS_ISSUE, "serifItalic", 0, boxW, headSize);
+      y += lineH + rowGap;
+      const nameRows = Math.ceil(input.toc.length / columns);
+      const colW = columns === 1 ? boxW : (boxW - 18) / 2;
+      for (let row = 0; row < nameRows; row += 1) {
+        for (let col = 0; col < columns; col += 1) {
+          const entry = input.toc[row * columns + col];
+          if (!entry) continue;
+          const page = String(entry.page);
+          const pageW = Math.max(10, measureTextWidth(page, fontSize, "sans"));
+          let nameSize = fontSize;
+          const room = Math.max(12, colW - pageW - 8);
+          while (nameSize > 8 && measureTextWidth(entry.name, nameSize, "serif") > room) nameSize -= 0.5;
+          const x = col * (colW + 18);
+          push(entry.name, "serif", x, room, nameSize);
+          push(page, "sans", x + colW - pageW, pageW, fontSize);
+        }
+        y += lineH + (row === nameRows - 1 ? 0 : rowGap);
+      }
+    }
+    const notes = [
+      input.missed ? { text: input.missed, font: "serifItalic" as const } : null,
+      input.empty ? { text: "No letters this month.", font: "serifItalic" as const } : null,
+    ].filter((note): note is { text: string; font: "serifItalic" } => !!note);
+    for (const note of notes) {
+      if (lines.length > 0) y += rowGap;
+      let noteSize = Math.max(10, fontSize - 2);
+      while (noteSize > 8 && measureTextWidth(note.text, noteSize, note.font) > boxW) noteSize -= 0.5;
+      push(note.text, note.font, 0, boxW, noteSize);
+      y += lineH;
+    }
+    return lines;
+  };
+  let lines = build(size, gap);
+  let height = tocBlockHeight(lines);
+  if (mode === "fill" && fillH > 40) {
+    if (height > fillH - 4) {
+      while (height > fillH - 4 && size > 9) {
+        size -= 0.5;
+        lines = build(size, gap);
+        height = tocBlockHeight(lines);
+      }
+    } else if (height < fillH * 0.82) {
+      while (size < 22 && tocBlockHeight(build(size + 0.5, gap)) <= fillH - 6) size += 0.5;
+      while (gap < 28 && tocBlockHeight(build(size, gap + 1)) <= fillH - 6) gap += 1;
+      lines = build(size, gap);
+    }
+  } else if (fillH > 40 && height > fillH - 4) {
+    while (height > fillH - 4 && size > 9) {
+      size -= 0.5;
+      gap = Math.max(4, gap - 0.5);
+      lines = build(size, gap);
+      height = tocBlockHeight(lines);
+    }
+  }
+  return lines;
+}
+
+type CoverInput = {
+  groupUpper: string;
+  month: string;
+  missed: string;
+  theme: CapsuleTheme;
+  ink: string;
+  empty: boolean;
+  toc: ReadonlyArray<{ name: string; page: number }>;
+};
+
+function coverTitleLines(input: CoverInput, color: string, titleY: number, titleSize: number): PlacedLine[] {
+  const lines: PlacedLine[] = [];
+  if (input.theme === "heritage") {
+    lines.push({
+      text: "A keepsake",
+      x: B2_INNER_X,
+      y: 12,
+      w: B2_INNER_W,
+      h: 16,
+      size: 13,
+      font: "serifItalic",
+      color,
+      role: "cover",
+    });
+  }
+  let size = titleSize;
+  while (size > 16 && measureTextWidth(input.groupUpper, size, "serifBold") > B2_INNER_W) size -= 1;
+  lines.push({
+    text: input.groupUpper,
+    x: B2_INNER_X,
+    y: titleY,
+    w: B2_INNER_W,
+    h: size * 1.15,
+    size,
+    font: "serifBold",
+    color,
+    role: "cover",
+  });
+  return lines;
+}
+
+function coverMonthLine(month: string, y: number, color: string): PlacedLine {
+  return {
+    text: month,
+    x: B2_INNER_X,
+    y,
+    w: B2_INNER_W,
+    h: 18,
+    size: 14,
+    font: "serif",
+    color,
+    role: "cover",
+  };
+}
+
+function shiftPack(pack: Pack, x: number, y: number): PlacedPhoto[] {
+  return pack.items.map((item) => ({ ...item, x: item.x + x, y: item.y + y }));
+}
+
+function placeCoverToc(
+  lines: PlacedLine[],
+  input: CoverTocInput,
+  box: { x: number; y: number; w: number; h: number; color: string; mode: "list" | "mast" | "fill" },
+): void {
+  const laid = coverTocBlock(input, box.w, box.mode, box.h);
+  const blockH = tocBlockHeight(laid);
+  if (!(blockH > 0)) return;
+  const extra = Math.max(0, box.h - blockH);
+  let y0 = box.y + (box.mode === "fill" ? extra / 2 : Math.min(8, extra));
+  if (y0 + blockH > box.y + box.h + 0.5) y0 = box.y + Math.max(0, box.h - blockH);
+  for (const line of laid) lines.push({ ...line, x: line.x + box.x, y: line.y + y0, color: box.color });
+}
+
+const COVER_RAIL = 168;
 
 function buildCoverPage(input: {
   groupUpper: string;
@@ -1664,138 +2207,183 @@ function buildCoverPage(input: {
 }): { lines: PlacedLine[]; photos: PlacedPhoto[]; bands: PageBand[] } {
   const fill = luminance(input.accent) < 170 ? input.accent : input.ink;
   const mastInk = luminance(input.paper) > 180 ? input.paper : "#fffdf8";
-  const mastH = input.leads.length ? (input.theme === "heritage" ? 92 : 78) : input.theme === "heritage" ? 168 : 156;
-  const bands: PageBand[] = [{ x: 0, y: 0, w: B2_PAGE_W, h: mastH, fill }];
-  const lines: PlacedLine[] = [];
-  let titleY = 22;
-  if (input.theme === "heritage") {
-    lines.push({
-      text: "A keepsake",
+  const tocInput: CoverTocInput = { missed: input.missed, empty: input.empty, toc: input.toc };
+  if (input.leads.length === 0) {
+    const mastH = input.theme === "heritage" ? 168 : 156;
+    const lines = coverTitleLines(input, mastInk, Math.max(input.theme === "heritage" ? 32 : 22, (mastH - 46 * 1.15) / 2), 46);
+    const cursor = mastH + 16;
+    lines.push(coverMonthLine(input.month, cursor, input.ink));
+    const tocY = cursor + 26 + (input.empty ? 36 : 40);
+    const bands: PageBand[] = [
+      { x: 0, y: 0, w: B2_PAGE_W, h: mastH, fill },
+      { x: B2_INNER_X, y: tocY - 18, w: 72, h: 3, fill },
+    ];
+    placeCoverToc(lines, tocInput, {
       x: B2_INNER_X,
-      y: 12,
+      y: tocY,
       w: B2_INNER_W,
-      h: 16,
-      size: 13,
-      font: "serifItalic",
-      color: mastInk,
-      role: "cover",
-    });
-    titleY = 32;
-  }
-  let size = input.leads.length ? 32 : 46;
-  while (size > 16 && measureTextWidth(input.groupUpper, size, "serifBold") > B2_INNER_W) size -= 1;
-  lines.push({
-    text: input.groupUpper,
-    x: B2_INNER_X,
-    y: input.leads.length ? titleY : Math.max(titleY, (mastH - size * 1.15) / 2),
-    w: B2_INNER_W,
-    h: size * 1.15,
-    size,
-    font: "serifBold",
-    color: mastInk,
-    role: "cover",
-  });
-
-  let cursor = mastH + 16;
-  lines.push({
-    text: input.month,
-    x: B2_INNER_X,
-    y: cursor,
-    w: B2_INNER_W,
-    h: 18,
-    size: 14,
-    font: "serif",
-    color: input.ink,
-    role: "cover",
-  });
-  cursor += 26;
-
-  const tocCount = input.toc.length;
-  const tocBlock = 26 + tocCount * 22 + (input.missed ? 24 : 0) + (input.empty ? 28 : 0);
-  const collageBudget = Math.max(72, B2_CONTENT_BOTTOM - cursor - tocBlock - 16);
-  const photos = coverCollage(input.leads, collageBudget, cursor);
-  if (photos.length > 0) {
-    cursor = Math.max(...photos.map((photo) => photo.y + photo.h)) + 18;
-  } else {
-    cursor += input.empty ? 36 : 40;
-    bands.push({ x: B2_INNER_X, y: cursor - 18, w: 72, h: 3, fill });
-  }
-
-  if (tocCount > 0) {
-    const tocSize = input.leads.length ? 13 : 16;
-    const tocGap = input.leads.length ? 22 : 28;
-    lines.push({
-      text: IN_THIS_ISSUE,
-      x: B2_INNER_X,
-      y: cursor,
-      w: B2_INNER_W,
-      h: tocSize + 6,
-      size: tocSize,
-      font: "serifItalic",
+      h: Math.max(80, B2_CONTENT_BOTTOM - tocY),
       color: input.ink,
-      role: "cover",
+      mode: "list",
     });
-    cursor += tocSize + 12;
-    for (const item of input.toc) {
-      const num = String(item.page);
-      const numW = Math.max(12, measureTextWidth(num, tocSize, "sans"));
-      const nameW = B2_INNER_W - numW - 16;
-      lines.push({
-        text: item.name,
-        x: B2_INNER_X,
-        y: cursor,
-        w: nameW,
-        h: tocSize + 6,
-        size: tocSize,
-        font: "serif",
-        color: input.ink,
-        role: "cover",
-      });
-      lines.push({
-        text: num,
-        x: B2_INNER_X + B2_INNER_W - numW,
-        y: cursor,
-        w: numW,
-        h: tocSize + 6,
-        size: tocSize,
-        font: "sans",
-        color: input.ink,
-        role: "cover",
-      });
-      cursor += tocGap;
+    return { lines, photos: [], bands };
+  }
+
+  const leads = input.leads.slice(0, 8);
+  const shortMast = input.theme === "heritage" ? 92 : 78;
+  const photoTop = shortMast + 44;
+  const availH = B2_CONTENT_BOTTOM - photoTop;
+  type Candidate = {
+    area: number;
+    ok: boolean;
+    lines: PlacedLine[];
+    photos: PlacedPhoto[];
+    bands: PageBand[];
+  };
+  const candidates: Candidate[] = [];
+
+  const mastToc = coverTocBlock(tocInput, B2_INNER_W, "mast", 0);
+  const mastTocH = tocBlockHeight(mastToc);
+  const mastTitleY = input.theme === "heritage" ? 32 : 18;
+  const mastMonthY = mastTitleY + 40;
+  const mastTocY = mastMonthY + 28;
+  const tallMast = mastTocY + mastTocH + 16;
+  const mastBoxH = B2_CONTENT_BOTTOM - tallMast;
+  const mastPack = bestPack(leads, B2_PAGE_W, mastBoxH);
+  if (mastPack && mastBoxH > 80) {
+    const side = Math.max(0, (B2_PAGE_W - mastPack.width) / 2);
+    const lines = [
+      ...coverTitleLines(input, mastInk, mastTitleY, 32),
+      coverMonthLine(input.month, mastMonthY, mastInk),
+      ...mastToc.map((line) => ({ ...line, x: line.x + B2_INNER_X, y: line.y + mastTocY, color: mastInk })),
+    ];
+    candidates.push({
+      area: packArea(mastPack),
+      ok: mastPack.height >= mastBoxH - 8 && side <= B2_PAGE_W * 0.09 && side >= -1,
+      lines,
+      photos: shiftPack(mastPack, side, tallMast),
+      bands: [{ x: 0, y: 0, w: B2_PAGE_W, h: tallMast, fill }],
+    });
+  }
+
+  const railPack = bestPack(leads, B2_PAGE_W - COVER_RAIL, availH);
+  if (railPack && availH > 80) {
+    const lines = [
+      ...coverTitleLines(input, mastInk, input.theme === "heritage" ? 32 : 22, 32),
+      coverMonthLine(input.month, shortMast + 16, input.ink),
+    ];
+    const photoRight = railPack.width;
+    const bands: PageBand[] = [
+      { x: 0, y: 0, w: B2_PAGE_W, h: shortMast, fill },
+      { x: photoRight, y: photoTop, w: B2_PAGE_W - photoRight, h: availH, fill },
+    ];
+    if (railPack.height < availH - 2) {
+      bands.push({ x: 0, y: photoTop + railPack.height, w: B2_PAGE_W, h: availH - railPack.height, fill });
     }
-  }
-
-  if (input.missed) {
-    lines.push({
-      text: input.missed,
-      x: B2_INNER_X,
-      y: cursor,
-      w: B2_INNER_W,
-      h: 16,
-      size: 11,
-      font: "serifItalic",
-      color: input.ink,
-      role: "cover",
+    placeCoverToc(lines, tocInput, {
+      x: photoRight + 16,
+      y: photoTop,
+      w: Math.max(80, B2_PAGE_W - photoRight - 28),
+      h: availH,
+      color: mastInk,
+      mode: "fill",
     });
-    cursor += 24;
-  }
-
-  if (input.empty) {
-    lines.push({
-      text: "No letters this month.",
-      x: B2_INNER_X,
-      y: Math.max(cursor, mastH + 120),
-      w: B2_INNER_W,
-      h: 20,
-      size: 14,
-      font: "serifItalic",
-      color: input.ink,
-      role: "cover",
+    candidates.push({
+      area: packArea(railPack),
+      ok: railPack.height >= availH - 8,
+      lines,
+      photos: shiftPack(railPack, 0, photoTop),
+      bands,
     });
   }
 
-  return { lines, photos, bands };
+  const bandPack = bestPack(leads, B2_PAGE_W, Math.max(72, availH - 64));
+  if (bandPack) {
+    const photoX = Math.max(0, (B2_PAGE_W - bandPack.width) / 2);
+    const photoBottom = photoTop + bandPack.height;
+    const bandH = B2_CONTENT_BOTTOM - photoBottom;
+    const lines = [
+      ...coverTitleLines(input, mastInk, input.theme === "heritage" ? 32 : 22, 32),
+      coverMonthLine(input.month, shortMast + 16, input.ink),
+    ];
+    const bands: PageBand[] = [{ x: 0, y: 0, w: B2_PAGE_W, h: shortMast, fill }];
+    if (bandH > 8) bands.push({ x: 0, y: photoBottom, w: B2_PAGE_W, h: bandH, fill });
+    if (bandH > 36) {
+      placeCoverToc(lines, tocInput, {
+        x: B2_INNER_X,
+        y: photoBottom,
+        w: B2_INNER_W,
+        h: bandH,
+        color: mastInk,
+        mode: "fill",
+      });
+    }
+    candidates.push({
+      area: packArea(bandPack),
+      ok: bandPack.width >= B2_PAGE_W - 10 && bandH >= 56,
+      lines,
+      photos: shiftPack(bandPack, photoX, photoTop),
+      bands,
+    });
+  }
+
+  const ready = candidates.filter((item) => item.ok);
+  const pool = ready.length > 0 ? ready : candidates;
+  const chosen = pool.reduce<Candidate | null>((best, item) => (!best || item.area > best.area + 1 ? item : best), null);
+  if (!chosen) {
+    const mastH = shortMast;
+    return {
+      lines: [...coverTitleLines(input, mastInk, 22, 32), coverMonthLine(input.month, mastH + 16, input.ink)],
+      photos: [],
+      bands: [{ x: 0, y: 0, w: B2_PAGE_W, h: mastH, fill }],
+    };
+  }
+  return { lines: chosen.lines, photos: chosen.photos, bands: chosen.bands };
+}
+
+/**
+ * A short caption under a photo that cannot grow any further (trim limit) sits
+ * in an accent plate that runs to the footer, instead of leaving a white band.
+ */
+function polishShortCaption(
+  templateId: string,
+  lines: PlacedLine[],
+  photos: PlacedPhoto[],
+  accent: string,
+  ink: string,
+  paper: string,
+): { lines: PlacedLine[]; bands: PageBand[] } {
+  if (CENTRED_PHOTO_TEMPLATES.includes(templateId)) return { lines, bands: [] };
+  const body = lines.filter((line) => line.role === "body");
+  if (body.length === 0 || photos.length === 0) return { lines, bands: [] };
+  const photoBottom = Math.max(...photos.map((photo) => photo.y + photo.h));
+  const textTop = Math.min(...body.map((line) => line.y));
+  const textBottom = Math.max(...body.map((line) => line.y + line.h));
+  if (textTop < photoBottom - 8) return { lines, bands: [] };
+  const leftover = B2_CONTENT_BOTTOM - textBottom;
+  if (leftover < 52) return { lines, bands: [] };
+  const words = body.reduce((sum, line) => sum + wordCount(line.text), 0);
+  if (words > 90) return { lines, bands: [] };
+  const plate = headerColors("block", ink, accent, paper);
+  const bandTop = photoBottom;
+  const bandH = B2_CONTENT_BOTTOM - bandTop;
+  if (bandH < leftover) return { lines, bands: [] };
+  const blockH = textBottom - textTop;
+  const innerTop = bandTop + 18;
+  const innerBottom = B2_CONTENT_BOTTOM - 16;
+  const shift = innerTop + Math.max(0, (innerBottom - innerTop - blockH) / 2) - textTop;
+  const moved = lines.map((line) =>
+    line.role === "body" ? { ...line, y: line.y + shift, color: plate.text } : line,
+  );
+  const bodies = moved.filter((line) => line.role === "body");
+  const top = Math.min(...bodies.map((line) => line.y));
+  const bottom = Math.max(...bodies.map((line) => line.y + line.h));
+  if (top < bandTop + 4 || bottom > B2_CONTENT_BOTTOM + 0.5) return { lines, bands: [] };
+  if (bodies.some((line) => photos.some((photo) => boxesOverlap(line, photo)))) return { lines, bands: [] };
+  return {
+    lines: moved,
+    bands: [{ x: 0, y: bandTop, w: B2_PAGE_W, h: bandH, fill: plate.fill }],
+  };
 }
 
 export type LayoutLetter = {
@@ -1832,12 +2420,13 @@ export function layoutCapsuleDocument(input: {
     const ordered = orderPhotos(letter.photos);
     const built = pickBuilt(ordered, letter.body, ink, previous);
     for (const page of built.pages) {
+      const polished = polishShortCaption(built.templateId, page.lines, page.photos, accent, ink, paper);
       letterPages.push({
         templateId: built.templateId,
         personName: letter.preferredName,
-        lines: page.lines,
+        lines: polished.lines,
         photos: page.photos,
-        bands: [],
+        bands: polished.bands,
       });
       previous = built.templateId;
       nextPage += 1;
