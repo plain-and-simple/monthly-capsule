@@ -4,7 +4,7 @@ import { inflateSync } from "node:zlib";
 import fontkit from "@pdf-lib/fontkit";
 import type { PDFDocument, PDFFont, PDFPage, RGB } from "pdf-lib";
 
-export const CAPSULE_PDF_PRODUCER = "monthly-capsule-layout/2";
+export const CAPSULE_PDF_PRODUCER = "monthly-capsule-b2/1";
 
 /** Traced onto the Vercel function disk next to process.cwd(); never resolve from the bundled module URL. */
 export const PDF_FONTS_DIR = join(process.cwd(), "src/lib/pdf-fonts");

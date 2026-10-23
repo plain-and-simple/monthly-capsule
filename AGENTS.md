@@ -11,28 +11,29 @@ Chandler is the product manager. Research, plan, ship. Dogfood. Prefer a usable 
 - **PIN is bcrypt-only.** Generated at create/regen, shown once, never recovered. Do not display, email, or reconstruct a stored Group PIN. Do not add PIN-reminder UI. Owner regen is the only way to get a new PIN (old one dies; sessions stay valid).
 - **Do not generate a PDF during email send.** Resend has a short timeout. Compile (or first download) stores `capsules.pdf_storage_path`. Email attaches that object only if it already exists. PDF failure must not block compile or email.
 - **Do not silently drop photos.** Max is 6 (`MAX_PHOTOS`). If someone picks 10, keep 6, skip compressing the rest, and show `PHOTOS_MAX` (`You can add 6 photos. Extra photos were not added.`).
-- **Newspaper wrap is every theme**, not Warm-only. Classic, Warm, Minimal, and Heritage all put photos beside the writing. Theme owns type, paper, and leftover chrome — not “letter then a photo dump.”
+- **On-screen newspaper wrap is every theme**, not Warm-only. Classic, Warm, Minimal, and Heritage all put photos beside the writing. Theme owns type, paper, and leftover chrome — not “letter then a photo dump.” The PDF is the B2 magazine layout, not this weave.
 - **Do not reopen** hosting/`basePath`, phone/SMS, rich editor, video, co-owners, or regenerate-past-month.
 - Theme picker stays **swatch + name**. No layout descriptions on the picker. Default remains Classic. Past months stay as-built.
 
-## Capsule layout (on-screen and PDF)
+## Capsule layout (on-screen)
 
-People typically write about two paragraphs and put photos on the sides so it reads like a newspaper.
+People typically write about two paragraphs and put photos on the sides so it reads like a newspaper. The on-screen capsule stays this weave. The PDF is a separate magazine layout (below).
 
 - Pair at most one photo with each paragraph (alternate right, then left).
 - If they write little and attach a lot, extras go **after** the letter.
 - Leftover treatment by theme: Classic/Warm **grid**, Minimal **strip**, Heritage **plates**.
 - In-flow HTML must wrap each photo+paragraph in `.letter__run` (`display: flow-root`). Sibling floats after a full-width first paragraph do not wrap.
 - CSS: `.letter__photo--weave` floats (~42% width); `--left` / `--right`; stack full-width under 640px.
-- PDF: `insetImage` (~42% width, keep `y` at the photo top) then column-aware `wrapped()` until past the photo. `finishWrap()` before the next photo, gallery, plate, or rule.
-- Code: `src/lib/capsule-theme.ts` (`weaveLetterBlocks`, `leftoverPhotoBlocks`, `groupWovenRuns`), `src/components/capsule-document.tsx`, `src/lib/capsule-archive.ts`, `src/lib/capsule-pdf.ts`, weave rules in `src/app/globals.css`.
+- Code: `src/lib/capsule-theme.ts` (`weaveLetterBlocks`, `leftoverPhotoBlocks`, `groupWovenRuns`), `src/components/capsule-document.tsx`, `src/lib/capsule-archive.ts`, weave rules in `src/app/globals.css`.
 
 ## PDF keepsake
 
-- Built with pdf-lib. Theme palettes follow the catalog paper/ink/accent.
-- WebP (and anything else) is re-encoded to JPEG with `sharp` before embed (`preparePdfJpeg`). Camera originals are never stored.
+- Magazine layout B2, not the on-screen newspaper weave. `layoutCapsuleDocument` in `src/lib/capsule-b2.ts` picks one of 14 templates per person from text length and each photo’s count and real aspect ratio, and penalizes repeating the previous page’s template. HTML/CSS is printed to PDF with headless Chromium (`src/lib/capsule-pdf-chromium.ts`): `@sparticuz/chromium-min` on Vercel, Playwright’s Chrome for Testing locally and in CI. No runtime model or LLM.
+- Photos keep their shape. Trim at most 10% per side. Face boxes stored on `photos.faces` (browser `FaceDetector` at upload; empty means an even trim) are never cut. Every submitted photo is placed. The lead slot prefers a photo of a person.
+- Producer `monthly-capsule-b2/1`. An older stored PDF rebuilds once on download. Theme palettes still follow the catalog paper/ink/accent.
+- WebP (and anything else) is re-encoded to JPEG with `sharp` and downscaled toward the print slot (`preparePdfJpeg` / `preparePdfJpegFitted`) so the email attachment stays near 3 MB. Camera originals are never stored.
 - Session-gated download: `/g/[uuid]/capsule/[YYYY-MM]/pdf` (and `/vN/pdf` for later editions).
-- Missing PDFs generate on first download. Email never calls generate-during-send.
+- Missing PDFs generate on first download. Email never calls generate-during-send. Compile and the PDF routes need a 60s function budget and 1024 MB.
 
 ## Submit photos
 

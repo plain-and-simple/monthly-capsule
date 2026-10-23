@@ -5,6 +5,7 @@ import { membershipIsActive, submitBlockedReason } from "@/lib/account";
 import { MAX_PHOTOS, PHOTO_BUCKET } from "@/lib/constants";
 import { ensureMonth } from "@/lib/compile";
 import { storedPhotoExtension } from "@/lib/photo-compress";
+import { parsePhotoFacesList } from "@/lib/face-boxes";
 import { collectPhotoFiles, validatePhotoList } from "@/lib/photo-files";
 import { compressPhotoForStorage } from "@/lib/photo-ingest";
 import { deleteStoredPhotos } from "@/lib/photos";
@@ -44,6 +45,7 @@ export async function submitLetter(
     const body = String(formData.get("body") ?? "").trim();
     const intent = parseSubmitIntent(formData.get("intent"));
     const files = collectPhotoFiles(formData);
+    const fileFaces = parsePhotoFacesList(formData.get("photo_faces"));
 
     if (body.length > 20_000) {
       return { error: "Letter is too long." };
@@ -113,6 +115,7 @@ export async function submitLetter(
       groupId,
       monthId: month.id,
       readFileBytes: async (index) => Buffer.from(await filesToStore[index]!.arrayBuffer()),
+      fileFaces,
       deps: {
         compressFile: async (_index, bytes) => compressPhotoForStorage(Buffer.from(bytes)),
         uploadPhoto: async (path, photo) => {

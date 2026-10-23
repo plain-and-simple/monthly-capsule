@@ -284,6 +284,8 @@ export type SubmitPhotoRow = {
   height: number;
   bytes: number;
   sort_order: number;
+  /** Null when the browser found no faces. Kept photos are not re-detected. */
+  faces?: Array<{ x: number; y: number; w: number; h: number }> | null;
 };
 
 export type SubmitCommitDeps = {
@@ -349,6 +351,7 @@ export async function runSubmitPhotoCommit(input: {
   groupId: string;
   monthId: string;
   readFileBytes: (index: number) => Promise<Uint8Array>;
+  fileFaces?: ReadonlyArray<ReadonlyArray<{ x: number; y: number; w: number; h: number }>>;
   deps: SubmitCommitDeps;
 }): Promise<{ ok: true; status: SubmitStatus } | { error: string }> {
   const alreadySubmitted = (input.existing?.status ?? null) === "submitted";
@@ -426,6 +429,7 @@ export async function runSubmitPhotoCommit(input: {
       return { error: "Could not store photo." };
     }
     uploadedPaths.push(storagePath);
+    const faces = input.fileFaces?.[i] ?? [];
     rows.push({
       submission_id: existingId,
       storage_path: storagePath,
@@ -433,6 +437,7 @@ export async function runSubmitPhotoCommit(input: {
       height: photo.height,
       bytes: photo.bytes,
       sort_order: kept.length + i,
+      faces: faces.length > 0 ? faces.map((face) => ({ ...face })) : null,
     });
   }
 
