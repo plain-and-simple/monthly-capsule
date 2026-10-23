@@ -122,6 +122,25 @@ export const PAGE_UNFILLED_MAX = 0.42;
 /** Body copy never goes below this. Short letters may use larger display sizes. */
 export const B2_BODY_SIZE = 14;
 /**
+ * Body lines at {@link B2_BODY_SIZE} sit on this pitch.
+ * Pitch scales with the font size and never grows to fill a short column.
+ */
+export const B2_BODY_LEADING = 18;
+/** Paragraph spacing may grow by at most this fraction of a line, by the same amount in every column. */
+const PARA_EXTRA_LINES = 0.5;
+
+export function bodyLinePitch(size: number): number {
+  return (size * B2_BODY_LEADING) / B2_BODY_SIZE;
+}
+
+function baseParagraphGap(size: number): number {
+  return size * 0.42;
+}
+
+function maxParagraphGap(size: number): number {
+  return baseParagraphGap(size) + bodyLinePitch(size) * PARA_EXTRA_LINES;
+}
+/**
  * Cover cells with no stored face stay this close to the real aspect.
  * Older uploads have no boxes; a tiny centred trim is the whole allowance.
  */
@@ -450,6 +469,11 @@ type FlowInput = {
   fill: boolean;
   color: string;
   style?: FontStyle;
+  /**
+   * Fixed paragraph gap. When omitted, `fill` may raise the gap up to half a line
+   * so every column in this block shares one spacing. Line pitch never changes.
+   */
+  paraGap?: number;
 };
 
 function flowText(input: FlowInput): { lines: PlacedLine[]; used: number } | null {
@@ -466,8 +490,9 @@ function flowText(input: FlowInput): { lines: PlacedLine[]; used: number } | nul
       flat.push({ text: line, paraBreakBefore: lineIndex === 0 && paragraphIndex > 0 });
     });
   });
-  const placeAt = (lineHeight: number, paraGap: number) => {
-    const total = flat.reduce((sum, line) => sum + lineHeight + (line.paraBreakBefore ? paraGap : 0), 0);
+  const pitch = bodyLinePitch(input.size);
+  const placeAt = (paraGap: number) => {
+    const total = flat.reduce((sum, line) => sum + pitch + (line.paraBreakBefore ? paraGap : 0), 0);
     const target = columns === 2 ? total / 2 : total;
     const lines: PlacedLine[] = [];
     let column = 0;
@@ -476,7 +501,7 @@ function flowText(input: FlowInput): { lines: PlacedLine[]; used: number } | nul
     let bottom = input.y;
     for (const line of flat) {
       let extra = line.paraBreakBefore ? paraGap : 0;
-      if (column < columns - 1 && y + extra + lineHeight - columnStart > target + 0.2 && y > columnStart) {
+      if (column < columns - 1 && y + extra + pitch - columnStart > target + 0.2 && y > columnStart) {
         column += 1;
         y = input.y;
         columnStart = input.y;
@@ -484,39 +509,43 @@ function flowText(input: FlowInput): { lines: PlacedLine[]; used: number } | nul
         extra = 0;
       }
       y += extra;
-      if (y + lineHeight > input.y + input.h + 0.75) return null;
+      if (y + pitch > input.y + input.h + 0.75) return null;
       lines.push({
         text: line.text,
         x: input.x + column * (columnWidth + columnGap),
         y,
         w: columnWidth,
-        h: lineHeight,
+        h: pitch,
         size: input.size,
         font: style,
         color: input.color,
         role: "body",
       });
-      y += lineHeight;
+      y += pitch;
       bottom = Math.max(bottom, y);
     }
-    return { lines, used: bottom - input.y, height: bottom - input.y };
+    return { lines, used: bottom - input.y };
   };
-  const minLine = input.size * 1.28;
-  const paraGap = input.size * 0.42;
-  const minPlaced = placeAt(minLine, paraGap);
-  if (!minPlaced) return null;
-  if (!input.fill) return { lines: minPlaced.lines, used: minPlaced.used };
-  let lo = minLine;
-  let hi = input.size * 1.85;
-  for (let i = 0; i < 14; i += 1) {
-    const mid = (lo + hi) / 2;
-    const placed = placeAt(mid, paraGap);
-    if (placed) lo = mid;
-    else hi = mid;
+  const baseGap = baseParagraphGap(input.size);
+  const cap = maxParagraphGap(input.size);
+  let gap = input.paraGap ?? baseGap;
+  if (input.paraGap == null && input.fill && flat.some((line) => line.paraBreakBefore)) {
+    let lo = baseGap;
+    let hi = cap;
+    gap = baseGap;
+    for (let i = 0; i < 16; i += 1) {
+      const mid = (lo + hi) / 2;
+      if (placeAt(mid)) {
+        gap = mid;
+        lo = mid;
+      } else {
+        hi = mid;
+      }
+    }
   }
-  const placed = placeAt(lo, paraGap);
-  if (!placed) return { lines: minPlaced.lines, used: minPlaced.used };
-  return { lines: placed.lines, used: placed.used };
+  const placed = placeAt(gap);
+  if (!placed) return null;
+  return placed;
 }
 
 export function slotFitsPhoto(photo: B2Photo, slotW: number, slotH: number): boolean {
@@ -1012,10 +1041,54 @@ function scaleBlockTo(block: Block, budget: number): Block {
   };
 }
 
-const LEADING_GROWTH = 1.85 / 1.28;
+/** How far paragraph spacing alone can carry a short block toward the footer. */
+const PARAGRAPH_FILL_SLACK = B2_BODY_LEADING * PARA_EXTRA_LINES * 4;
 
 function placedUnfilled(photos: readonly PlacedPhoto[], lines: readonly PlacedLine[]): number {
   return regionUnfilledRatio(photos, lines, [], B2_BODY_TOP, B2_CONTENT_BOTTOM);
+}
+
+function sharedParagraphGap(
+  regions: ReadonlyArray<{ text: string; x: number; y: number; w: number; h: number; columns: 1 | 2 } | null>,
+  ink: string,
+): number {
+  const base = baseParagraphGap(B2_BODY_SIZE);
+  const cap = maxParagraphGap(B2_BODY_SIZE);
+  const active = regions.filter(
+    (region): region is { text: string; x: number; y: number; w: number; h: number; columns: 1 | 2 } =>
+      !!region && region.text.trim().length > 0,
+  );
+  if (active.length === 0) return base;
+  const fits = (gap: number) =>
+    active.every(
+      (region) =>
+        flowText({
+          text: region.text,
+          x: region.x,
+          y: region.y,
+          w: region.w,
+          h: region.h,
+          columns: region.columns,
+          size: B2_BODY_SIZE,
+          fill: false,
+          paraGap: gap,
+          color: ink,
+        }) != null,
+    );
+  if (!fits(base)) return base;
+  let lo = base;
+  let hi = cap;
+  let best = base;
+  for (let i = 0; i < 16; i += 1) {
+    const mid = (lo + hi) / 2;
+    if (fits(mid)) {
+      best = mid;
+      lo = mid;
+    } else {
+      hi = mid;
+    }
+  }
+  return best;
 }
 
 /**
@@ -1029,56 +1102,70 @@ function fitBesidePage(
   ink: string,
 ): { lines: PlacedLine[]; photos: PlacedPhoto[]; unfilled: number } | null {
   if (photos.length === 0 || photos.length > 4 || tokens.length === 0) return null;
-  let best: { lines: PlacedLine[]; photos: PlacedPhoto[]; unfilled: number; area: number } | null = null;
-  const lo = 110;
-  const hi = B2_INNER_W * 0.64;
-  for (let step = 0; step < 14; step += 1) {
-    const columnW = lo + ((hi - lo) * step) / 13;
-    const aspects = photos.map((photo) => photo.width / Math.max(1, photo.height));
+  const aspects = photos.map((photo) => photo.width / Math.max(1, photo.height));
+  type BesideGeom = {
+    columnW: number;
+    heights: number[];
+    stackH: number;
+    besideCount: number;
+    belowColumns: 1 | 2;
+    area: number;
+    unfilled: number;
+    lines: PlacedLine[];
+    photos: PlacedPhoto[];
+  };
+  const placeAtWidth = (columnW: number, paraGap?: number): BesideGeom | null => {
     const heights = aspects.map((aspect) => columnW / aspect);
-    if (heights.some((height) => height < 90)) continue;
+    if (heights.some((height) => height < 90)) return null;
     const stackH = heights.reduce((sum, height) => sum + height, 0) + ROW_GAP * (photos.length - 1);
-    if (stackH > B2_AVAIL - B2_BODY_SIZE * 2) continue;
+    if (stackH > B2_AVAIL - B2_BODY_SIZE * 2) return null;
     const textW = B2_INNER_W - columnW - B2_GAP;
-    if (textW < 140) continue;
+    if (textW < 140) return null;
     const belowH = B2_AVAIL - stackH - B2_GAP;
     const besideCount = fitTokenCount(tokens, stackH, tokens.length, textW, 1);
     const rest = tokens.slice(besideCount);
     const belowColumns: 1 | 2 = rest.length > 36 ? 2 : 1;
-    if (rest.length > 0) {
-      const need = textHeight(joinTokens(rest), B2_BODY_SIZE, B2_INNER_W, belowColumns);
-      if (need == null || need > belowH + 0.5) continue;
+    const besideText = besideCount > 0 ? joinTokens(tokens.slice(0, besideCount)) : "";
+    const belowText = rest.length > 0 ? joinTokens(rest) : "";
+    if (belowText) {
+      const need = textHeight(belowText, B2_BODY_SIZE, B2_INNER_W, belowColumns);
+      if (need == null || need > belowH + 0.5) return null;
     }
-    const beside =
-      besideCount > 0
+    const besideBox = {
+      text: besideText,
+      x: B2_INNER_X + columnW + B2_GAP,
+      y: B2_BODY_TOP,
+      w: textW,
+      h: stackH,
+      columns: 1 as const,
+    };
+    const belowBox = {
+      text: belowText,
+      x: B2_INNER_X,
+      y: B2_BODY_TOP + stackH + B2_GAP,
+      w: B2_INNER_W,
+      h: belowH,
+      columns: belowColumns,
+    };
+    const gap = paraGap ?? baseParagraphGap(B2_BODY_SIZE);
+    const flow = (region: { text: string; x: number; y: number; w: number; h: number; columns: 1 | 2 }) =>
+      region.text
         ? flowText({
-            text: joinTokens(tokens.slice(0, besideCount)),
-            x: B2_INNER_X + columnW + B2_GAP,
-            y: B2_BODY_TOP,
-            w: textW,
-            h: stackH,
-            columns: 1,
+            text: region.text,
+            x: region.x,
+            y: region.y,
+            w: region.w,
+            h: region.h,
+            columns: region.columns,
             size: B2_BODY_SIZE,
-            fill: true,
+            fill: false,
+            paraGap: gap,
             color: ink,
           })
         : { lines: [] as PlacedLine[], used: 0 };
-    if (!beside) continue;
-    const below =
-      rest.length > 0
-        ? flowText({
-            text: joinTokens(rest),
-            x: B2_INNER_X,
-            y: B2_BODY_TOP + stackH + B2_GAP,
-            w: B2_INNER_W,
-            h: belowH,
-            columns: belowColumns,
-            size: B2_BODY_SIZE,
-            fill: true,
-            color: ink,
-          })
-        : { lines: [] as PlacedLine[], used: 0 };
-    if (!below) continue;
+    const beside = flow(besideBox);
+    const below = flow(belowBox);
+    if (!beside || !below) return null;
     let y = 0;
     const items: PlacedPhoto[] = photos.map((photo, index) => {
       const height = heights[index]!;
@@ -1097,14 +1184,82 @@ function fitBesidePage(
     });
     const shifted = shiftBlock({ items, height: stackH }, B2_INNER_X, B2_BODY_TOP);
     const lines = [...beside.lines, ...below.lines];
-    const unfilled = placedUnfilled(shifted, lines);
-    const area = shifted.reduce((sum, photo) => sum + photo.w * photo.h, 0);
-    if (!best || unfilled < best.unfilled - 0.008 || (Math.abs(unfilled - best.unfilled) <= 0.008 && area > best.area)) {
-      best = { lines, photos: shifted, unfilled, area };
+    return {
+      columnW,
+      heights,
+      stackH,
+      besideCount,
+      belowColumns,
+      area: shifted.reduce((sum, photo) => sum + photo.w * photo.h, 0),
+      unfilled: placedUnfilled(shifted, lines),
+      lines,
+      photos: shifted,
+    };
+  };
+  // A wider column is a taller photo at the real aspect, so more of the letter sits beside it.
+  const cap = SPREAD_PAGE_UNFILLED_MAX + 0.02;
+  let best: BesideGeom | null = null;
+  const lo = 110;
+  const hi = B2_INNER_W * 0.64;
+  const steps = 24;
+  for (let step = 0; step < steps; step += 1) {
+    const columnW = lo + ((hi - lo) * step) / (steps - 1);
+    const placed = placeAtWidth(columnW);
+    if (!placed) continue;
+    if (!best) {
+      best = placed;
+      continue;
+    }
+    const bestOk = best.unfilled <= cap;
+    const nextOk = placed.unfilled <= cap;
+    if (bestOk !== nextOk) {
+      if (nextOk) best = placed;
+      continue;
+    }
+    if (bestOk && nextOk) {
+      if (placed.area > best.area + 1 || (Math.abs(placed.area - best.area) <= 1 && placed.unfilled < best.unfilled)) {
+        best = placed;
+      }
+      continue;
+    }
+    if (
+      placed.unfilled < best.unfilled - 0.008 ||
+      (Math.abs(placed.unfilled - best.unfilled) <= 0.008 && placed.area > best.area)
+    ) {
+      best = placed;
     }
   }
   if (!best) return null;
-  return { lines: best.lines, photos: best.photos, unfilled: best.unfilled };
+  const besideText = best.besideCount > 0 ? joinTokens(tokens.slice(0, best.besideCount)) : "";
+  const belowText = best.besideCount < tokens.length ? joinTokens(tokens.slice(best.besideCount)) : "";
+  const gap = sharedParagraphGap(
+    [
+      besideText
+        ? {
+            text: besideText,
+            x: B2_INNER_X + best.columnW + B2_GAP,
+            y: B2_BODY_TOP,
+            w: B2_INNER_W - best.columnW - B2_GAP,
+            h: best.stackH,
+            columns: 1 as const,
+          }
+        : null,
+      belowText
+        ? {
+            text: belowText,
+            x: B2_INNER_X,
+            y: B2_BODY_TOP + best.stackH + B2_GAP,
+            w: B2_INNER_W,
+            h: B2_AVAIL - best.stackH - B2_GAP,
+            columns: best.belowColumns,
+          }
+        : null,
+    ],
+    ink,
+  );
+  const opened = Math.abs(gap - baseParagraphGap(B2_BODY_SIZE)) > 0.05 ? placeAtWidth(best.columnW, gap) : best;
+  const chosen = opened ?? best;
+  return { lines: chosen.lines, photos: chosen.photos, unfilled: chosen.unfilled };
 }
 
 function finishBeside(
@@ -1120,10 +1275,40 @@ function finishBeside(
   return finishSingle(templateId, ordered.slice(), fitted.photos, fitted.lines, B2_BODY_SIZE, affinity);
 }
 
+function layoutScore(built: Built): number {
+  return scoreCandidate({
+    blankRatio: built.blankRatio,
+    fontSize: built.fontSize,
+    meanCrop: built.meanCrop,
+    heroIsLargest: built.heroIsLargest,
+    objectIsBiggest: built.objectIsBiggest,
+    hasPerson: built.hasPerson,
+    templateId: built.templateId,
+    previousTemplateId: null,
+    affinity: built.affinity,
+    letterboxCount: built.letterboxCount,
+  });
+}
+
+function photoAreaOf(built: Built): number {
+  return built.pages.reduce((sum, page) => sum + page.photos.reduce((area, photo) => area + photo.w * photo.h, 0), 0);
+}
+
+/** Lower blank area wins. A tie goes to the larger photo, which is the first way to spend leftover space. */
+function preferBuilt(current: Built | null, next: Built | null): Built | null {
+  if (!next) return current;
+  if (!current) return next;
+  const delta = layoutScore(next) - layoutScore(current);
+  if (delta > 1e-6) return next;
+  if (delta < -1e-6) return current;
+  return photoAreaOf(next) > photoAreaOf(current) ? next : current;
+}
+
 function buildPortraitFeature(hero: B2Photo, ordered: B2Photo[], text: string, ink: string): Built | null {
-  const classic = buildPortraitBeside(hero, ordered, text, ink);
-  if (classic) return classic;
-  return finishBeside("portrait-feature", ordered, text, ink, 1.45);
+  return preferBuilt(
+    buildPortraitBeside(hero, ordered, text, ink),
+    finishBeside("portrait-feature", ordered, text, ink, 1.45),
+  );
 }
 
 function buildPortraitBeside(hero: B2Photo, ordered: B2Photo[], text: string, ink: string): Built | null {
@@ -1514,6 +1699,26 @@ function fitTokenCount(
 
 type SpreadLeaf = { lines: PlacedLine[]; photos: PlacedPhoto[]; unfilled: number };
 
+/**
+ * Page counts above two share one photo split, and a strict miss is searched
+ * again without the cap. The leaf for a photo group and token span does not
+ * change between those passes.
+ */
+let spreadLeafCache: Map<string, SpreadLeaf | null> | null = null;
+
+function cachedSpreadLeaf(
+  key: string,
+  photos: readonly B2Photo[],
+  tokens: readonly Token[],
+  ink: string,
+): SpreadLeaf | null {
+  const cached = spreadLeafCache?.get(key);
+  if (cached !== undefined) return cached;
+  const page = trySpreadLeaf(photos, tokens, ink);
+  spreadLeafCache?.set(key, page);
+  return page;
+}
+
 function leafArea(leaf: SpreadLeaf): number {
   return leaf.photos.reduce((sum, photo) => sum + photo.w * photo.h, 0);
 }
@@ -1605,13 +1810,13 @@ function tryRowLeaf(photos: readonly B2Photo[], tokens: readonly Token[], ink: s
 function trySpreadLeaf(photos: readonly B2Photo[], tokens: readonly Token[], ink: string): SpreadLeaf | null {
   const row = tryRowLeaf(photos, tokens, ink);
   const cap = SPREAD_PAGE_UNFILLED_MAX + 0.02;
-  const wide = !!row && row.unfilled <= cap && leafArea(row) >= B2_INNER_W * 160;
-  const beside = !wide && photos.length === 1 && tokens.length > 0 ? fitBesidePage(photos, tokens, ink) : null;
+  // A full-width row that already reaches the footer wins. The side column is
+  // only worth measuring when that row still leaves a hole at the standard pitch.
+  if (row && row.unfilled <= cap) return row;
+  const beside = photos.length === 1 && tokens.length > 0 ? fitBesidePage(photos, tokens, ink) : null;
   if (!row || !beside) return row ?? beside;
-  const rowOk = row.unfilled <= cap;
   const besideOk = beside.unfilled <= cap;
-  if (rowOk && leafArea(beside) < leafArea(row) * 0.8) return row;
-  if (rowOk !== besideOk) return rowOk ? row : beside;
+  if (!besideOk) return row.unfilled <= beside.unfilled ? row : beside;
   const scale = Math.max(leafArea(row), leafArea(beside), 1);
   if (Math.abs(leafArea(row) - leafArea(beside)) > scale * 0.2) return leafArea(row) >= leafArea(beside) ? row : beside;
   return row.unfilled <= beside.unfilled ? row : beside;
@@ -1725,7 +1930,7 @@ function textBudget(photos: readonly B2Photo[]): number {
   return Math.max(48, B2_AVAIL - block.height - B2_GAP);
 }
 
-/** Token counts that fit the band and, at the loosest leading, still reach it. */
+/** Token counts that fit the band and still reach it at the standard line pitch. */
 function tokenWindow(photos: readonly B2Photo[], tokenCount: number, heights: readonly HeightOf[]): { min: number; max: number } {
   const budget = textBudget(photos);
   const slack = photos.length === 0 ? 28 : 18;
@@ -1741,7 +1946,7 @@ function tokenWindow(photos: readonly B2Photo[], tokenCount: number, heights: re
     while (lo <= hi) {
       const mid = Math.floor((lo + hi) / 2);
       const height = heightOf(mid);
-      if (height != null && height * LEADING_GROWTH >= target - 0.5) {
+      if (height != null && height + PARAGRAPH_FILL_SLACK >= target - 0.5) {
         filled = mid;
         hi = mid - 1;
       } else {
@@ -1821,17 +2026,29 @@ function bundleSpread(
   ink: string,
   heights: readonly HeightOf[],
 ): SpreadLeaf[] | null {
+  const tokenCount = tokens.length;
+  const leaf = (photos: readonly B2Photo[], start: number, end: number) => {
+    const key = `${start}:${end}:${photos.map((photo) => `${photo.storagePath}:${photo.width}x${photo.height}`).join("|")}`;
+    return cachedSpreadLeaf(key, photos, tokens.slice(start, end), ink);
+  };
   if (groups.length === 1) {
-    const page = trySpreadLeaf(groups[0] ?? [], tokens, ink);
+    const page = leaf(groups[0] ?? [], 0, tokenCount);
     return page ? [page] : null;
   }
   let best: SpreadPick | null = null;
   for (const cut of spreadCuts(groups, tokens, heights)) {
-    const slices =
+    const ranges =
       groups.length === 2
-        ? [tokens.slice(0, cut[0] ?? 0), tokens.slice(cut[0] ?? 0)]
-        : [tokens.slice(0, cut[0] ?? 0), tokens.slice(cut[0] ?? 0, cut[1] ?? 0), tokens.slice(cut[1] ?? 0)];
-    const pages = groups.map((group, index) => trySpreadLeaf(group, slices[index] ?? [], ink));
+        ? [
+            [0, cut[0] ?? 0],
+            [cut[0] ?? 0, tokenCount],
+          ]
+        : [
+            [0, cut[0] ?? 0],
+            [cut[0] ?? 0, cut[1] ?? 0],
+            [cut[1] ?? 0, tokenCount],
+          ];
+    const pages = groups.map((group, index) => leaf(group, ranges[index]![0]!, ranges[index]![1]!));
     if (!pages.every((page): page is SpreadLeaf => !!page)) continue;
     const pick = rankSpread(pages);
     if (!best || betterSpread(best, pick)) best = pick;
@@ -1857,28 +2074,34 @@ function buildSpread(ordered: B2Photo[], text: string, ink: string, force: boole
 
   let chosen: SpreadLeaf[] | null = null;
   const heightOf: HeightOf[] = [textHeights(tokens, 2), textHeights(tokens, 1)];
-  const attempt = (pages: number, strict: boolean) => {
-    let best: SpreadPick | null = null;
-    for (const groups of photoBundles(ordered, pages)) {
-      const laid = bundleSpread(groups, tokens, ink, heightOf);
-      if (!laid) continue;
-      const pick = rankSpread(laid);
-      if (!best || betterSpread(best, pick)) best = pick;
-    }
-    if (!best) return null;
-    if (strict && best.over > 1e-9) return null;
-    return best.pages;
-  };
+  const previousCache = spreadLeafCache;
+  spreadLeafCache = new Map();
+  try {
+    const attempt = (pages: number, strict: boolean) => {
+      let best: SpreadPick | null = null;
+      for (const groups of photoBundles(ordered, pages)) {
+        const laid = bundleSpread(groups, tokens, ink, heightOf);
+        if (!laid) continue;
+        const pick = rankSpread(laid);
+        if (!best || betterSpread(best, pick)) best = pick;
+      }
+      if (!best) return null;
+      if (strict && best.over > 1e-9) return null;
+      return best.pages;
+    };
 
-  for (let pages = minPages; pages <= Math.min(4, minPages + 1); pages += 1) {
-    chosen = attempt(pages, true);
-    if (chosen) break;
-  }
-  if (!chosen) {
-    for (let pages = minPages; pages <= Math.min(4, Math.max(minPages, 2)); pages += 1) {
-      chosen = attempt(pages, false);
+    for (let pages = minPages; pages <= Math.min(4, minPages + 1); pages += 1) {
+      chosen = attempt(pages, true);
       if (chosen) break;
     }
+    if (!chosen) {
+      for (let pages = minPages; pages <= Math.min(4, Math.max(minPages, 2)); pages += 1) {
+        chosen = attempt(pages, false);
+        if (chosen) break;
+      }
+    }
+  } finally {
+    spreadLeafCache = previousCache;
   }
   if (!chosen || chosen.length === 0) return null;
   const words = wordCount(chosen.flatMap((page) => page.lines).map((line) => line.text).join(" "));

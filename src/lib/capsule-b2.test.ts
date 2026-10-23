@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   B2_AVAIL,
+  B2_BODY_LEADING,
   B2_BODY_SIZE,
   B2_CONTENT_BOTTOM,
   B2_INNER_W,
@@ -22,6 +23,7 @@ import {
   TEMPLATE_REPEAT_PENALTY,
   auditPageContent,
   bindPhotosToSlots,
+  bodyLinePitch,
   faceFullyVisible,
   heroScore,
   layoutCapsuleDocument,
@@ -540,7 +542,19 @@ describe("b2 fill and footer", () => {
       expectClean(plan.pages);
       for (const page of plan.pages) {
         if (page.templateId === "cover") continue;
-        expect(pageUnfilledRatio(page), page.templateId).toBeLessThanOrEqual(PAGE_UNFILLED_MAX);
+        // A text page ends when the letter ends. Line pitch stays 18pt, so a
+        // 220-word paragraph cannot be stretched down to the footer.
+        const cap = page.templateId === "text-only" ? 0.5 : PAGE_UNFILLED_MAX;
+        expect(pageUnfilledRatio(page), page.templateId).toBeLessThanOrEqual(cap);
+        if (page.templateId === "text-only") {
+          const body = page.lines.filter((line) => line.role === "body");
+          for (let i = 1; i < body.length; i += 1) {
+            if (Math.abs(body[i]!.x - body[i - 1]!.x) > 0.6) continue;
+            const delta = body[i]!.y - body[i - 1]!.y;
+            if (delta > B2_BODY_LEADING + 1) continue;
+            expect(delta).toBeCloseTo(B2_BODY_LEADING, 4);
+          }
+        }
         const last = page.lines.filter((line) => line.role === "body").at(-1);
         if (last) {
           expect(B2_PAGE_H - 30 - (last.y + last.h)).toBeGreaterThanOrEqual(MIN_FOOTER_GAP - 0.6);
@@ -906,7 +920,9 @@ describe("b2 letter length and photo count", () => {
         expectPhotosOnce(pages, shots);
         expectClean(plan.pages);
         const page = pages[0]!;
-        expect(pageUnfilledRatio(page)).toBeLessThanOrEqual(SPREAD_PAGE_UNFILLED_MAX + 0.005);
+        // Photos are already as large as a true aspect (or a 10% trim) allows.
+        // Leftover space stays empty instead of stretching the 18pt body pitch.
+        expect(pageUnfilledRatio(page)).toBeLessThanOrEqual(0.25);
         for (const line of page.lines) {
           if (line.role === "body") expect(line.size).toBeGreaterThanOrEqual(B2_BODY_SIZE);
         }
@@ -962,6 +978,115 @@ describe("b2 letter length and photo count", () => {
         }
       }
     }
+  });
+});
+
+function expectEvenBodyPitch(pages: PagePlan[], source: string) {
+  const body = pages.flatMap((page, pageIndex) =>
+    page.lines.filter((line) => line.role === "body").map((line) => ({ line, pageIndex })),
+  );
+  const paragraphs = source
+    .replace(/\r\n/g, "\n")
+    .trim()
+    .split(/\n\n/)
+    .map((paragraph) => paragraph.split(/\s+/).filter(Boolean))
+    .filter((words) => words.length > 0);
+  let index = 0;
+  for (const words of paragraphs) {
+    let previous: { line: PagePlan["lines"][number]; pageIndex: number } | null = null;
+    let left = words;
+    while (left.length > 0) {
+      const current = body[index];
+      expect(current, `missing a line for "${left.slice(0, 5).join(" ")}"`).toBeTruthy();
+      const lineWords = current!.line.text.split(/\s+/).filter(Boolean);
+      expect(lineWords.length, current!.line.text).toBeGreaterThan(0);
+      expect(lineWords.join(" ")).toBe(left.slice(0, lineWords.length).join(" "));
+      left = left.slice(lineWords.length);
+      if (
+        previous &&
+        previous.pageIndex === current!.pageIndex &&
+        Math.abs(previous.line.x - current!.line.x) < 0.6
+      ) {
+        const delta = current!.line.y - previous.line.y;
+        const pitch = current!.line.size === B2_BODY_SIZE ? B2_BODY_LEADING : bodyLinePitch(current!.line.size);
+        expect(delta, current!.line.text).toBeCloseTo(pitch, 4);
+      }
+      previous = current!;
+      index += 1;
+    }
+  }
+  expect(index).toBe(body.length);
+}
+
+describe("b2 body line pitch", () => {
+  const portrait = (id: string) => photo(id, 3024, 4032);
+
+  it("keeps the standard pitch in every column, including a 330-word portrait and the length fixtures", () => {
+    const cases: Array<{ source: string; photos: B2Photo[] }> = [
+      { source: countedProse(330, 4), photos: [portrait("p330")] },
+    ];
+    for (const count of [250, 300, 350]) {
+      for (const photos of [1, 3, 6]) {
+        cases.push({
+          source: countedProse(count, photos === 6 ? 4 : 3),
+          photos: Array.from({ length: photos }, (_, index) => portrait(`p-${count}-${photos}-${index}`)),
+        });
+      }
+    }
+    const sweep: Array<{ source: string; photos: B2Photo[] }> = [
+      { source: countedProse(140, 3), photos: [] },
+      { source: "Hello October.", photos: [] },
+      { source: countedProse(24, 1), photos: [photo("ann", 1250, 1100)] },
+      { source: countedProse(70, 2), photos: [photo("phone", 900, 1950)] },
+      { source: countedProse(70, 2), photos: [photo("pano", 3200, 800)] },
+      { source: countedProse(180, 3), photos: [photo("d1", 1400, 1000), photo("d2", 1300, 1000)] },
+      {
+        source: countedProse(36, 2),
+        photos: [photo("s1", 900, 1400), photo("s2", 860, 1300), photo("s3", 940, 1500)],
+      },
+      { source: countedProse(50, 2), photos: [photo("stack", 1380, 1200), photo("stack2", 1000, 900)] },
+      {
+        source: countedProse(90, 2),
+        photos: [photo("h", 1400, 1200), photo("h2", 1200, 900), photo("h3", 1100, 800)],
+      },
+      {
+        source: countedProse(80, 2),
+        photos: [photo("m1", 900, 1500), photo("m2", 1200, 900), photo("m3", 1000, 1000), photo("m4", 1100, 800)],
+      },
+      {
+        source: countedProse(120, 3),
+        photos: [photo("r1", 1200, 900), photo("r2", 1100, 900), photo("r3", 1000, 1000), photo("r4", 1400, 1000)],
+      },
+      {
+        source: countedProse(24, 1),
+        photos: Array.from({ length: 8 }, (_, index) => photo(`gal${index}`, 1000, 1200, [], index)),
+      },
+      { source: countedProse(900, 6), photos: [photo("spread", 1600, 1000)] },
+      { source: countedProse(40, 2), photos: [photo("band", 2200, 1000)] },
+      { source: countedProse(48, 2), photos: [photo("sq", 1400, 1400)] },
+    ];
+    const seen = new Set<string>();
+    for (const item of [...cases, ...sweep]) {
+      const plan = layout([{ body: item.source, photos: item.photos }]);
+      expectClean(plan.pages);
+      const pages = personPages(plan, "Wren");
+      expectEvenBodyPitch(pages, item.source);
+      for (const page of plan.pages) seen.add(page.templateId);
+      if (wordCount(item.source) >= 80) {
+        for (const line of pages.flatMap((page) => page.lines)) {
+          if (line.role === "body") expect(line.size, item.photos.map((shot) => shot.storagePath).join(",")).toBe(B2_BODY_SIZE);
+        }
+      }
+    }
+    const feature = layout([{ body: countedProse(330, 4), photos: [portrait("lead")] }]);
+    const featurePage = personPages(feature, "Wren")[0]!;
+    expect(featurePage.templateId).toBe("portrait-feature");
+    expect(featurePage.photos[0]!.h).toBeGreaterThan(featurePage.photos[0]!.w);
+    const columns = new Set(
+      featurePage.lines.filter((line) => line.role === "body").map((line) => Math.round(line.x)),
+    );
+    expect(columns.size).toBeGreaterThanOrEqual(2);
+    for (const id of B2_TEMPLATE_IDS) expect(seen, id).toContain(id);
   });
 });
 

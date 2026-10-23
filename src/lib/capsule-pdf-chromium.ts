@@ -92,6 +92,7 @@ async function launchCapsuleBrowser(): Promise<Browser> {
   return puppeteer.launch({
     executablePath,
     headless: true,
+    timeout: 60_000,
     args: ["--disable-dev-shm-usage", "--font-render-hinting=none", "--allow-file-access-from-files"],
     defaultViewport: { width: 816, height: 1056, deviceScaleFactor: 1 },
   });
@@ -113,7 +114,17 @@ export async function shutdownCapsuleBrowser(): Promise<void> {
   if (!pending) return;
   try {
     const browser = await pending;
-    await browser.close();
+    const child = browser.process();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    await Promise.race([
+      browser.close(),
+      new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, 4_000);
+      }),
+    ]);
+    if (timer) clearTimeout(timer);
+    // close() can sit on a wedged Chrome. The suite must still finish.
+    if (child && child.exitCode == null && !child.killed) child.kill("SIGKILL");
   } catch {
     // The render already failed or the browser exited.
   }
