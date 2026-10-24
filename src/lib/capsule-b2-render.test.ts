@@ -1,9 +1,42 @@
 import { afterAll, describe, expect, it } from "vitest";
 import sharp from "sharp";
+import { PDFDocument } from "pdf-lib";
 import { buildCapsuleArchive } from "./capsule-archive";
-import { buildCapsulePdfBytes } from "./capsule-pdf";
+import { buildCapsulePdfBytes, planCapsulePdfLayout, type CapsulePdfLayoutEvent } from "./capsule-pdf";
 import { shutdownCapsuleBrowser } from "./capsule-pdf-chromium";
 import { capsulePdfHasProducerMark, pdfEmbeddedFontNames } from "./capsule-pdf-fonts";
+
+function pdfImageFilters(bytes: Uint8Array): { dct: number; flateImages: number; images: number } {
+  const raw = Buffer.from(bytes).toString("latin1");
+  let dct = 0;
+  let flateImages = 0;
+  let images = 0;
+  const re = /<<(?:(?!>>)[\s\S])*?\/Subtype\s*\/Image(?:(?!>>)[\s\S])*?>>/g;
+  for (const match of raw.matchAll(re)) {
+    images += 1;
+    const dict = match[0];
+    if (/\/DCTDecode/.test(dict)) dct += 1;
+    else if (/\/FlateDecode/.test(dict)) flateImages += 1;
+  }
+  return { dct, flateImages, images };
+}
+
+function layoutSignature(events: readonly CapsulePdfLayoutEvent[]): string {
+  return events
+    .map((event) =>
+      [
+        event.kind,
+        event.page,
+        event.x ?? "",
+        event.y,
+        event.width ?? "",
+        event.height ?? "",
+        event.storage_path ?? "",
+        event.text ?? "",
+      ].join(":"),
+    )
+    .join("\n");
+}
 
 async function plate(width: number, height: number, seed: number): Promise<Uint8Array> {
   const raw = Buffer.alloc(width * height * 3);
@@ -113,5 +146,75 @@ describe("b2 chromium render", () => {
     expect(names).toMatch(/capsulesans|liberationsans/);
     expect(names).toMatch(/capsuleemoji|notocoloremoji|noto color emoji|noto-colemoji|colr/);
   });
+
+  it("embeds a 30-photo fixture as JPEG under 3 MB with the same layout", async () => {
+    const aspects = [
+      [1400, 1000],
+      [1000, 1400],
+      [1600, 900],
+      [900, 1600],
+      [1200, 1200],
+      [1500, 800],
+    ] as const;
+    const photos: Array<{ storage_path: string; bytes: Uint8Array }> = [];
+    const letters = [];
+    for (let member = 0; member < 5; member += 1) {
+      const letterPhotos = [];
+      for (let index = 0; index < 6; index += 1) {
+        const [width, height] = aspects[index]!;
+        const storage_path = `fixture/m${member}/p${index}.jpg`;
+        const raw = Buffer.alloc(width * height * 3);
+        const seed = member * 6 + index + 1;
+        for (let y = 0; y < height; y += 1) {
+          for (let x = 0; x < width; x += 1) {
+            const i = (y * width + x) * 3;
+            raw[i] = Math.max(0, Math.min(255, seed * 37 + Math.round((x / width) * 180)));
+            raw[i + 1] = Math.max(0, Math.min(255, 40 + seed * 19 + Math.round((y / height) * 120)));
+            raw[i + 2] = Math.max(0, Math.min(255, 90 + ((seed * 23 + x + y) % 40)));
+          }
+        }
+        photos.push({
+          storage_path,
+          bytes: await sharp(raw, { raw: { width, height, channels: 3 } })
+            .jpeg({ quality: 90, progressive: false })
+            .toBuffer(),
+        });
+        letterPhotos.push({ storage_path, width, height, sort_order: index });
+      }
+      letters.push({
+        preferred_name: `Member ${member + 1}`,
+        body: `Synthetic note ${member + 1} about the porch light and the extra pictures from the walk.`,
+        photos: letterPhotos,
+      });
+    }
+    const archive = buildCapsuleArchive({
+      yearMonth: "2026-10",
+      groupName: "Fixture Group",
+      memberCount: 5,
+      theme: "classic",
+      letters,
+    });
+    const before = planCapsulePdfLayout(archive);
+    const again = planCapsulePdfLayout(archive);
+    expect(layoutSignature(again)).toBe(layoutSignature(before));
+    const layout: CapsulePdfLayoutEvent[] = [];
+    const started = performance.now();
+    const bytes = await buildCapsulePdfBytes({ archive, photos, layout });
+    const ms = Math.round(performance.now() - started);
+    expect(layoutSignature(layout)).toBe(layoutSignature(before));
+    const doc = await PDFDocument.load(bytes);
+    const layoutPages = Math.max(...before.map((event) => event.page));
+    const placed = before.filter((event) => event.kind === "photo").length;
+    const filters = pdfImageFilters(bytes);
+    expect(doc.getPageCount()).toBe(layoutPages);
+    expect(filters.images).toBe(placed);
+    expect(filters.dct).toBe(placed);
+    expect(filters.flateImages).toBe(0);
+    expect(bytes.length).toBeLessThan(3_000_000);
+    expect(capsulePdfHasProducerMark(bytes)).toBe(true);
+    console.log(
+      `B2_FIXTURE bytes=${bytes.length} ms=${ms} pages=${doc.getPageCount()} images=${filters.images} dct=${filters.dct}`,
+    );
+  }, 120_000);
 });
 

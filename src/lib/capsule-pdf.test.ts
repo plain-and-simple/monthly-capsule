@@ -1038,7 +1038,11 @@ describe("pdf layout locks", () => {
     expect(capsulePdfFilename("Regression Kitchen", "2026-10", 1)).toBe("regression-kitchen-2026-10.pdf");
     expect(capsuleTitle("October 2026", 1)).toBe("October 2026");
     expect(capsuleTitle("October 2026", 1)).not.toContain("v2");
-    expect(CAPSULE_PDF_PRODUCER).toBe("monthly-capsule-b2/1");
+    expect(CAPSULE_PDF_PRODUCER).toBe("monthly-capsule-b2/2");
+    const previousProducer = await PDFDocument.create();
+    previousProducer.setProducer("monthly-capsule-b2/1");
+    previousProducer.addPage();
+    expect(capsulePdfNeedsUnicodeRerender(await previousProducer.save())).toBe(true);
     expect(source("./capsule-pdf-store.ts")).toContain("upsert: true");
     expect(source("./capsule-pdf-store.ts")).toContain("capsulePdfNeedsUnicodeRerender");
     expect(source("./capsule-pdf-store.ts")).not.toContain("planForceOpen");

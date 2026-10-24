@@ -106,8 +106,21 @@ function planHasEmoji(plan: DocumentPlan): boolean {
   return false;
 }
 
-export function renderCapsuleHtml(plan: DocumentPlan, images: ReadonlyMap<string, string>): string {
-  const pages = plan.pages.map((page) => renderPage(page, images)).join("");
+export type CapsuleHtmlImage = {
+  src: string;
+  /** Fractions of the photo slot. A cover fill is 0,0,1,1. */
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+};
+
+export function capsulePhotoKey(pageIndex: number, photoIndex: number): string {
+  return `${pageIndex}:${photoIndex}`;
+}
+
+export function renderCapsuleHtml(plan: DocumentPlan, images: ReadonlyMap<string, CapsuleHtmlImage>): string {
+  const pages = plan.pages.map((page, index) => renderPage(page, index, images)).join("");
   return `<!doctype html><html><head><meta charset="utf-8"><style>${css(planHasEmoji(plan))}</style></head><body>${pages}</body></html>`;
 }
 
@@ -131,13 +144,13 @@ function css(emoji: boolean): string {
     `.ff-s{font-family:CapsuleSans${emojiStack},sans-serif}`,
     emoji ? `.em{font-family:CapsuleEmoji,emoji;font-variant-emoji:emoji}` : `.em{font-variant-emoji:emoji}`,
     `.ph{position:absolute;overflow:hidden}`,
-    `.ph img{width:100%;height:100%;display:block}`,
+    `.ph img{position:absolute;display:block}`,
     `.band{position:absolute}`,
     `.rule{position:absolute}`,
   ].join("");
 }
 
-function renderPage(page: PagePlan, images: ReadonlyMap<string, string>): string {
+function renderPage(page: PagePlan, pageIndex: number, images: ReadonlyMap<string, CapsuleHtmlImage>): string {
   const parts: string[] = [
     `<div class="page" data-tpl="${esc(page.templateId)}" data-header="${page.headerStyle}" style="background:${page.paper};color:${page.ink}">`,
   ];
@@ -167,16 +180,21 @@ function renderPage(page: PagePlan, images: ReadonlyMap<string, string>): string
   parts.push(
     `<div class="rule" style="left:${px(32)}px;top:${px(B2_PAGE_H - 30)}px;width:${px(B2_PAGE_W - 64)}px;border-top:1px solid ${page.ink}"></div>`,
   );
-  for (const photo of page.photos) {
-    const src = images.get(photo.storagePath);
-    const fit = photo.fit === "contain" || photo.crop.letterbox ? "contain" : "cover";
-    const pos = `${(photo.crop.posX * 100).toFixed(2)}% ${(photo.crop.posY * 100).toFixed(2)}%`;
+  page.photos.forEach((photo, photoIndex) => {
+    const image = images.get(capsulePhotoKey(pageIndex, photoIndex));
+    const slot = `left:${px(photo.x)}px;top:${px(photo.y)}px;width:${px(photo.w)}px;height:${px(photo.h)}px;background:${page.paper}`;
+    if (!image) {
+      parts.push(`<div class="ph" style="${slot}"></div>`);
+      return;
+    }
+    const left = (image.left * 100).toFixed(2);
+    const top = (image.top * 100).toFixed(2);
+    const width = (image.width * 100).toFixed(2);
+    const height = (image.height * 100).toFixed(2);
     parts.push(
-      `<div class="ph" style="left:${px(photo.x)}px;top:${px(photo.y)}px;width:${px(photo.w)}px;height:${px(photo.h)}px;background:${page.paper}">${
-        src ? `<img alt="" src="${src}" style="object-fit:${fit};object-position:${pos}">` : ""
-      }</div>`,
+      `<div class="ph" style="${slot}"><img alt="" src="${image.src}" style="left:${left}%;top:${top}%;width:${width}%;height:${height}%"></div>`,
     );
-  }
+  });
   for (const line of page.lines) {
     parts.push(
       `<div class="ln ${fontClass(line.font)}" style="left:${px(line.x)}px;top:${px(line.y)}px;width:${px(line.w)}px;height:${px(line.h)}px;font-size:${px(line.size)}px;line-height:${px(line.h)}px;color:${line.color}">${wrapLineHtml(line.text)}</div>`,
