@@ -2,8 +2,9 @@ import { PDFDocument, rgb, type RGB } from "pdf-lib";
 import sharp from "sharp";
 import type { CapsuleArchive } from "@/lib/capsule-archive";
 import { B2_PAGE_H, layoutCapsuleDocument, parseFaceBoxes, type DocumentPlan } from "@/lib/capsule-b2";
-import { renderCapsuleHtml } from "@/lib/capsule-b2-html";
-import { printHtmlToPdf } from "@/lib/capsule-pdf-chromium";
+import { capsulePhotoKey, renderCapsuleHtml, type CapsuleHtmlImage } from "@/lib/capsule-b2-html";
+import { printHtmlToPdf, getCapsuleBrowser } from "@/lib/capsule-pdf-chromium";
+import { preparePlacedPhotoJpeg } from "@/lib/capsule-pdf-image";
 import {
   CAPSULE_PDF_PRODUCER,
   takePdfLine,
@@ -53,6 +54,40 @@ const PAGE_WIDTH = PDF_PAGE_WIDTH;
 const PAGE_HEIGHT = PDF_PAGE_HEIGHT;
 const MARGIN = PDF_MARGIN;
 const CONTENT_WIDTH = PDF_CONTENT_WIDTH;
+
+export type PdfPhotoWarning = {
+  storagePath: string;
+  effectivePpi: number;
+};
+
+export type PdfBuildTiming = {
+  prepMs: number;
+  launchMs: number;
+  renderMs: number;
+  uploadMs: number;
+  warnings: PdfPhotoWarning[];
+};
+
+export function createPdfBuildTiming(): PdfBuildTiming {
+  return { prepMs: 0, launchMs: 0, renderMs: 0, uploadMs: 0, warnings: [] };
+}
+
+/** One line per build: prep, launch, render, upload. Low-res photos are a metric, not a failure. */
+export function logPdfServerTiming(timing: PdfBuildTiming): void {
+  const parts = [
+    `prep;dur=${timing.prepMs.toFixed(1)}`,
+    `launch;dur=${timing.launchMs.toFixed(1)}`,
+    `render;dur=${timing.renderMs.toFixed(1)}`,
+    `upload;dur=${timing.uploadMs.toFixed(1)}`,
+  ];
+  if (timing.warnings.length > 0) parts.push(`lowres;dur=${timing.warnings.length}`);
+  console.info(`server-timing ${parts.join(", ")}`);
+  for (const warning of timing.warnings) {
+    console.warn(
+      `capsule-pdf low-res effective_ppi=${warning.effectivePpi.toFixed(1)} path=${warning.storagePath}`,
+    );
+  }
+}
 
 export type CapsulePdfLayoutEvent = {
   kind: "heading" | "photo" | "text" | "page";
@@ -441,33 +476,65 @@ export async function buildCapsulePdfBytes(input: {
   photos: readonly CapsulePdfPhotoBytes[];
   monthLabelText?: string;
   layout?: CapsulePdfLayoutEvent[];
+  timing?: PdfBuildTiming;
 }): Promise<Uint8Array> {
-  const groupName = groupDisplayName(input.archive.group_name);
-  const title =
-    input.monthLabelText ??
-    capsuleTitle(monthLabel(input.archive.year_month), input.archive.month_version);
-  const plan = planForArchive(input.archive, input.monthLabelText);
-  recordB2Layout(plan, input.layout);
-  const bytesByPath = new Map(input.photos.map((photo) => [photo.storage_path, photo.bytes]));
-  const images = new Map<string, string>();
-  for (const page of plan.pages) {
-    for (const photo of page.photos) {
-      if (images.has(photo.storagePath)) continue;
-      const bytes = bytesByPath.get(photo.storagePath);
-      if (!bytes) continue;
-      const edge = Math.max(photo.w, photo.h) * (96 / 72) * 2;
-      const jpeg = await preparePdfJpegFitted(bytes, edge);
-      if (!jpeg) continue;
-      images.set(photo.storagePath, `data:image/jpeg;base64,${Buffer.from(jpeg).toString("base64")}`);
+  const timing = input.timing ?? createPdfBuildTiming();
+  const report = !input.timing;
+  const launchStart = performance.now();
+  let launchError: unknown;
+  const launchTask = getCapsuleBrowser().then(
+    () => {
+      timing.launchMs = performance.now() - launchStart;
+    },
+    (error: unknown) => {
+      timing.launchMs = performance.now() - launchStart;
+      launchError = error;
+    },
+  );
+  try {
+    const groupName = groupDisplayName(input.archive.group_name);
+    const title =
+      input.monthLabelText ??
+      capsuleTitle(monthLabel(input.archive.year_month), input.archive.month_version);
+    const plan = planForArchive(input.archive, input.monthLabelText);
+    recordB2Layout(plan, input.layout);
+    const prepStart = performance.now();
+    const bytesByPath = new Map(input.photos.map((photo) => [photo.storage_path, photo.bytes]));
+    const images = new Map<string, CapsuleHtmlImage>();
+    for (let pageIndex = 0; pageIndex < plan.pages.length; pageIndex += 1) {
+      const page = plan.pages[pageIndex]!;
+      for (let photoIndex = 0; photoIndex < page.photos.length; photoIndex += 1) {
+        const photo = page.photos[photoIndex]!;
+        const bytes = bytesByPath.get(photo.storagePath);
+        if (!bytes) continue;
+        const prepared = await preparePlacedPhotoJpeg(bytes, photo);
+        if (!prepared) continue;
+        if (prepared.lowRes) {
+          timing.warnings.push({ storagePath: photo.storagePath, effectivePpi: prepared.effectivePpi });
+        }
+        images.set(capsulePhotoKey(pageIndex, photoIndex), {
+          src: `data:image/jpeg;base64,${Buffer.from(prepared.jpeg).toString("base64")}`,
+          left: prepared.left,
+          top: prepared.top,
+          width: prepared.width,
+          height: prepared.height,
+        });
+      }
     }
+    timing.prepMs = performance.now() - prepStart;
+    await launchTask;
+    if (launchError) throw launchError;
+    const printed = await printHtmlToPdf(renderCapsuleHtml(plan, images), timing);
+    const doc = await PDFDocument.load(printed);
+    doc.setProducer(CAPSULE_PDF_PRODUCER);
+    doc.setCreator(CAPSULE_PDF_PRODUCER);
+    doc.setKeywords([CAPSULE_PDF_PRODUCER]);
+    doc.setTitle(`${groupName} — ${title}`);
+    return doc.save({ useObjectStreams: false });
+  } finally {
+    await launchTask;
+    if (report) logPdfServerTiming(timing);
   }
-  const printed = await printHtmlToPdf(renderCapsuleHtml(plan, images));
-  const doc = await PDFDocument.load(printed);
-  doc.setProducer(CAPSULE_PDF_PRODUCER);
-  doc.setCreator(CAPSULE_PDF_PRODUCER);
-  doc.setKeywords([CAPSULE_PDF_PRODUCER]);
-  doc.setTitle(`${groupName} — ${title}`);
-  return doc.save({ useObjectStreams: false });
 }
 
 function takeLine(

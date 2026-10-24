@@ -5,6 +5,8 @@ import {
   capsulePdfFilename,
   capsulePdfNeedsUnicodeRerender,
   capsulePdfStoragePath,
+  createPdfBuildTiming,
+  logPdfServerTiming,
   PDF_CONTENT_TYPE,
   type CapsulePdfPhotoBytes,
 } from "@/lib/capsule-pdf";
@@ -51,24 +53,31 @@ export async function generateAndStoreCapsulePdf(input: {
   version: number;
   archive: CapsuleArchive;
 }): Promise<{ storagePath: string; bytes: Uint8Array; filename: string } | null> {
-  const photos = await loadArchivePhotoBytes(input.archive);
-  const bytes = await buildCapsulePdfBytes({ archive: input.archive, photos });
-  const storagePath = capsulePdfStoragePath(input.groupId, input.yearMonth, input.version);
-  const uploaded = await uploadCapsulePdf(storagePath, bytes);
-  if (!uploaded) return null;
+  const timing = createPdfBuildTiming();
+  try {
+    const photos = await loadArchivePhotoBytes(input.archive);
+    const bytes = await buildCapsulePdfBytes({ archive: input.archive, photos, timing });
+    const storagePath = capsulePdfStoragePath(input.groupId, input.yearMonth, input.version);
+    const uploadStart = performance.now();
+    const uploaded = await uploadCapsulePdf(storagePath, bytes);
+    timing.uploadMs = performance.now() - uploadStart;
+    if (!uploaded) return null;
 
-  const admin = createAdminClient();
-  const { error } = await admin
-    .from("capsules")
-    .update({ pdf_storage_path: storagePath })
-    .eq("id", input.capsuleId);
-  if (error) return null;
+    const admin = createAdminClient();
+    const { error } = await admin
+      .from("capsules")
+      .update({ pdf_storage_path: storagePath })
+      .eq("id", input.capsuleId);
+    if (error) return null;
 
-  return {
-    storagePath,
-    bytes,
-    filename: capsulePdfFilename(input.groupName, input.yearMonth, input.version),
-  };
+    return {
+      storagePath,
+      bytes,
+      filename: capsulePdfFilename(input.groupName, input.yearMonth, input.version),
+    };
+  } finally {
+    logPdfServerTiming(timing);
+  }
 }
 
 export async function loadStoredCapsulePdf(input: {

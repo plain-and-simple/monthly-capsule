@@ -4,6 +4,10 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import type { Browser } from "puppeteer-core";
 
+export type PdfRenderTiming = {
+  renderMs: number;
+};
+
 const CHROMIUM_PACK_URL =
   "https://github.com/Sparticuz/chromium/releases/download/v133.0.0/chromium-v133.0.0-pack.tar";
 
@@ -70,12 +74,30 @@ export function findLocalChrome(): string | null {
   return null;
 }
 
+/** Sparticuz extracts the pack to this file. A warm instance keeps it for the next build. */
+export function chromiumCacheCandidates(): string[] {
+  const fromTmp = join(tmpdir(), "chromium");
+  return fromTmp === "/tmp/chromium" ? ["/tmp/chromium"] : ["/tmp/chromium", fromTmp];
+}
+
+export function findCachedChromiumBinary(candidates = chromiumCacheCandidates()): string | null {
+  for (const candidate of candidates) {
+    try {
+      const stat = statSync(candidate);
+      if (stat.isFile() && stat.size > 0) return candidate;
+    } catch {
+      // Cold start: the pack has not been unpacked yet.
+    }
+  }
+  return null;
+}
+
 async function launchCapsuleBrowser(): Promise<Browser> {
   const puppeteer = await import("puppeteer-core");
   if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME) {
     const chromium = (await import("@sparticuz/chromium-min")).default;
     chromium.setGraphicsMode = false;
-    const executablePath = await chromium.executablePath(CHROMIUM_PACK_URL);
+    const executablePath = findCachedChromiumBinary() ?? (await chromium.executablePath(CHROMIUM_PACK_URL));
     return puppeteer.launch({
       args: chromium.args,
       executablePath,
@@ -131,10 +153,11 @@ export async function shutdownCapsuleBrowser(): Promise<void> {
 }
 
 /** Print one HTML document to a PDF. Reuses the browser after the first launch. */
-export async function printHtmlToPdf(html: string): Promise<Uint8Array> {
+export async function printHtmlToPdf(html: string, timing?: PdfRenderTiming): Promise<Uint8Array> {
   const browser = await getCapsuleBrowser();
   const page = await browser.newPage();
   const dir = mkdtempSync(join(tmpdir(), "capsule-b2-"));
+  const renderStart = performance.now();
   try {
     const file = join(dir, "capsule.html");
     writeFileSync(file, html);
@@ -151,6 +174,7 @@ export async function printHtmlToPdf(html: string): Promise<Uint8Array> {
     });
     return new Uint8Array(pdf);
   } finally {
+    if (timing) timing.renderMs += performance.now() - renderStart;
     await page.close().catch(() => undefined);
     rmSync(dir, { recursive: true, force: true });
   }

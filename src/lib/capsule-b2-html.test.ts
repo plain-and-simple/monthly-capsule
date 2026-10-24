@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { layoutCapsuleDocument } from "./capsule-b2";
-import { renderCapsuleHtml } from "./capsule-b2-html";
+import { capsulePhotoKey, renderCapsuleHtml, type CapsuleHtmlImage } from "./capsule-b2-html";
 
 function layoutWithEmoji() {
   return layoutCapsuleDocument({
@@ -81,5 +81,48 @@ describe("b2 html fonts", () => {
     expect(html).toContain(`left:${ruleX}px`);
     expect(html).toContain(`width:${ruleW}px`);
     expect(html).toContain(`background:${serif.accent}`);
+  });
+
+  it("places each photo at its slot with no CSS crop or scale", () => {
+    const plan = layoutCapsuleDocument({
+      groupName: "Fixture Group",
+      monthLabel: "October 2026",
+      theme: "classic",
+      missedLine: "",
+      contributors: "",
+      letters: [
+        {
+          preferredName: "Member One",
+          body: "A short synthetic note about the porch light.",
+          photos: [{ storagePath: "fixture/one.jpg", width: 1400, height: 900, faces: [], order: 0 }],
+        },
+      ],
+    });
+    const images = new Map<string, CapsuleHtmlImage>();
+    const px = (points: number) => (Math.round(points * (96 / 72) * 100) / 100).toFixed(2);
+    plan.pages.forEach((page, pageIndex) => {
+      page.photos.forEach((_photo, photoIndex) => {
+        images.set(capsulePhotoKey(pageIndex, photoIndex), {
+          src: "data:image/jpeg;base64,QQ==",
+          left: 0,
+          top: 0,
+          width: 1,
+          height: 1,
+        });
+      });
+    });
+    const html = renderCapsuleHtml(plan, images);
+    expect(html).not.toContain("object-fit");
+    expect(html).not.toContain("object-position");
+    const slots = plan.pages.flatMap((page) => page.photos);
+    expect(slots.length).toBeGreaterThan(0);
+    for (const photo of slots) {
+      expect(html).toContain(`left:${px(photo.x)}px`);
+      expect(html).toContain(`top:${px(photo.y)}px`);
+      expect(html).toContain(`width:${px(photo.w)}px`);
+      expect(html).toContain(`height:${px(photo.h)}px`);
+    }
+    expect(html).toContain("width:100.00%");
+    expect(html).toContain("height:100.00%");
   });
 });

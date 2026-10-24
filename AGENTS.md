@@ -30,8 +30,8 @@ People typically write about two paragraphs and put photos on the sides so it re
 
 - Magazine layout B2, not the on-screen newspaper weave. `layoutCapsuleDocument` in `src/lib/capsule-b2.ts` picks one of 14 templates per person from text length and each photo’s count and real aspect ratio, and penalizes repeating the previous page’s template. HTML/CSS is printed to PDF with headless Chromium (`src/lib/capsule-pdf-chromium.ts`): `@sparticuz/chromium-min` on Vercel, Playwright’s Chrome for Testing locally and in CI. No runtime model or LLM.
 - Photos keep their shape. Trim at most 10% per side. Face boxes stored on `photos.faces` (browser `FaceDetector` at upload; empty means an even trim) are never cut. Every submitted photo is placed. The lead slot prefers a photo of a person.
-- Producer `monthly-capsule-b2/1`. An older stored PDF rebuilds once on download. Theme palettes still follow the catalog paper/ink/accent.
-- WebP (and anything else) is re-encoded to JPEG with `sharp` and downscaled toward the print slot (`preparePdfJpeg` / `preparePdfJpegFitted`) so the email attachment stays near 3 MB. Camera originals are never stored.
+- Producer `monthly-capsule-b2/2`. An older stored PDF rebuilds once on download. Theme palettes still follow the catalog paper/ink/accent.
+- Each placed photo is cropped with the template face-aware window, resized to that box at 200 ppi (never above 220, never upscaled), and encoded as a baseline sRGB JPEG before Chromium prints. The page shows that JPEG at the box size with no CSS crop. A source under about 150 ppi is kept whole and logged. Camera originals are never stored. The PDF is still built once and reused.
 - Session-gated download: `/g/[uuid]/capsule/[YYYY-MM]/pdf` (and `/vN/pdf` for later editions).
 - Missing PDFs generate on first download. Email never calls generate-during-send. Compile and the PDF routes need a 60s function budget and 1024 MB.
 
