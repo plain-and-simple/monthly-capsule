@@ -108,4 +108,20 @@ describe("e2e suite locks", () => {
     expect(ready).toContain("GROUP_FIRST_CAPSULE_HEADING");
     expect(ready).toContain("primary.or(write).or(edit).or(resume).or(first)");
   });
+
+  it("keeps the draft-resilience harness off production", () => {
+    const page = readFileSync(
+      resolve(repoRoot, "src/app/e2e-harness/draft-resilience/page.tsx"),
+      "utf8",
+    );
+    const route = readFileSync(resolve(repoRoot, "src/app/api/e2e-harness/draft-save/route.ts"), "utf8");
+    const spec = readFileSync(resolve(repoRoot, "e2e/draft-resilience.spec.ts"), "utf8");
+    expect(page).toContain('process.env.E2E_HARNESS !== "1"');
+    expect(page).toContain("notFound");
+    expect(route).toContain('process.env.E2E_HARNESS !== "1"');
+    expect(spec).toContain("JWT claims validation failed");
+    expect(spec).toContain("SUBMIT_SAVE_RETRYING");
+    expect(spec).toContain("SUBMIT_RESTORED_UNSAVED");
+    expect(spec).not.toMatch(/page\.goto\("\/g\//);
+  });
 });

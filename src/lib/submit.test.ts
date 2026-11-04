@@ -7,6 +7,8 @@ import { isSubmittedThisPeriod, rosterPeriodLabel } from "./roster";
 import { ROSTER_NOT_YET } from "./copy";
 import {
   LETTER_AUTOSAVE_MS,
+  LETTER_FIRST_AUTOSAVE_MS,
+  letterAutosaveDelay,
   POSTGRES_UNIQUE_VIOLATION,
   DROPPED_PHOTO_DELETE_ORDER,
   SUBMIT_COMMIT_ORDER,
@@ -165,6 +167,10 @@ describe("submit action error handling", () => {
     expect(cleanup.indexOf('.from("photos")')).toBeGreaterThan(-1);
     expect(source).toMatch(/catch \(error\)/);
     expect(source).toContain("if (isRedirectError(error)) throw error");
+    expect(source).toContain("isTransientError");
+    expect(source).toContain("ok: false, retry: true");
+    expect(source).toContain("reportOpsAlert");
+    expect(source).not.toMatch(/reportOpsAlert\(\{[^}]*\bbody:/);
   });
 
   it("autosaves letter drafts without touching the photo pipeline", () => {
@@ -190,7 +196,10 @@ describe("letter autosave vs final submit", () => {
   const now = "2026-10-05T12:00:00.000Z";
 
   it("debounces about 2s and skips unchanged, closed, busy, or already-submitted letters", () => {
+    expect(LETTER_FIRST_AUTOSAVE_MS).toBe(1_000);
     expect(LETTER_AUTOSAVE_MS).toBe(2_000);
+    expect(letterAutosaveDelay(false)).toBe(1_000);
+    expect(letterAutosaveDelay(true)).toBe(2_000);
     expect(
       shouldAutosaveLetter({
         closed: false,

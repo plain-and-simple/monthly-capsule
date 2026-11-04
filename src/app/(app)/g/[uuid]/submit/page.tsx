@@ -44,18 +44,20 @@ export default async function SubmitPage({
       : { data: null };
 
   let initialBody = "";
+  let initialUpdatedAt: string | null = null;
   let existingPhotos: Array<{ url: string; storagePath: string; width: number; height: number }> = [];
   let initialStatus: SubmitStatus | null = null;
 
   if (month) {
     const { data: submission } = await admin
       .from("submissions")
-      .select("id, body, status")
+      .select("id, body, status, updated_at")
       .eq("month_id", month.id)
       .eq("member_id", member.id)
       .maybeSingle();
     if (submission) {
       initialBody = submission.body ?? "";
+      initialUpdatedAt = (submission.updated_at as string | null) ?? null;
       initialStatus = ((submission.status as SubmitStatus | null) ?? "submitted") as SubmitStatus;
       const { data: photoRows } = await admin
         .from("photos")
@@ -109,8 +111,11 @@ export default async function SubmitPage({
           ) : (
             <SubmitForm
               groupId={uuid}
+              memberId={member.id}
+              yearMonth={yearMonth ?? ""}
               closed={!open}
               initialBody={initialBody}
+              initialUpdatedAt={initialUpdatedAt}
               existingPhotos={existingPhotos}
               initialStatus={initialStatus}
               title={title}

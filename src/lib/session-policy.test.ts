@@ -308,6 +308,10 @@ describe("open-group hang regression", () => {
     const body = source.slice(start, next === -1 ? undefined : next);
     expect(body).toContain("decideGroupGate");
     expect(body).toContain('decision.action === "manage"');
+    expect(body).toContain("fetchMaybeSingleWithRetry");
+    expect(body).toContain("TransientError");
+    expect(body.indexOf("fetchMaybeSingleWithRetry")).toBeLessThan(body.indexOf("decideGroupGate"));
+    expect(body.indexOf("throw error")).toBeLessThan(body.indexOf("decideGroupGate"));
     expect(source).toContain("export const requireGroupMember = cache(loadGroupMember)");
     expect(source).toContain("export async function requireOwnerUncached");
   });

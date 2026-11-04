@@ -11,7 +11,8 @@ import { compressPhotoForStorage } from "@/lib/photo-ingest";
 import { deleteStoredPhotos } from "@/lib/photos";
 import { resolveSubmitWindow } from "@/lib/cycle-store";
 import { findAccountById } from "@/lib/memberships";
-import { requireGroupMember } from "@/lib/session";
+import { reportOpsAlert } from "@/lib/ops-alert-mail";
+import { getSession, requireGroupMember } from "@/lib/session";
 import { SUBMIT_EMPTY, PHOTOS_MAX } from "@/lib/copy";
 import {
   isUniqueConstraintError,
@@ -25,10 +26,12 @@ import {
   type SubmitStatus,
 } from "@/lib/submit";
 import { createAdminClient } from "@/lib/supabase";
+import { isTransientError, mutationCatchKind } from "@/lib/transient-error";
 
 export type SubmitState = {
   error?: string;
   ok?: boolean;
+  retry?: boolean;
   status?: SubmitStatus;
 } | null;
 
@@ -202,7 +205,15 @@ export async function submitLetter(
       },
     });
 
-    if ("error" in result) return { error: result.error };
+    if ("error" in result) {
+      await reportOpsAlert({
+        route: "submitLetter",
+        code: "submit_failed",
+        groupId,
+        memberId: member.id,
+      });
+      return { error: result.error };
+    }
 
     revalidatePath(`/g/${groupId}`);
     revalidatePath(`/g/${groupId}/submit`);
@@ -210,9 +221,11 @@ export async function submitLetter(
   } catch (error) {
     // redirect() / notFound() use a digest; rethrow those. ensureMonth and
     // photo/storage failures must not become the Next.js digest 500 page.
-    if (isRedirectError(error)) throw error;
-    console.error("submitLetter failed", error);
-    return { error: "Could not save." };
+    // TransientError is a blip — never redirect; the client keeps the text.
+    return mutationFailureState(error, {
+      route: "submitLetter",
+      groupId: String(formData.get("groupId") ?? ""),
+    });
   }
 }
 
@@ -264,7 +277,15 @@ export async function saveLetterDraft(groupId: string, body: string): Promise<Su
         .neq("status", "submitted")
         .select("id")
         .maybeSingle();
-      if (error) return { error: "Could not save." };
+      if (error) {
+        await reportOpsAlert({
+          route: "saveLetterDraft",
+          code: error.code || "save_failed",
+          groupId,
+          memberId: member.id,
+        });
+        return { error: "Could not save." };
+      }
       if (!updated) {
         return { ok: true, status: "submitted" };
       }
@@ -278,6 +299,12 @@ export async function saveLetterDraft(groupId: string, body: string): Promise<Su
         if (isUniqueConstraintError(error)) {
           return { ok: true, status: "submitted" };
         }
+        await reportOpsAlert({
+          route: "saveLetterDraft",
+          code: error.code || "save_failed",
+          groupId,
+          memberId: member.id,
+        });
         return { error: "Could not save." };
       }
     }
@@ -286,8 +313,36 @@ export async function saveLetterDraft(groupId: string, body: string): Promise<Su
     revalidatePath(`/g/${groupId}/submit`);
     return { ok: true, status: "draft" };
   } catch (error) {
-    if (isRedirectError(error)) throw error;
-    console.error("saveLetterDraft failed", error);
-    return { error: "Could not save." };
+    return mutationFailureState(error, {
+      route: "saveLetterDraft",
+      groupId,
+    });
   }
+}
+
+async function mutationFailureState(
+  error: unknown,
+  context: { route: string; groupId: string },
+): Promise<SubmitState> {
+  const kind = mutationCatchKind(error);
+  if (kind === "retry" || isTransientError(error)) {
+    const session = await getSession().catch(() => null);
+    await reportOpsAlert({
+      route: context.route,
+      code: isTransientError(error) ? error.code : "transient",
+      groupId: context.groupId || null,
+      memberId: session?.memberId ?? null,
+    });
+    return { ok: false, retry: true };
+  }
+  if (isRedirectError(error)) throw error;
+  const session = await getSession().catch(() => null);
+  await reportOpsAlert({
+    route: context.route,
+    code: "save_failed",
+    groupId: context.groupId || null,
+    memberId: session?.memberId ?? null,
+  });
+  console.error(`${context.route} failed`, error instanceof Error ? error.name : "Error");
+  return { error: "Could not save." };
 }
