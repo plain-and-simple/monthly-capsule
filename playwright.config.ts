@@ -23,6 +23,7 @@ const localWebServerEnv = {
     process.env.SUPABASE_SERVICE_ROLE_KEY || "e2e-service-role-key",
   CRON_SECRET: process.env.CRON_SECRET || "e2e-local-cron-secret",
   APP_URL: E2E_LOCAL_ORIGIN,
+  E2E_HARNESS: "1",
 };
 
 export default defineConfig({

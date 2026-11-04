@@ -17,15 +17,29 @@ import {
   SUBMIT_IN_AND_EDITABLE,
   SUBMIT_IN_HEADING,
   SUBMIT_PREPARING_PHOTOS,
+  SUBMIT_RESTORED_UNSAVED,
   SUBMIT_SAVED_DRAFT,
   SUBMIT_DRAFT_SAVED,
+  SUBMIT_SAVE_RETRYING,
   SUBMIT_STILL_EDITABLE,
 } from "@/lib/copy";
+import {
+  canRetryDraftSave,
+  draftRetryDelay,
+  isRetryableSave,
+} from "@/lib/draft-retry";
+import {
+  clearLocalLetterDraft,
+  letterDraftStorageKey,
+  readLocalLetterDraft,
+  shouldRestoreLocalDraft,
+  writeLocalLetterDraft,
+} from "@/lib/draft-local";
 import { appendPhotos, photoBatchFit } from "@/lib/photo-files";
 import { detectPhotoFaces } from "@/lib/face-detect";
 import { PHOTO_COMPRESS_FAILED, compressPhotoFile } from "@/lib/photo-compress";
 import {
-  LETTER_AUTOSAVE_MS,
+  letterAutosaveDelay,
   shouldAutosaveLetter,
   submissionHasContent,
   visibleSubmitLetter,
@@ -46,29 +60,43 @@ type StagedPhoto = {
 
 export function SubmitForm({
   groupId,
+  memberId,
+  yearMonth,
   closed,
   initialBody,
+  initialUpdatedAt = null,
   existingPhotos,
   initialStatus,
   title,
   closesPhrase,
   latestCapsuleHref,
+  saveDraft = saveLetterDraft,
 }: {
   groupId: string;
+  memberId: string;
+  yearMonth: string;
   closed: boolean;
   initialBody: string;
+  initialUpdatedAt?: string | null;
   existingPhotos: Array<{ url: string; storagePath: string; width: number; height: number }>;
   initialStatus: SubmitStatus | null;
   title: string;
   closesPhrase: string;
   latestCapsuleHref?: string | null;
+  saveDraft?: (groupId: string, body: string) => Promise<SubmitState>;
 }) {
   const router = useRouter();
+  const draftKey = letterDraftStorageKey({ groupId, yearMonth, memberId });
   const [body, setBody] = useState(initialBody);
   const savedBodyRef = useRef<string | null>(null);
   const lastSavedBodyRef = useRef(initialBody);
   const [draftHint, setDraftHint] = useState(initialStatus === "draft");
   const [autosaveStatus, setAutosaveStatus] = useState<SubmitStatus | null>(null);
+  const [retryHint, setRetryHint] = useState(false);
+  const [restoredNote, setRestoredNote] = useState(false);
+  const firstSaveAttemptedRef = useRef(false);
+  const lastFormDataRef = useRef<FormData | null>(null);
+  const submitRetryRef = useRef(0);
   const [photos, setPhotos] = useState<StagedPhoto[]>(() =>
     existingPhotos.map((photo) => ({
       id: photo.storagePath,
@@ -106,6 +134,32 @@ export function SubmitForm({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- unmount only
   }, []);
 
+  function commitBody(next: string) {
+    setBody(next);
+    if (typeof window !== "undefined") {
+      writeLocalLetterDraft(window.localStorage, draftKey, next, new Date().toISOString());
+    }
+  }
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const local = readLocalLetterDraft(window.localStorage, draftKey);
+    if (
+      !local ||
+      !shouldRestoreLocalDraft({
+        local,
+        serverBody: initialBody,
+        serverUpdatedAt: initialUpdatedAt,
+      })
+    ) {
+      return;
+    }
+    commitBody(local.body);
+    setRestoredNote(true);
+    // One restore on first paint for this group+month+member.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftKey]);
+
   useEffect(() => {
     setBody((current) =>
       visibleSubmitLetter({
@@ -117,10 +171,21 @@ export function SubmitForm({
   }, [initialBody]);
 
   useEffect(() => {
+    if (state?.retry) {
+      setRetryHint(true);
+      return;
+    }
     if (!state?.ok) return;
     lastSavedBodyRef.current = savedBodyRef.current ?? lastSavedBodyRef.current;
     if (state.status === "draft") setDraftHint(true);
-    if (state.status === "submitted") setDraftHint(false);
+    if (state.status === "submitted") {
+      setDraftHint(false);
+      if (typeof window !== "undefined") {
+        clearLocalLetterDraft(window.localStorage, draftKey);
+      }
+    }
+    setRetryHint(false);
+    setRestoredNote(false);
     setBody((current) =>
       visibleSubmitLetter({
         initialBody,
@@ -129,7 +194,7 @@ export function SubmitForm({
         savedBody: savedBodyRef.current ?? current,
       }),
     );
-  }, [state, initialBody]);
+  }, [state, initialBody, draftKey]);
 
   useEffect(() => {
     if (!state?.ok) return;
@@ -137,27 +202,43 @@ export function SubmitForm({
   }, [state, router]);
 
   const persistLetterDraft = useCallback(async () => {
-    const text = bodyRef.current;
-    if (
-      !shouldAutosaveLetter({
-        closed: closedRef.current,
-        submitted: submittedRef.current,
-        explicitBusy: explicitBusyRef.current,
-        currentBody: text,
-        lastSavedBody: lastSavedBodyRef.current,
-      })
-    ) {
-      return;
-    }
+    firstSaveAttemptedRef.current = true;
     const gen = ++autosaveGenRef.current;
-    const result = await saveLetterDraft(groupId, text);
-    if (gen !== autosaveGenRef.current) return;
-    if (explicitBusyRef.current || submittedRef.current) return;
-    if (!result?.ok || result.status !== "draft") return;
-    lastSavedBodyRef.current = text;
-    setAutosaveStatus("draft");
-    setDraftHint(true);
-  }, [groupId]);
+    for (let attempt = 0; ; attempt++) {
+      const text = bodyRef.current;
+      if (
+        !shouldAutosaveLetter({
+          closed: closedRef.current,
+          submitted: submittedRef.current,
+          explicitBusy: explicitBusyRef.current,
+          currentBody: text,
+          lastSavedBody: lastSavedBodyRef.current,
+        })
+      ) {
+        return;
+      }
+      const result = await saveDraft(groupId, text);
+      if (gen !== autosaveGenRef.current) return;
+      if (explicitBusyRef.current || submittedRef.current) return;
+      if (result?.ok && result.status === "draft") {
+        lastSavedBodyRef.current = text;
+        setAutosaveStatus("draft");
+        setDraftHint(true);
+        setRetryHint(false);
+        setRestoredNote(false);
+        return;
+      }
+      if (!isRetryableSave(result) || !canRetryDraftSave(attempt)) {
+        if (isRetryableSave(result)) setRetryHint(true);
+        return;
+      }
+      setRetryHint(true);
+      await new Promise<void>((resolve) => {
+        window.setTimeout(resolve, draftRetryDelay(attempt));
+      });
+      if (gen !== autosaveGenRef.current) return;
+    }
+  }, [groupId, saveDraft]);
 
   useEffect(() => {
     if (
@@ -171,11 +252,28 @@ export function SubmitForm({
     ) {
       return;
     }
+    const delay = letterAutosaveDelay(firstSaveAttemptedRef.current);
     const handle = window.setTimeout(() => {
+      firstSaveAttemptedRef.current = true;
       void persistLetterDraft();
-    }, LETTER_AUTOSAVE_MS);
+    }, delay);
     return () => window.clearTimeout(handle);
   }, [body, busy, closed, persistLetterDraft, submitted]);
+
+  useEffect(() => {
+    if (!state?.retry) {
+      submitRetryRef.current = 0;
+      return;
+    }
+    const data = lastFormDataRef.current;
+    if (!data || !canRetryDraftSave(submitRetryRef.current)) return;
+    const wait = draftRetryDelay(submitRetryRef.current);
+    submitRetryRef.current += 1;
+    const handle = window.setTimeout(() => {
+      void action(data);
+    }, wait);
+    return () => window.clearTimeout(handle);
+  }, [state, action]);
 
   async function onFiles(list: FileList | null) {
     const files = Array.from(list ?? []);
@@ -220,7 +318,13 @@ export function SubmitForm({
       : "Submitting…";
   const draftPendingLabel = preparingPhotos ? SUBMIT_PREPARING_PHOTOS : "Saving…";
 
-  const statusLine = submitted ? null : draftHint || status === "draft" ? SUBMIT_DRAFT_SAVED : null;
+  const statusLine = submitted
+    ? null
+    : retryHint
+      ? SUBMIT_SAVE_RETRYING
+      : draftHint || status === "draft"
+        ? SUBMIT_DRAFT_SAVED
+        : null;
   const toastMessage =
     state?.ok && status === "draft"
       ? SUBMIT_SAVED_DRAFT
@@ -263,7 +367,7 @@ export function SubmitForm({
         markBusy();
         autosaveGenRef.current += 1;
         savedBodyRef.current = posted;
-        setBody(posted);
+        commitBody(posted);
         formData.set("groupId", groupId);
         formData.set("body", posted);
         if (photosTouched) formData.set("photos_touched", "1");
@@ -278,6 +382,7 @@ export function SubmitForm({
           newFaces.push(photo.faces ?? []);
         });
         if (newFaces.length > 0) formData.set("photo_faces", JSON.stringify(newFaces));
+        lastFormDataRef.current = formData;
         return action(formData);
       }}
     >
@@ -302,6 +407,11 @@ export function SubmitForm({
             Open until {closesPhrase}. A draft stays hidden from the capsule until you submit.
           </p>
         )}
+        {restoredNote && !submitted ? (
+          <p className="muted small" role="status">
+            {SUBMIT_RESTORED_UNSAVED}
+          </p>
+        ) : null}
       </div>
 
       <label className="field">
@@ -310,7 +420,7 @@ export function SubmitForm({
           className="textarea"
           name="body"
           value={body}
-          onChange={(event) => setBody(event.target.value)}
+          onChange={(event) => commitBody(event.target.value)}
           onBlur={() => {
             void persistLetterDraft();
           }}

@@ -7,8 +7,11 @@ import { membershipIsActive } from "@/lib/account";
 import { ACCOUNT_COOKIE, SESSION_COOKIE } from "@/lib/constants";
 import { cookieSecret } from "@/lib/env";
 import { sessionCookieOptions } from "@/lib/hosting";
+import { fetchMaybeSingleWithRetry } from "@/lib/membership-lookup";
+import { reportOpsAlert } from "@/lib/ops-alert-mail";
 import { decideAccountSession, decideGroupGate } from "@/lib/session-policy";
 import { createAdminClient } from "@/lib/supabase";
+import { isTransientError } from "@/lib/transient-error";
 import type { Account, AccountSessionPayload, Group, Member, SessionPayload } from "@/lib/types";
 
 export async function mintSessionToken(payload: SessionPayload): Promise<string> {
@@ -65,12 +68,35 @@ async function loadGroupMember(groupId: string): Promise<{
   let group: Group | null = null;
   if (lookup && session) {
     const admin = createAdminClient();
-    const [{ data: memberRow }, { data: groupRow }] = await Promise.all([
-      admin.from("members").select("*").eq("id", session.memberId).maybeSingle(),
-      admin.from("groups").select("*").eq("id", groupId).maybeSingle(),
-    ]);
-    member = (memberRow as Member | null) ?? null;
-    group = (groupRow as Group | null) ?? null;
+    try {
+      const [memberRow, groupRow] = await Promise.all([
+        fetchMaybeSingleWithRetry(async () => {
+          const { data, error } = await admin
+            .from("members")
+            .select("*")
+            .eq("id", session.memberId)
+            .maybeSingle();
+          return { data, error };
+        }),
+        fetchMaybeSingleWithRetry(async () => {
+          const { data, error } = await admin.from("groups").select("*").eq("id", groupId).maybeSingle();
+          return { data, error };
+        }),
+      ]);
+      member = (memberRow as Member | null) ?? null;
+      group = (groupRow as Group | null) ?? null;
+    } catch (error) {
+      if (isTransientError(error)) {
+        await reportOpsAlert({
+          route: "loadGroupMember",
+          code: error.code,
+          groupId,
+          memberId: session.memberId,
+        });
+        throw error;
+      }
+      throw error;
+    }
     if (member && !membershipIsActive(member)) {
       member = null;
     }

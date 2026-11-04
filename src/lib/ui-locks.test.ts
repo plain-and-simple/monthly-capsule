@@ -12,10 +12,14 @@ describe("submit model A UI", () => {
     expect(source).toContain("SUBMIT_AND_SEND");
     expect(source).toContain("SUBMIT_DRAFT_SAVED");
     expect(source).toContain("saveLetterDraft");
-    expect(source).toContain("LETTER_AUTOSAVE_MS");
+    expect(source).toContain("letterAutosaveDelay");
     expect(source).toContain("shouldAutosaveLetter");
     expect(source).toContain("onBlur");
     expect(source).toContain("persistLetterDraft");
+    expect(source).toContain("writeLocalLetterDraft");
+    expect(source).toContain("SUBMIT_SAVE_RETRYING");
+    expect(source).toContain("SUBMIT_RESTORED_UNSAVED");
+    expect(source).toContain("isRetryableSave");
     expect(source).not.toMatch(/saveLetterDraft\([^)]*photo/i);
     expect(source).toContain('value="draft"');
     expect(source).toContain('value="submit"');

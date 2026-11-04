@@ -42,7 +42,7 @@ People typically write about two paragraphs and put photos on the sides so it re
 - Hint: `{n} of 6 photos.` At 6: hide Add, append “Remove one to add another.”
 - Overflow uses `role="alert"` and `PHOTOS_MAX` from `src/lib/copy.ts`.
 - Server rejects `keep_path` + new files over 6 with the same copy.
-- Letter text autosaves as a draft while the window is open (debounce ~2s and blur). Photos never autosave. Draft ≠ submitted.
+- Letter text autosaves as a draft while the window is open (first save ~1s, then debounce ~2s and blur). A browser copy restores unsaved text after reload. Transient save failures keep the text and retry; they must not redirect. Photos never autosave. Draft ≠ submitted.
 - Code: `src/components/submit-form.tsx`, `src/lib/photo-files.ts`, `src/actions/submit.ts`.
 
 ## Copy and UI

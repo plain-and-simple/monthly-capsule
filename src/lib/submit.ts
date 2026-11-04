@@ -5,7 +5,12 @@ export type SubmitStatus = (typeof SUBMIT_STATUSES)[number];
 
 export const SUBMIT_INTENT_DRAFT = "draft";
 export const SUBMIT_INTENT_SUBMIT = "submit";
+export const LETTER_FIRST_AUTOSAVE_MS = 1_000;
 export const LETTER_AUTOSAVE_MS = 2_000;
+
+export function letterAutosaveDelay(hasAttemptedSave: boolean): number {
+  return hasAttemptedSave ? LETTER_AUTOSAVE_MS : LETTER_FIRST_AUTOSAVE_MS;
+}
 
 export function parseSubmitIntent(value: FormDataEntryValue | null | undefined): SubmitStatus {
   return String(value ?? "") === SUBMIT_INTENT_DRAFT ? "draft" : "submitted";

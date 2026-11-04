@@ -42,6 +42,12 @@ export function resendFromEmail(): string {
   return process.env.RESEND_FROM_EMAIL || DEFAULT_RESEND_FROM;
 }
 
+/** Ops inbox for save/submit blips. Unset → log and skip. Never required. */
+export function alertEmail(): string | null {
+  const value = process.env.ALERT_EMAIL?.trim();
+  return value || null;
+}
+
 export function createGroupCode(): string {
   return resolveCreateGroupCode(process.env.CREATE_GROUP_CODE);
 }

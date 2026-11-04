@@ -71,6 +71,8 @@ import {
   SUBMIT_IN_HEADING,
   SUBMIT_SAVED_DRAFT,
   SUBMIT_DRAFT_SAVED,
+  SUBMIT_SAVE_RETRYING,
+  SUBMIT_RESTORED_UNSAVED,
   SUBMIT_STILL_EDITABLE,
   SUBMIT_SUBMITTED,
   PHOTOS_TYPE,
@@ -140,6 +142,8 @@ describe("create success hero smoke", () => {
     expect(TOAST_SUCCESS).toBe("Success");
     expect(SUBMIT_SAVED_DRAFT).toBe("Saved as draft");
     expect(SUBMIT_DRAFT_SAVED).toBe("Draft saved");
+    expect(SUBMIT_SAVE_RETRYING).toBe("Couldn't save, retrying…");
+    expect(SUBMIT_RESTORED_UNSAVED).toBe("Restored your unsaved text");
     expect(SUBMIT_SUBMITTED).toBe("Submitted");
     expect(SUBMIT_IN_HEADING).toBe("Your letter is in.");
     expect(SUBMIT_STILL_EDITABLE).toBe("You can keep editing until the window closes.");
@@ -226,6 +230,8 @@ describe("join and manage labels", () => {
     expect(SUBMIT_AND_SEND).toBe("Save and submit");
     expect(SUBMIT_PREPARING_PHOTOS).toBe("Preparing photos…");
     expect(SUBMIT_DRAFT_SAVED).toBe("Draft saved");
+    expect(SUBMIT_SAVE_RETRYING).toBe("Couldn't save, retrying…");
+    expect(SUBMIT_RESTORED_UNSAVED).toBe("Restored your unsaved text");
     expect(SUBMIT_IN_AND_EDITABLE).toMatch(/keep editing/i);
   });
 
