@@ -11,6 +11,12 @@ import {
   CYCLE_SECTION,
   CYCLE_SEND,
   CYCLE_SEND_AGAIN,
+  OPEN_EMAIL_CHECKBOX,
+  OPEN_EMAIL_NOTE,
+  OPEN_EMAIL_SUBJECT,
+  REMINDER_EMAIL_CHECKBOX,
+  REMINDER_EMAIL_NOTE,
+  REMINDER_EMAIL_SUBJECT,
   CAPSULE_THEME_SAVE,
   CAPSULE_THEME_SECTION,
   CREATE_SCHEDULE_HINT,
@@ -243,6 +249,14 @@ describe("join and manage labels", () => {
     expect(CYCLE_SEND_AGAIN).toBe("Send again");
     expect(CYCLE_NOT_NOW).toBe("Not now");
     expect(CYCLE_EMAIL_LATER).toBe("Email group");
+    expect(OPEN_EMAIL_SUBJECT).toBe("Submissions are open");
+    expect(OPEN_EMAIL_NOTE).toBe("Submissions open now, so the open email hasn't gone out");
+    expect(OPEN_EMAIL_CHECKBOX).toBe("Email the group that it's open");
+    expect(REMINDER_EMAIL_SUBJECT).toBe("Your letter is due soon");
+    expect(REMINDER_EMAIL_NOTE).toBe("The reminder hasn't gone out");
+    expect(REMINDER_EMAIL_CHECKBOX).toBe(
+      "Send the reminder now to members who haven't submitted.",
+    );
     expect(CAPSULE_THEME_SECTION).toBe("Capsule theme");
     expect(CAPSULE_THEME_SAVE).toBe("Save theme");
   });
