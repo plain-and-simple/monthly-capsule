@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { RegenPinForm } from "@/components/regen-pin-form";
 import { SettingsForm } from "@/components/settings-form";
+import { closedYearMonthsFromRows, listGroupMonthRows } from "@/lib/compile";
 import { groupDisplayName } from "@/lib/copy";
+import { loadCycleEmailSentMap } from "@/lib/cycle-mail";
 import { appUrl } from "@/lib/env";
 import { invitePayload } from "@/lib/manage";
 import { requireOwner } from "@/lib/session";
@@ -12,6 +14,9 @@ export default async function SettingsPage({ params }: { params: Promise<{ uuid:
   const { uuid } = await params;
   const { group } = await requireOwner(uuid);
   const name = groupDisplayName(group.name);
+  const months = await listGroupMonthRows(group.id);
+  const closedYearMonths = closedYearMonthsFromRows(months);
+  const cycleEmailSent = await loadCycleEmailSentMap(group.id);
 
   return (
     <main className="main">
@@ -25,7 +30,11 @@ export default async function SettingsPage({ params }: { params: Promise<{ uuid:
             <p className="muted small">Only you can see this page.</p>
           </div>
 
-          <SettingsForm group={group} />
+          <SettingsForm
+            group={group}
+            closedYearMonths={closedYearMonths}
+            cycleEmailSent={cycleEmailSent}
+          />
           <hr className="rule" />
           <RegenPinForm
             groupId={group.id}
