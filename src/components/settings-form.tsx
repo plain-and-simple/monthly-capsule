@@ -5,11 +5,32 @@ import { updateGroupName, updateSchedule, type SettingsState } from "@/actions/s
 import { DaySelect } from "@/components/day-select";
 import { PendingSubmitButton, useInstantBusy } from "@/components/pending-submit-button";
 import { ThemeForm } from "@/components/theme-form";
-import { CREATE_SCHEDULE_HINT } from "@/lib/copy";
+import {
+  CREATE_SCHEDULE_HINT,
+  OPEN_EMAIL_CHECKBOX,
+  OPEN_EMAIL_NOTE,
+  REMINDER_EMAIL_CHECKBOX,
+  REMINDER_EMAIL_NOTE,
+} from "@/lib/copy";
+import {
+  SEND_CYCLE_EMAIL_VALUE,
+  SEND_OPEN_EMAIL_FIELD,
+  SEND_REMINDER_EMAIL_FIELD,
+  scheduleCatchUpPrompts,
+  type CycleEmailSentMap,
+} from "@/lib/cycle-email";
 import { scheduleFormDays, type ScheduleDays } from "@/lib/schedule";
 import type { Group } from "@/lib/types";
 
-export function SettingsForm({ group }: { group: Group }) {
+export function SettingsForm({
+  group,
+  closedYearMonths,
+  cycleEmailSent,
+}: {
+  group: Group;
+  closedYearMonths: readonly string[];
+  cycleEmailSent: CycleEmailSentMap;
+}) {
   const [scheduleState, scheduleAction, schedulePending] = useActionState<SettingsState, FormData>(
     updateSchedule,
     null,
@@ -22,6 +43,16 @@ export function SettingsForm({ group }: { group: Group }) {
   const { busy: nameBusy, markBusy: markNameBusy } = useInstantBusy(namePending);
   const [draft, setDraft] = useState<ScheduleDays | null>(null);
   const days = scheduleFormDays(group, scheduleState, draft);
+  const prompts = scheduleCatchUpPrompts({
+    group: {
+      ...group,
+      submit_start_day: days.submit_start_day,
+      submit_end_day: days.submit_end_day,
+      email_day: days.email_day,
+    },
+    closedYearMonths,
+    sent: cycleEmailSent,
+  });
 
   function setDay(field: keyof ScheduleDays, value: string) {
     setDraft({ ...days, [field]: Number(value) });
@@ -71,8 +102,38 @@ export function SettingsForm({ group }: { group: Group }) {
             />
           </div>
           <p className="formnote">{CREATE_SCHEDULE_HINT}</p>
+          {prompts.promptOpen ? (
+            <div className="stack stack--tight" key={`open-${days.submit_start_day}-${days.submit_end_day}`}>
+              <p className="formnote">{OPEN_EMAIL_NOTE}</p>
+              <label className="check">
+                <input
+                  type="checkbox"
+                  name={SEND_OPEN_EMAIL_FIELD}
+                  value={SEND_CYCLE_EMAIL_VALUE}
+                />
+                <span>{OPEN_EMAIL_CHECKBOX}</span>
+              </label>
+            </div>
+          ) : null}
+          {prompts.promptReminder ? (
+            <div
+              className="stack stack--tight"
+              key={`reminder-${days.submit_start_day}-${days.submit_end_day}`}
+            >
+              <p className="formnote">{REMINDER_EMAIL_NOTE}</p>
+              <label className="check">
+                <input
+                  type="checkbox"
+                  name={SEND_REMINDER_EMAIL_FIELD}
+                  value={SEND_CYCLE_EMAIL_VALUE}
+                />
+                <span>{REMINDER_EMAIL_CHECKBOX}</span>
+              </label>
+            </div>
+          ) : null}
           {scheduleState?.error ? <p className="err">{scheduleState.error}</p> : null}
           {scheduleState?.ok ? <p className="small">Saved.</p> : null}
+          {scheduleState?.notice ? <p className="formnote">{scheduleState.notice}</p> : null}
           <div>
             <PendingSubmitButton
               className="btn btn--secondary"

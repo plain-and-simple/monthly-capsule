@@ -281,6 +281,13 @@ describe("previous-month open picker", () => {
     expect(settings).not.toMatch(/name="submit_end_day"[\s\S]{0,80}variant="open"/);
     expect(settings).not.toMatch(/name="email_day"[\s\S]{0,80}variant="open"/);
     expect(settings).toContain("CREATE_SCHEDULE_HINT");
+    expect(settings).toContain("OPEN_EMAIL_NOTE");
+    expect(settings).toContain("OPEN_EMAIL_CHECKBOX");
+    expect(settings).toContain("REMINDER_EMAIL_NOTE");
+    expect(settings).toContain("REMINDER_EMAIL_CHECKBOX");
+    expect(settings).toContain("SEND_OPEN_EMAIL_FIELD");
+    expect(settings).toContain("SEND_REMINDER_EMAIL_FIELD");
+    expect(settings).toContain("scheduleCatchUpPrompts");
     expect(settings).not.toContain("Days of the month. America/Chicago.</p>");
 
     expect(create).toContain('name="submit_start_day"');
@@ -298,5 +305,9 @@ describe("previous-month open picker", () => {
     expect(action).not.toMatch(/await requireOwner\(groupId\)/);
     expect(action).toContain("ok: true");
     expect(action).toContain("submit_start_day: data.submit_start_day");
+    expect(action).toContain("parseScheduleCatchUpForm");
+    expect(action).toContain("shouldSendCatchUpNow");
+    expect(action).toContain('sendGroupCycleEmail(updated, "open"');
+    expect(action).toContain('sendGroupCycleEmail(updated, "reminder"');
   });
 });
