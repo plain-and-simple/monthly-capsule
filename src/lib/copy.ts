@@ -136,6 +136,16 @@ export const CYCLE_SEND_AGAIN_HINT = "Sends again from Capsule with the locked s
 export const CYCLE_NOT_NOW = "Not now";
 export const CYCLE_EMAIL_LATER = "Email group";
 
+export const OPEN_EMAIL_SUBJECT = "Submissions are open";
+export const OPEN_EMAIL_NOTE =
+  "Submissions open now, so the open email hasn't gone out";
+export const OPEN_EMAIL_CHECKBOX = "Email the group that it's open";
+export const REMINDER_EMAIL_SUBJECT = "Your letter is due soon";
+export const REMINDER_EMAIL_NOTE = "The reminder hasn't gone out";
+export const REMINDER_EMAIL_CHECKBOX =
+  "Send the reminder now to members who haven't submitted.";
+export const CYCLE_EMAIL_BUTTON = GROUP_PRIMARY_SUBMIT;
+
 export const CAPSULE_THEME_SECTION = "Capsule theme";
 export const CAPSULE_THEME_HINT =
   "Used the next time a capsule is made. Past months stay as they were.";

@@ -47,3 +47,5 @@ export const RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
 export const DEFAULT_SUBMIT_START_DAY = 1;
 export const DEFAULT_SUBMIT_END_DAY = 8;
 export const DEFAULT_EMAIL_DAY = 9;
+/** Reminder email goes out this many Chicago calendar days before submit_end_day. */
+export const CYCLE_REMINDER_LEAD_DAYS = 2;

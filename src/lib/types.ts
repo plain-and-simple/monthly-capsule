@@ -83,3 +83,12 @@ export type SessionPayload = {
   memberId: string;
   groupId: string;
 };
+
+export type CycleEmailSend = {
+  id: string;
+  group_id: string;
+  year_month: string;
+  member_id: string;
+  open_email_sent_at: string | null;
+  reminder_email_sent_at: string | null;
+};
