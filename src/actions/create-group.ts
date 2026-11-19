@@ -6,12 +6,13 @@ import {
   DEFAULT_SUBMIT_END_DAY,
   DEFAULT_SUBMIT_START_DAY,
 } from "@/lib/constants";
-import { appUrl, createGroupCode } from "@/lib/env";
+import { appUrl } from "@/lib/env";
 import { createAccount, linkMembership } from "@/lib/memberships";
 import { generatePin, hashPin } from "@/lib/pin";
 import { validateSchedule } from "@/lib/schedule";
+import { accountSessionVersion } from "@/lib/session-policy";
 import { getAccountSession, setAccountSession, setSession } from "@/lib/session";
-import { rejectInvalidStudioCode } from "@/lib/studio-code";
+import { rejectStudioAttempt } from "@/lib/studio-gate";
 import { createAdminClient } from "@/lib/supabase";
 import type { Account } from "@/lib/types";
 
@@ -21,10 +22,7 @@ export type CreateState =
   | null;
 
 export async function createGroup(_prev: CreateState, formData: FormData): Promise<CreateState> {
-  const codeError = rejectInvalidStudioCode(
-    String(formData.get("studio_code") ?? ""),
-    createGroupCode(),
-  );
+  const codeError = await rejectStudioAttempt(String(formData.get("studio_code") ?? ""));
   if (codeError) {
     return codeError;
   }
@@ -109,8 +107,9 @@ export async function createGroup(_prev: CreateState, formData: FormData): Promi
       return { ok: false, error: "Could not create owner." };
     }
 
-    await setAccountSession({ accountId: account.id });
-    await setSession({ memberId: member.id, groupId: group.id });
+    const sessionVersion = accountSessionVersion(account);
+    await setAccountSession({ accountId: account.id, sessionVersion });
+    await setSession({ memberId: member.id, groupId: group.id, sessionVersion });
 
     return {
       ok: true,

@@ -119,3 +119,29 @@ export async function purgeOldPasswordResetAttempts(): Promise<void> {
   const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
   await admin.from("password_reset_attempts").delete().lt("attempted_at", cutoff);
 }
+
+export async function studioAttemptsBlocked(ip: string): Promise<boolean> {
+  const admin = createAdminClient();
+  const since = new Date(Date.now() - LOGIN_ATTEMPT_WINDOW_MS).toISOString();
+  const { count, error } = await admin
+    .from("studio_attempts")
+    .select("id", { count: "exact", head: true })
+    .eq("ip_hash", hashIp(ip))
+    .gte("attempted_at", since);
+
+  if (error) {
+    throw new Error("Could not check studio rate limit");
+  }
+  return (count ?? 0) >= LOGIN_ATTEMPT_MAX;
+}
+
+export async function recordStudioAttempt(ip: string): Promise<void> {
+  const admin = createAdminClient();
+  await admin.from("studio_attempts").insert({ ip_hash: hashIp(ip) });
+}
+
+export async function purgeOldStudioAttempts(): Promise<void> {
+  const admin = createAdminClient();
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  await admin.from("studio_attempts").delete().lt("attempted_at", cutoff);
+}

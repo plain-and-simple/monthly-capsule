@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  clearAllLetterDrafts,
   letterDraftStorageKey,
   parseLocalLetterDraft,
   serializeLocalLetterDraft,
@@ -52,6 +53,27 @@ describe("local letter draft", () => {
         serverUpdatedAt: null,
       }),
     ).toBe(false);
+  });
+
+  it("clears every letter draft and leaves other keys", () => {
+    const store = new Map<string, string>([
+      ["mc-letter-draft:g:2026-10:m", "a"],
+      ["mc-letter-draft:g:2026-11:m", "b"],
+      ["other", "keep"],
+    ]);
+    const storage = {
+      get length() {
+        return store.size;
+      },
+      key(index: number) {
+        return [...store.keys()][index] ?? null;
+      },
+      removeItem(key: string) {
+        store.delete(key);
+      },
+    };
+    clearAllLetterDrafts(storage);
+    expect([...store.keys()]).toEqual(["other"]);
   });
 
   it("round-trips without extra fields", () => {

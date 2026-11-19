@@ -4,6 +4,8 @@ import { capsuleEmailHtml, capsuleEmailSubject, capsuleEmailText } from "@/lib/c
 import { parseCapsuleArchive } from "@/lib/capsule-archive";
 import { PDF_CONTENT_TYPE } from "@/lib/capsule-pdf";
 import { loadStoredCapsulePdf } from "@/lib/capsule-pdf-store";
+import { claimCapsuleDelivery, releaseCapsuleDelivery } from "@/lib/email-delivery";
+import { capsuleForceSendKey, capsuleSendKey, maskEmail } from "@/lib/email-send";
 import { appUrl, resendApiKey, resendFromEmail } from "@/lib/env";
 import {
   capsuleFromHeader,
@@ -341,40 +343,70 @@ async function sendCapsuleEmail(
   let accepted = 0;
   let error: string | null = null;
   for (const to of resolved.emails) {
+    const masked = maskEmail(to);
+    let claimed = true;
+    if (!opts.forceResend) {
+      try {
+        claimed = await claimCapsuleDelivery(capsule.id, to);
+      } catch (caught) {
+        error = "Could not record the send.";
+        console.error("capsule email claim failed", {
+          capsuleId: capsule.id,
+          to: masked,
+          error: caught instanceof Error ? caught.message : caught,
+        });
+        continue;
+      }
+      if (!claimed) {
+        accepted += 1;
+        continue;
+      }
+    }
     try {
       const result = await withTimeout(
-        resend.emails.send({
-          from: from.from,
-          to: [to],
-          subject,
-          html,
-          text,
-          ...(pdfAttachment
-            ? {
-                attachments: [
-                  {
-                    filename: pdfAttachment.filename,
-                    content: pdfAttachment.content,
-                    contentType: pdfAttachment.contentType,
-                  },
-                ],
-              }
-            : {}),
-        }),
+        resend.emails.send(
+          {
+            from: from.from,
+            to: [to],
+            subject,
+            html,
+            text,
+            ...(pdfAttachment
+              ? {
+                  attachments: [
+                    {
+                      filename: pdfAttachment.filename,
+                      content: pdfAttachment.content,
+                      contentType: pdfAttachment.contentType,
+                    },
+                  ],
+                }
+              : {}),
+          },
+          {
+            idempotencyKey: opts.forceResend
+              ? capsuleForceSendKey(capsule.id, to, new Date().toISOString())
+              : capsuleSendKey(capsule.id, to),
+          },
+        ),
         RESEND_SEND_TIMEOUT_MS,
         RESEND_TIMEOUT_MESSAGE,
       );
       const interpreted = resendSendAccepted(result);
       if (interpreted.ok) {
         accepted += 1;
-        console.info("capsule email accepted", { capsuleId: capsule.id, to, id: interpreted.id });
+        console.info("capsule email accepted", { capsuleId: capsule.id, to: masked, id: interpreted.id });
       } else {
         error = interpreted.message;
-        console.error("capsule email resend rejected", { capsuleId: capsule.id, to, error });
+        if (claimed && !opts.forceResend) await releaseCapsuleDelivery(capsule.id, to);
+        console.error("capsule email resend rejected", { capsuleId: capsule.id, to: masked, error });
       }
     } catch (caught) {
       error = caught instanceof Error ? caught.message : "Resend failed";
-      console.error("capsule email resend rejected", { capsuleId: capsule.id, to, error });
+      if (claimed && !opts.forceResend && error !== RESEND_TIMEOUT_MESSAGE) {
+        await releaseCapsuleDelivery(capsule.id, to);
+      }
+      console.error("capsule email resend rejected", { capsuleId: capsule.id, to: masked, error });
     }
   }
 

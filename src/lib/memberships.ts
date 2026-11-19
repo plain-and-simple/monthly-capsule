@@ -1,5 +1,6 @@
 import "server-only";
 import { ACCOUNT_EXISTS, accountIsBanned } from "@/lib/account";
+import { accountSessionVersion } from "@/lib/session-policy";
 import { hashPassword, verifyPassword } from "@/lib/password";
 import { createAdminClient } from "@/lib/supabase";
 import type { Account, Group, Member } from "@/lib/types";
@@ -103,7 +104,10 @@ export async function banAccountByEmail(email: string): Promise<Account | { erro
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("accounts")
-    .update({ banned_at: new Date().toISOString() })
+    .update({
+      banned_at: new Date().toISOString(),
+      session_version: accountSessionVersion(account) + 1,
+    })
     .eq("id", account.id)
     .is("banned_at", null)
     .select("*")
@@ -119,11 +123,17 @@ export async function updateAccountPassword(
   accountId: string,
   passwordHash: string,
 ): Promise<Account | null> {
+  const current = await findAccountById(accountId);
+  if (!current) return null;
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("accounts")
-    .update({ password_hash: passwordHash })
+    .update({
+      password_hash: passwordHash,
+      session_version: accountSessionVersion(current) + 1,
+    })
     .eq("id", accountId)
+    .eq("session_version", accountSessionVersion(current))
     .select("*")
     .maybeSingle();
   if (error || !data) {

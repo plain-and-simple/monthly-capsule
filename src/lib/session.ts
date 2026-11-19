@@ -3,13 +3,21 @@ import { jwtVerify, SignJWT } from "jose";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { cache } from "react";
-import { membershipIsActive } from "@/lib/account";
+import { accountIsBanned, membershipIsActive } from "@/lib/account";
 import { ACCOUNT_COOKIE, SESSION_COOKIE } from "@/lib/constants";
 import { cookieSecret } from "@/lib/env";
 import { sessionCookieOptions } from "@/lib/hosting";
 import { fetchMaybeSingleWithRetry } from "@/lib/membership-lookup";
+import { findAccountById } from "@/lib/memberships";
 import { reportOpsAlert } from "@/lib/ops-alert-mail";
-import { decideAccountSession, decideGroupGate } from "@/lib/session-policy";
+import {
+  accountAccessAllowed,
+  accountSessionVersion,
+  CLEAR_ACCOUNT_SESSION_PATH,
+  decideAccountSession,
+  decideGroupGate,
+  readTokenSessionVersion,
+} from "@/lib/session-policy";
 import { createAdminClient } from "@/lib/supabase";
 import { isTransientError } from "@/lib/transient-error";
 import type { Account, AccountSessionPayload, Group, Member, SessionPayload } from "@/lib/types";
@@ -18,6 +26,7 @@ export async function mintSessionToken(payload: SessionPayload): Promise<string>
   return new SignJWT({
     memberId: payload.memberId,
     groupId: payload.groupId,
+    ...(typeof payload.sessionVersion === "number" ? { sessionVersion: payload.sessionVersion } : {}),
   })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
@@ -43,7 +52,7 @@ export async function getSession(): Promise<SessionPayload | null> {
     if (typeof memberId !== "string" || typeof groupId !== "string") {
       return null;
     }
-    return { memberId, groupId };
+    return { memberId, groupId, sessionVersion: readTokenSessionVersion(payload.sessionVersion) };
   } catch {
     return null;
   }
@@ -100,6 +109,19 @@ async function loadGroupMember(groupId: string): Promise<{
     if (member && !membershipIsActive(member)) {
       member = null;
     }
+    if (member?.account_id && session) {
+      const account = await findAccountById(member.account_id);
+      const allowed =
+        account != null &&
+        accountAccessAllowed({
+          banned: accountIsBanned(account),
+          tokenVersion: session.sessionVersion,
+          accountVersion: accountSessionVersion(account),
+        });
+      if (!allowed) {
+        redirect(CLEAR_ACCOUNT_SESSION_PATH);
+      }
+    }
   }
 
   const decision = decideGroupGate({
@@ -138,7 +160,10 @@ export async function requireOwnerUncached(groupId: string) {
 }
 
 export async function mintAccountToken(payload: AccountSessionPayload): Promise<string> {
-  return new SignJWT({ accountId: payload.accountId })
+  return new SignJWT({
+    accountId: payload.accountId,
+    ...(typeof payload.sessionVersion === "number" ? { sessionVersion: payload.sessionVersion } : {}),
+  })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime("400d")
@@ -162,7 +187,7 @@ export async function getAccountSession(): Promise<AccountSessionPayload | null>
     if (typeof accountId !== "string") {
       return null;
     }
-    return { accountId };
+    return { accountId, sessionVersion: readTokenSessionVersion(payload.sessionVersion) };
   } catch {
     return null;
   }
@@ -196,6 +221,13 @@ export async function getAccount(): Promise<Account | null> {
     cookiePresent,
     payloadValid: Boolean(session),
     accountFound: Boolean(account),
+    accessAllowed: account
+      ? accountAccessAllowed({
+          banned: accountIsBanned(account),
+          tokenVersion: session?.sessionVersion ?? null,
+          accountVersion: accountSessionVersion(account),
+        })
+      : false,
   });
   if (decision.action === "anonymous") {
     return null;

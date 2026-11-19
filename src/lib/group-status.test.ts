@@ -30,19 +30,27 @@ describe("manage group status", () => {
   it("labels manage-row action tags from window + submission", () => {
     expect(
       manageGroupActionTag({ submitOpen: true, hasCompiledCapsule: false, myStatus: "none" }),
-    ).toBe("Submit capsule");
+    ).toBe("Write your letter");
     expect(
       manageGroupActionTag({ submitOpen: true, hasCompiledCapsule: true, myStatus: "draft" }),
-    ).toBe("Submit capsule");
+    ).toBe("Write your letter");
     expect(
       manageGroupActionTag({ submitOpen: true, hasCompiledCapsule: true, myStatus: "submitted" }),
-    ).toBe("Capsule already submitted");
+    ).toBe("Letter is in");
     expect(
       manageGroupActionTag({ submitOpen: false, hasCompiledCapsule: true, myStatus: "none" }),
-    ).toBe("Read latest capsule");
+    ).toBe("Read");
     expect(
       manageGroupActionTag({ submitOpen: false, hasCompiledCapsule: false, myStatus: "none" }),
-    ).toBe("Next capsule not open");
+    ).toBe("Not open yet");
+    expect(
+      manageGroupActionTag({
+        submitOpen: false,
+        hasCompiledCapsule: false,
+        myStatus: "none",
+        opensOn: "Opens 22 Nov",
+      }),
+    ).toBe("Opens 22 Nov");
   });
 
   it("labels Open / Capsule ready / Resting", () => {

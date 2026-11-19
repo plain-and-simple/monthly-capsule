@@ -4,8 +4,11 @@ import {
   JOIN_EXISTING_CTA,
   JOIN_PIN_LABEL,
   LANDING_HEADLINE,
-  LANDING_MONTH_GOES,
+  LANDING_INVITE_NOTE,
   LANDING_SIGN_IN,
+  PRIVACY_TITLE,
+  SAMPLE_KICKER,
+  SAMPLE_ONE_LETTER,
   LANDING_SIGN_UP,
   PREFERRED_NAME_LABEL,
   PRODUCT_NAME,
@@ -23,13 +26,15 @@ test.describe("Ready smoke (no secrets)", () => {
     await expect(page).toHaveTitle(new RegExp(PRODUCT_NAME));
     await expect(page.getByRole("heading", { name: LANDING_HEADLINE })).toBeVisible();
     await expect(page.getByRole("heading", { name: LANDING_SIGN_IN })).toBeVisible();
-    await expect(page.getByRole("heading", { name: LANDING_SIGN_UP })).toBeVisible();
-    await expect(page.getByLabel(PREFERRED_NAME_LABEL)).toBeVisible();
+    await expect(page.getByRole("heading", { name: LANDING_SIGN_UP })).toHaveCount(0);
+    await expect(page.getByText(LANDING_INVITE_NOTE)).toBeVisible();
     await expect(page.getByLabel("Email").first()).toBeVisible();
     await expect(page.getByLabel("Password").first()).toBeVisible();
     await expect(page.getByRole("button", { name: LANDING_SIGN_UP })).toBeVisible();
     await expect(page.getByRole("link", { name: "Create a capsule group" })).toHaveCount(0);
-    await expect(page.getByText(LANDING_MONTH_GOES)).toBeVisible();
+    await expect(page.getByText(SAMPLE_KICKER)).toBeVisible();
+    await expect(page.getByText(SAMPLE_ONE_LETTER)).toBeVisible();
+    await expect(page.getByRole("link", { name: PRIVACY_TITLE })).toBeVisible();
   });
 
   test("sign-in UI is reachable from landing @smoke", async ({ page }) => {
@@ -57,6 +62,7 @@ test.describe("Ready smoke (no secrets)", () => {
 
   test("sign-up POST still includes name, email, and password @smoke", async ({ page }) => {
     await page.goto("/");
+    await page.getByRole("button", { name: LANDING_SIGN_UP }).click();
     const signUp = page.locator("form").filter({ has: page.getByRole("heading", { name: LANDING_SIGN_UP }) });
     const posted = page.waitForRequest(
       (req) => req.method() === "POST" && new URL(req.url()).pathname === SIGNUP_PATH,

@@ -1,6 +1,7 @@
 import type { NextResponse } from "next/server";
 import { parseGroupId } from "@/lib/group-id";
 import { mintSessionToken, requireAccount } from "@/lib/session";
+import { accountSessionVersion } from "@/lib/session-policy";
 import { decideOpenGroupRequest } from "@/lib/session-policy";
 import { seeOther, seeOtherWithCookies } from "@/lib/session-redirect";
 import { createAdminClient } from "@/lib/supabase";
@@ -33,6 +34,7 @@ async function openGroup(request: Request, groupIdRaw: string): Promise<NextResp
   const token = await mintSessionToken({
     memberId: decision.memberId,
     groupId: decision.groupId,
+    sessionVersion: accountSessionVersion(account),
   });
   return seeOtherWithCookies(request, decision.path, { session: token });
 }

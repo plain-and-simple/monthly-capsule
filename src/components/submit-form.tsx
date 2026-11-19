@@ -10,6 +10,9 @@ import { MAX_PHOTOS, PHOTO_FILE_ACCEPT } from "@/lib/constants";
 import {
   GROUP_PRIMARY_VIEW,
   SUBMIT_AND_SEND,
+  SUBMIT_PHOTO_NOTE,
+  SUBMIT_SAVE_PHOTOS,
+  SUBMIT_UPDATE,
   SUBMIT_CLOSED_HEADING,
   SUBMIT_DRAFT,
   SUBMIT_EMPTY,
@@ -426,7 +429,7 @@ export function SubmitForm({
           }}
           maxLength={20000}
           readOnly={busy}
-          placeholder="What has this month been like?"
+
         />
         <span className="field__hint">No length rule. Three lines is a letter too.</span>
       </label>
@@ -434,18 +437,18 @@ export function SubmitForm({
       <div className="field">
         <span className="field__label">Photos</span>
         <div className="photos" style={{ marginTop: "0.5rem" }}>
-          {photos.map((photo) => (
+          {photos.map((photo, index) => (
             <div className="photo" key={photo.id}>
               <img
                 src={photo.preview}
-                alt=""
+                alt={`Photo ${index + 1}`}
                 width={photo.width || undefined}
                 height={photo.height || undefined}
               />
               <button
                 className="photo__remove"
                 type="button"
-                aria-label="Remove photo"
+                aria-label={`Remove photo ${index + 1}`}
                 disabled={buttonBusy}
                 onClick={() => {
                   setPhotos((current) => {
@@ -496,7 +499,7 @@ export function SubmitForm({
           disabled={preparingPhotos}
           pendingLabel={submitPendingLabel}
         >
-          {preparingPhotos ? SUBMIT_PREPARING_PHOTOS : SUBMIT_AND_SEND}
+          {preparingPhotos ? SUBMIT_PREPARING_PHOTOS : submitted ? SUBMIT_UPDATE : SUBMIT_AND_SEND}
         </PendingSubmitButton>
         {state?.error ? (
           <p className="err" role="alert">
@@ -511,7 +514,11 @@ export function SubmitForm({
           disabled={preparingPhotos}
           pendingLabel={draftPendingLabel}
         >
-          {preparingPhotos ? SUBMIT_PREPARING_PHOTOS : SUBMIT_DRAFT}
+          {preparingPhotos
+            ? SUBMIT_PREPARING_PHOTOS
+            : photos.length > 0
+              ? SUBMIT_SAVE_PHOTOS
+              : SUBMIT_DRAFT}
         </PendingSubmitButton>
         <p className="btn-note" role="status">
           {preparingPhotos
@@ -522,7 +529,7 @@ export function SubmitForm({
                 : "Working…"
               : submitted
                 ? SUBMIT_STILL_EDITABLE
-                : "Save as draft to keep it hidden. After you submit, you can still edit until the window closes."}
+                : SUBMIT_PHOTO_NOTE}
         </p>
       </div>
     </form>

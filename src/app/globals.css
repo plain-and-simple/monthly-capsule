@@ -1,11 +1,11 @@
 @import "tailwindcss";
 
 @theme {
-  --font-sans: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-franklin), ui-sans-serif, system-ui, sans-serif;
   --font-serif: var(--font-newsreader), ui-serif, Georgia, serif;
   --color-paper: #f5f2ea;
   --color-ink: #1a1712;
-  --color-muted: #7b7268;
+  --color-muted: #6a635a;
   --color-rule: #e4ddce;
   --color-accent: #2f5b4c;
   --color-card: #fffdf7;
@@ -17,7 +17,7 @@
   --card: #fffdf7;
   --ink: #1a1712;
   --ink-2: #453f36;
-  --muted: #7b7268;
+  --muted: #6a635a;
   --line: #e4ddce;
   --line-strong: #cec5b1;
   --accent: #2f5b4c;
@@ -25,7 +25,7 @@
   --accent-soft: #e7efe9;
   --stamp: #a8462f;
   --font-serif: var(--font-newsreader), ui-serif, Georgia, "Times New Roman", serif;
-  --font-sans: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-franklin), ui-sans-serif, system-ui, sans-serif;
   --font-warm: var(--font-fraunces), var(--font-serif);
   --font-heritage: var(--font-cormorant), "Palatino Linotype", Palatino, var(--font-serif);
   --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
@@ -204,6 +204,89 @@ select {
 
 .footer a {
   color: var(--muted);
+}
+
+.sample {
+  margin: 0;
+}
+
+.sample__kicker {
+  margin: 0 0 0.45rem;
+  color: var(--muted);
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.sample__sheet {
+  background: var(--card);
+  border: 1px solid var(--line);
+  padding: 1rem 1.1rem 1.15rem;
+}
+
+.sample__month {
+  margin: 0 0 0.75rem;
+  font-size: 1.35rem;
+}
+
+.sample__grid {
+  display: grid;
+  grid-template-columns: 1.2fr 0.8fr;
+  gap: 0.85rem 1rem;
+  align-items: start;
+}
+
+.sample__letter--wide {
+  grid-column: 1 / -1;
+}
+
+.sample__name {
+  margin: 0 0 0.2rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.sample__letter p {
+  margin: 0;
+}
+
+.sample__letter .serif {
+  font-size: 1.02rem;
+  line-height: 1.45;
+}
+
+.sample__photo {
+  min-height: 7.5rem;
+  border: 1px solid var(--line);
+  background: linear-gradient(160deg, #d7c4a8 0%, #efe6d4 46%, #c5b49a 100%);
+}
+
+.cycle-tools h2,
+.cycle-tools__title {
+  font-family: var(--font-sans);
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.cycle-tools .panel {
+  background: transparent;
+  border: none;
+  padding: 0.1rem 0 0;
+}
+
+.cycle-tools__card {
+  padding: 0.9rem 1rem;
+}
+
+@media (max-width: 640px) {
+  .sample__grid {
+    grid-template-columns: 1fr;
+  }
+
+  .sample__photo {
+    min-height: 5.5rem;
+  }
 }
 
 h1,

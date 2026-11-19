@@ -43,11 +43,14 @@ export function manageGroupActionTag(input: {
   submitOpen: boolean;
   hasCompiledCapsule: boolean;
   myStatus: "none" | "draft" | "submitted";
-}): ManageActionTag {
+  opensOn?: string | null;
+}): string {
   if (input.submitOpen) {
     return input.myStatus === "submitted" ? MANAGE_TAG_SUBMITTED : MANAGE_TAG_SUBMIT;
   }
-  return input.hasCompiledCapsule ? MANAGE_TAG_READ : MANAGE_TAG_NOT_OPEN;
+  if (input.hasCompiledCapsule) return MANAGE_TAG_READ;
+  const opensOn = input.opensOn?.trim();
+  return opensOn || MANAGE_TAG_NOT_OPEN;
 }
 
 export function membershipRoleLabel(role: Role): string {

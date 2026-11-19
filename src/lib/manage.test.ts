@@ -115,13 +115,15 @@ describe("manage UI scenarios 1–20", () => {
   });
 
   it("11. session rejoin skips join for the same group", () => {
-    expect(sessionRejoinsGroup({ memberId: "mem", groupId }, groupId)).toBe(true);
+    expect(sessionRejoinsGroup({ memberId: "mem", groupId, sessionVersion: null }, groupId)).toBe(
+      true,
+    );
   });
 
   it("12. a session for another group does not skip this join", () => {
-    expect(sessionRejoinsGroup({ memberId: "mem", groupId: otherGroup }, groupId)).toBe(
-      false,
-    );
+    expect(
+      sessionRejoinsGroup({ memberId: "mem", groupId: otherGroup, sessionVersion: null }, groupId),
+    ).toBe(false);
   });
 
   it("13. invite is the join URL only", () => {

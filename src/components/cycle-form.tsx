@@ -72,13 +72,12 @@ export function CycleForm({
   return (
     <div className="stack stack--loose">
       {canForce && showEmailPrompt && askYearMonth ? (
-        <div className="card">
+        <div className="card cycle-tools__card">
           <div className="stack">
             <div className="stack stack--tight">
-              <p className="eyebrow">Made just now</p>
-              <h2 className="serif" style={{ fontSize: "1.3rem" }}>
+              <p className="cycle-tools__title">
                 The {capsuleTitle(monthLabel(askYearMonth), askVersion ?? 1)} capsule is ready
-              </h2>
+              </p>
               <p className="muted small">{CYCLE_EMAIL_PROMPT}</p>
             </div>
             {skipState?.error ? <p className="err">{skipState.error}</p> : null}
@@ -112,14 +111,13 @@ export function CycleForm({
       ) : null}
 
       {canForce && later ? (
-        <div className="card">
+        <div className="card cycle-tools__card">
           <div className="stack">
             <div className="stack stack--tight">
-              <p className="eyebrow">Waiting on you</p>
-              <h2>
+              <p className="cycle-tools__title">
                 The {capsuleTitle(monthLabel(later.yearMonth), later.version)} capsule was never
                 emailed
-              </h2>
+              </p>
               <p className="muted small">Everyone can read it on the site.</p>
             </div>
             <div className="row">
@@ -138,7 +136,7 @@ export function CycleForm({
         </div>
       ) : null}
 
-      <section className="stack">
+      <section className="stack cycle-tools">
         <h2>{GROUP_NEXT_CAPSULE}</h2>
         <div className="panel">
           <div className="stack">

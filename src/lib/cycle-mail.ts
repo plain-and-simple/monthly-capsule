@@ -27,6 +27,7 @@ import {
   resendSendAccepted,
   withTimeout,
 } from "@/lib/email-policy";
+import { cycleSendKey, maskEmail } from "@/lib/email-send";
 import { shortMonthDayYear } from "@/lib/group-status";
 import { activeRosterMembers } from "@/lib/roster";
 import { monthLabel } from "@/lib/schedule";
@@ -122,14 +123,22 @@ async function loadSubmittedIds(groupId: string, yearMonth: string): Promise<str
   return submittedMemberIds((data ?? []) as Pick<Submission, "member_id" | "status">[]);
 }
 
-async function stampCycleEmail(
+const UNIQUE_VIOLATION = "23505";
+
+function cycleStampColumn(kind: CycleEmailKind): "open_email_sent_at" | "reminder_email_sent_at" {
+  return kind === "open" ? "open_email_sent_at" : "reminder_email_sent_at";
+}
+
+/** Write the stamp before Resend. False means another attempt already owns it. */
+async function claimCycleEmail(
   groupId: string,
   yearMonth: string,
   memberId: string,
   kind: CycleEmailKind,
   at: string,
-) {
+): Promise<boolean> {
   const admin = createAdminClient();
+  const column = cycleStampColumn(kind);
   const { data: existing } = await admin
     .from("cycle_email_sends")
     .select("id, open_email_sent_at, reminder_email_sent_at")
@@ -142,16 +151,16 @@ async function stampCycleEmail(
     kind === "open"
       ? Boolean(existing?.open_email_sent_at)
       : Boolean(existing?.reminder_email_sent_at);
-  if (already) return;
+  if (already) return false;
 
   if (existing) {
-    const column = kind === "open" ? "open_email_sent_at" : "reminder_email_sent_at";
-    await admin
+    const { data: won } = await admin
       .from("cycle_email_sends")
       .update({ [column]: at })
       .eq("id", existing.id)
-      .is(column, null);
-    return;
+      .is(column, null)
+      .select("id");
+    return Boolean(won && won.length > 0);
   }
 
   const { error } = await admin.from("cycle_email_sends").insert({
@@ -161,18 +170,48 @@ async function stampCycleEmail(
     open_email_sent_at: kind === "open" ? at : null,
     reminder_email_sent_at: kind === "reminder" ? at : null,
   });
-  if (!error) return;
+  if (!error) return true;
+  if (String(error.code ?? "") !== UNIQUE_VIOLATION) return false;
 
   const { data: raced } = await admin
+    .from("cycle_email_sends")
+    .select("id, open_email_sent_at, reminder_email_sent_at")
+    .eq("group_id", groupId)
+    .eq("year_month", yearMonth)
+    .eq("member_id", memberId)
+    .maybeSingle();
+  if (!raced) return false;
+  const racedAlready =
+    kind === "open" ? Boolean(raced.open_email_sent_at) : Boolean(raced.reminder_email_sent_at);
+  if (racedAlready) return false;
+  const { data: won } = await admin
+    .from("cycle_email_sends")
+    .update({ [column]: at })
+    .eq("id", raced.id)
+    .is(column, null)
+    .select("id");
+  return Boolean(won && won.length > 0);
+}
+
+async function releaseCycleEmailClaim(
+  groupId: string,
+  yearMonth: string,
+  memberId: string,
+  kind: CycleEmailKind,
+  at: string,
+): Promise<void> {
+  const admin = createAdminClient();
+  const column = cycleStampColumn(kind);
+  const { data: existing } = await admin
     .from("cycle_email_sends")
     .select("id")
     .eq("group_id", groupId)
     .eq("year_month", yearMonth)
     .eq("member_id", memberId)
+    .eq(column, at)
     .maybeSingle();
-  if (!raced) return;
-  const column = kind === "open" ? "open_email_sent_at" : "reminder_email_sent_at";
-  await admin.from("cycle_email_sends").update({ [column]: at }).eq("id", raced.id).is(column, null);
+  if (!existing) return;
+  await admin.from("cycle_email_sends").update({ [column]: null }).eq("id", existing.id).eq(column, at);
 }
 
 export async function sendGroupCycleEmail(
@@ -277,46 +316,58 @@ export async function sendGroupCycleEmail(
   for (const seat of withEmail) {
     const to = seat.to;
     if (!to) continue;
+    const at = new Date().toISOString();
+    const claimed = await claimCycleEmail(group.id, yearMonth, seat.member.id, kind, at);
+    if (!claimed) continue;
     try {
       const result = await withTimeout(
-        resend.emails.send({
-          from: from.from,
-          to: [to],
-          subject,
-          html,
-          text,
-        }),
+        resend.emails.send(
+          {
+            from: from.from,
+            to: [to],
+            subject,
+            html,
+            text,
+          },
+          { idempotencyKey: cycleSendKey({ kind, groupId: group.id, yearMonth, memberId: seat.member.id }) },
+        ),
         RESEND_SEND_TIMEOUT_MS,
         RESEND_TIMEOUT_MESSAGE,
       );
       const interpreted = resendSendAccepted(result);
       if (interpreted.ok) {
         accepted += 1;
-        await stampCycleEmail(group.id, yearMonth, seat.member.id, kind, new Date().toISOString());
         console.info("cycle email accepted", {
           kind,
           groupId: group.id,
           yearMonth,
           memberId: seat.member.id,
+          to: maskEmail(to),
           id: interpreted.id,
         });
       } else {
         error = interpreted.message;
+        await releaseCycleEmailClaim(group.id, yearMonth, seat.member.id, kind, at);
         console.error("cycle email resend rejected", {
           kind,
           groupId: group.id,
           yearMonth,
           memberId: seat.member.id,
+          to: maskEmail(to),
           error,
         });
       }
     } catch (caught) {
       error = caught instanceof Error ? caught.message : "Resend failed";
+      if (error !== RESEND_TIMEOUT_MESSAGE) {
+        await releaseCycleEmailClaim(group.id, yearMonth, seat.member.id, kind, at);
+      }
       console.error("cycle email resend rejected", {
         kind,
         groupId: group.id,
         yearMonth,
         memberId: seat.member.id,
+        to: maskEmail(to),
         error,
       });
     }

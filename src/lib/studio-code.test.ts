@@ -18,6 +18,15 @@ describe("resolveCreateGroupCode", () => {
     expect(resolveCreateGroupCode("studio-secret")).toBe("studio-secret");
     expect(resolveCreateGroupCode("  studio-secret  ")).toBe("studio-secret");
   });
+
+  it("refuses the public fallback in production", () => {
+    expect(() => resolveCreateGroupCode(undefined, "production")).toThrow(/private value/);
+    expect(() => resolveCreateGroupCode("", "production")).toThrow(/private value/);
+    expect(() => resolveCreateGroupCode(DEFAULT_CREATE_GROUP_CODE, "production")).toThrow(
+      /private value/,
+    );
+    expect(resolveCreateGroupCode("studio-secret", "production")).toBe("studio-secret");
+  });
 });
 
 describe("studioCodeMatches", () => {

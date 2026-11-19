@@ -243,13 +243,27 @@ describe("send path must not stamp blindly", () => {
     expect(cron).toContain("sendDueCapsuleEmails");
     const cycleMail = readFileSync(resolve(here, "./cycle-mail.ts"), "utf8");
     expect(cycleMail).toContain("resendSendAccepted");
-    expect(cycleMail).toContain("stampCycleEmail");
-    expect(cycleMail.indexOf("interpreted.ok")).toBeLessThan(cycleMail.lastIndexOf("await stampCycleEmail"));
+    expect(cycleMail).toContain("claimCycleEmail");
+    expect(cycleMail).toContain("releaseCycleEmailClaim");
+    expect(cycleMail).toContain("idempotencyKey");
+    expect(cycleMail).toContain("maskEmail");
     expect(cycleMail).toContain("opts.dryRun");
     expect(cycleMail).not.toContain("email_held");
     expect(cycleMail).toContain("planCycleEmailMembers");
     const sendFn = cycleMail.slice(cycleMail.indexOf("export async function sendGroupCycleEmail"));
-    expect(sendFn.indexOf("opts.dryRun")).toBeLessThan(sendFn.indexOf("await stampCycleEmail"));
+    expect(sendFn.indexOf("opts.dryRun")).toBeLessThan(sendFn.indexOf("await claimCycleEmail"));
+    expect(sendFn.indexOf("await claimCycleEmail")).toBeLessThan(sendFn.indexOf("resend.emails.send"));
+    expect(sendFn.indexOf("interpreted.ok")).toBeLessThan(sendFn.indexOf("releaseCycleEmailClaim"));
+    const capsuleSend = source.slice(source.indexOf("async function sendCapsuleEmail"));
+    expect(capsuleSend.indexOf("if (opts.dryRun)")).toBeLessThan(
+      capsuleSend.indexOf("await claimCapsuleDelivery"),
+    );
+    expect(capsuleSend.indexOf("await claimCapsuleDelivery")).toBeLessThan(
+      capsuleSend.indexOf("resend.emails.send"),
+    );
+    expect(capsuleSend).toContain("maskEmail");
+    expect(capsuleSend).toContain("idempotencyKey");
+    expect(capsuleSend).toContain("releaseCapsuleDelivery");
     const vercel = readFileSync(resolve(here, "../../vercel.json"), "utf8");
     expect(vercel).toContain('"/api/cron/email"');
     expect(vercel).not.toContain("/api/cron/cycle");

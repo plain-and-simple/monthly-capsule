@@ -72,7 +72,8 @@ describe("brand chrome locks", () => {
     const layout = readFileSync(resolve(here, "../app/layout.tsx"), "utf8");
     expect(layout).toContain('default: "Plain and Simple Monthly Capsule"');
     expect(layout).toContain('template: "%s · Plain and Simple Monthly Capsule"');
-    expect(layout).toContain("Geist");
+    expect(layout).toContain("Libre_Franklin");
+    expect(layout).not.toContain("Geist");
     expect(layout).toContain("Newsreader");
     expect(layout).not.toContain("Fraunces");
     expect(layout).not.toContain("Cormorant");
@@ -137,6 +138,10 @@ describe("privacy and chrome locks", () => {
     expect(source).not.toContain("Last month");
     expect(source).not.toContain("compiled.slice(1)");
     expect(source).not.toContain("compiled.length > 0");
+    const peopleAt = source.indexOf("<PeopleRoster");
+    const cycleAt = source.indexOf("<CycleForm");
+    expect(peopleAt).toBeGreaterThan(-1);
+    expect(cycleAt).toBeGreaterThan(peopleAt);
   });
 
   it("Your groups goes to /manage and the month badge sits in the card", () => {

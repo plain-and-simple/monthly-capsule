@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import { SIGN_OUT } from "@/lib/copy";
+import { clearAllLetterDrafts } from "@/lib/draft-local";
 import { CLIENT_PENDING_GUARD_MS } from "@/lib/pending-ui";
 import { LOGOUT_PATH } from "@/lib/session-policy";
 
@@ -27,6 +28,7 @@ export function SignOutButton() {
           event.preventDefault();
           return;
         }
+        clearAllLetterDrafts(window.localStorage);
         setClicked(true);
       }}
     >
