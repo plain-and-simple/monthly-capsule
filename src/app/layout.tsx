@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Newsreader } from "next/font/google";
+import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 
 const geist = Geist({
@@ -25,6 +26,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en">
       <body className={`${geist.variable} ${newsreader.variable} font-sans antialiased`}>
         {children}
+        <Analytics />
       </body>
     </html>
   );
