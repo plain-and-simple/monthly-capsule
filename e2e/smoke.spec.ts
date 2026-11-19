@@ -12,8 +12,10 @@ import {
   LANDING_SIGN_UP,
   PREFERRED_NAME_LABEL,
   PRODUCT_NAME,
+  STUDIO_RATE_LIMITED,
 } from "../src/lib/copy";
-import { LOGIN_PATH, SIGNUP_PATH } from "../src/lib/session-policy";
+import { STUDIO_COOKIE } from "../src/lib/constants";
+import { LOGIN_PATH, SIGNUP_PATH, STUDIO_PATH } from "../src/lib/session-policy";
 import { BAD_STUDIO_CODE, STUDIO_CODE_ERROR } from "./helpers/ready";
 
 function postedForm(request: { postData: () => string | null }): URLSearchParams {
@@ -105,9 +107,34 @@ test.describe("Ready smoke (no secrets)", () => {
     await page.goto("/admin");
     await expect(page.getByRole("heading", { name: "Studio code" })).toBeVisible();
     await page.getByLabel("Code").fill(BAD_STUDIO_CODE);
-    await page.getByRole("button", { name: "Continue" }).click();
-    await expect(page).toHaveURL(/\/admin/);
-    await expect(page.getByText(STUDIO_CODE_ERROR)).toBeVisible();
+
+    const [response] = await Promise.all([
+      page.waitForResponse(
+        (res) => res.request().method() === "POST" && new URL(res.url()).pathname === STUDIO_PATH,
+      ),
+      page.getByRole("button", { name: "Continue" }).click(),
+    ]);
+
+    // Wrong code flashes back to /admin with STUDIO_CODE_ERROR, or with
+    // STUDIO_RATE_LIMITED ("Too many tries. Wait a few minutes.") when the
+    // gate is blocking tries. Dummy Supabase makes studioAttemptsBlocked throw
+    // first, so the route 500s on /api/session/studio before that redirect.
+    // Either response refuses the code: no studio cookie, and no Studio screen.
+    expect(response.headers()["set-cookie"] ?? "").not.toContain(`${STUDIO_COOKIE}=`);
     await expect(page.getByRole("heading", { name: "Studio", exact: true })).toHaveCount(0);
+
+    const location = response.headers()["location"];
+    if (location) {
+      const dest = new URL(location, response.url());
+      expect(dest.pathname).toBe("/admin");
+      const error = dest.searchParams.get("error");
+      expect(error === STUDIO_CODE_ERROR || error === STUDIO_RATE_LIMITED).toBe(true);
+      await expect(page).toHaveURL(/\/admin/);
+      await expect(page.getByText(STUDIO_CODE_ERROR).or(page.getByText(STUDIO_RATE_LIMITED))).toBeVisible();
+      return;
+    }
+
+    expect(response.status()).toBeGreaterThanOrEqual(500);
+    expect(new URL(page.url()).pathname).toBe(STUDIO_PATH);
   });
 });
