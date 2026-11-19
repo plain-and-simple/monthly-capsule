@@ -23,6 +23,8 @@ export type Account = {
   password_hash: string;
   banned_at: string | null;
   created_at: string;
+  /** Missing on rows read before the session_version migration. Treat as 0. */
+  session_version?: number | null;
 };
 
 export type Member = {
@@ -38,6 +40,8 @@ export type Member = {
 
 export type AccountSessionPayload = {
   accountId: string;
+  /** Null when the cookie was minted before session versions existed. */
+  sessionVersion: number | null;
 };
 
 export type Month = {
@@ -82,6 +86,8 @@ export type Capsule = {
 export type SessionPayload = {
   memberId: string;
   groupId: string;
+  /** Null when the cookie was minted before session versions existed. */
+  sessionVersion: number | null;
 };
 
 export type CycleEmailSend = {

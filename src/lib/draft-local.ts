@@ -3,6 +3,25 @@ export type LocalLetterDraft = {
   updatedAt: string;
 };
 
+export const LETTER_DRAFT_PREFIX = "mc-letter-draft:";
+
+export function clearAllLetterDrafts(
+  storage: Pick<Storage, "length" | "key" | "removeItem">,
+): void {
+  const keys: string[] = [];
+  for (let index = 0; index < storage.length; index += 1) {
+    const key = storage.key(index);
+    if (key?.startsWith(LETTER_DRAFT_PREFIX)) keys.push(key);
+  }
+  for (const key of keys) {
+    try {
+      storage.removeItem(key);
+    } catch {
+      // Private mode. The sign-out still proceeds.
+    }
+  }
+}
+
 export function letterDraftStorageKey(input: {
   groupId: string;
   yearMonth: string;
@@ -12,7 +31,7 @@ export function letterDraftStorageKey(input: {
   const yearMonth = input.yearMonth.trim();
   const memberId = input.memberId.trim();
   if (!groupId || !yearMonth || !memberId) return null;
-  return `mc-letter-draft:${groupId}:${yearMonth}:${memberId}`;
+  return `${LETTER_DRAFT_PREFIX}${groupId}:${yearMonth}:${memberId}`;
 }
 
 export function parseLocalLetterDraft(raw: string | null | undefined): LocalLetterDraft | null {

@@ -7,6 +7,7 @@ import { PendingSubmitButton, useInstantBusy } from "@/components/pending-submit
 import { ThemeForm } from "@/components/theme-form";
 import {
   CREATE_SCHEDULE_HINT,
+  SCHEDULE_OPEN_EXAMPLE,
   OPEN_EMAIL_CHECKBOX,
   OPEN_EMAIL_NOTE,
   REMINDER_EMAIL_CHECKBOX,
@@ -102,6 +103,7 @@ export function SettingsForm({
             />
           </div>
           <p className="formnote">{CREATE_SCHEDULE_HINT}</p>
+          <p className="formnote">{SCHEDULE_OPEN_EXAMPLE}</p>
           {prompts.promptOpen ? (
             <div className="stack stack--tight" key={`open-${days.submit_start_day}-${days.submit_end_day}`}>
               <p className="formnote">{OPEN_EMAIL_NOTE}</p>

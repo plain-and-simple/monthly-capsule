@@ -58,15 +58,43 @@ export type AccountSessionDecision =
   | { action: "signed_in" }
   | { action: "clear_via_route"; path: typeof CLEAR_ACCOUNT_SESSION_PATH };
 
+export function accountSessionVersion(
+  account: { session_version?: number | null } | null | undefined,
+): number {
+  const value = account?.session_version;
+  return typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : 0;
+}
+
+export function readTokenSessionVersion(value: unknown): number | null {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : null;
+}
+
+/**
+ * Version 0 still honors cookies that have no version claim.
+ * A ban or any later version requires an exact match, so reset and ban end old browsers.
+ */
+export function accountAccessAllowed(input: {
+  banned: boolean;
+  tokenVersion: number | null;
+  accountVersion: number;
+}): boolean {
+  if (input.banned) return false;
+  if (input.accountVersion <= 0) {
+    return input.tokenVersion == null || input.tokenVersion === 0;
+  }
+  return input.tokenVersion === input.accountVersion;
+}
+
 export function decideAccountSession(input: {
   cookiePresent: boolean;
   payloadValid: boolean;
   accountFound: boolean;
+  accessAllowed?: boolean;
 }): AccountSessionDecision {
   if (!input.cookiePresent) {
     return { action: "anonymous" };
   }
-  if (!input.payloadValid || !input.accountFound) {
+  if (!input.payloadValid || !input.accountFound || input.accessAllowed === false) {
     return { action: "clear_via_route", path: CLEAR_ACCOUNT_SESSION_PATH };
   }
   return { action: "signed_in" };

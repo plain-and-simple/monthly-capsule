@@ -7,6 +7,7 @@ import { listAccountGroups, findAccountById, updateAccountPassword } from "@/lib
 import { hashPassword } from "@/lib/password";
 import { parseResetPassword } from "@/lib/password-reset";
 import { consumeAccountResetTokens, peekPasswordReset } from "@/lib/password-reset-store";
+import { accountSessionVersion } from "@/lib/session-policy";
 import { setAccountSession, setSession } from "@/lib/session";
 
 export type CompletePasswordResetState = { error: string } | null;
@@ -44,7 +45,8 @@ export async function completePasswordReset(
     }
 
     await consumeAccountResetTokens(peeked.accountId);
-    await setAccountSession({ accountId: peeked.accountId });
+    const sessionVersion = accountSessionVersion(updated);
+    await setAccountSession({ accountId: peeked.accountId, sessionVersion });
 
     const groups = await listAccountGroups(peeked.accountId);
     const destination = manageDestination(groups.map((row) => row.group.id));
@@ -53,6 +55,7 @@ export async function completePasswordReset(
       await setSession({
         memberId: membership.member.id,
         groupId: membership.group.id,
+        sessionVersion,
       });
     }
 

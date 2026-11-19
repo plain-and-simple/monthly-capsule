@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
-import { Geist, Newsreader } from "next/font/google";
+import { Libre_Franklin, Newsreader } from "next/font/google";
 import "./globals.css";
 
-const geist = Geist({
+const franklin = Libre_Franklin({
   subsets: ["latin", "latin-ext"],
-  variable: "--font-geist",
+  variable: "--font-franklin",
 });
 
 const newsreader = Newsreader({
@@ -23,7 +23,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body className={`${geist.variable} ${newsreader.variable} font-sans antialiased`}>
+      <body className={`${franklin.variable} ${newsreader.variable} font-sans antialiased`}>
         {children}
       </body>
     </html>

@@ -31,6 +31,14 @@ import {
   LANDING_HEADLINE,
   LANDING_MANAGE_HEADING,
   LANDING_MONTH_GOES,
+  PRIVACY_BAN,
+  PRIVACY_LEAVE,
+  PRIVACY_PHOTOS,
+  PRIVACY_READ,
+  PRIVACY_TITLE,
+  SAMPLE_KICKER,
+  SAMPLE_ONE_LETTER,
+  SAMPLE_ONE_NAME,
   LANDING_NEED_ACCOUNT,
   LANDING_PROMISE,
   LANDING_SIGN_IN,
@@ -72,6 +80,9 @@ import {
   ROSTER_SUBMITTED,
   SUBMIT_AND_SEND,
   SUBMIT_DRAFT,
+  SUBMIT_PHOTO_NOTE,
+  SUBMIT_SAVE_PHOTOS,
+  SUBMIT_UPDATE,
   SUBMIT_PREPARING_PHOTOS,
   SUBMIT_IN_AND_EDITABLE,
   SUBMIT_IN_HEADING,
@@ -108,6 +119,14 @@ describe("landing copy smoke", () => {
     expect(LANDING_MONTH_GOES).toBe(
       "The window opens. Everyone writes, adds a few photos, and submits. The window closes and the capsule goes out.",
     );
+    expect(SAMPLE_KICKER).toBe("A sample page");
+    expect(SAMPLE_ONE_NAME).toBe("Mina");
+    expect(SAMPLE_ONE_LETTER.length).toBeGreaterThan(20);
+    expect(PRIVACY_TITLE).toBe("Privacy");
+    expect(PRIVACY_READ).toMatch(/no public page/i);
+    expect(PRIVACY_PHOTOS).toMatch(/Photos stay in the group/);
+    expect(PRIVACY_LEAVE).toMatch(/Sign out/);
+    expect(PRIVACY_BAN).toBe("Plain and Simple can ban an account.");
     expect(chrome.createLabel).toBe("Create");
     expect(chrome.manageHeading).toBe("Manage your capsule");
     expect(chrome.signIn).toBe("Sign in");
@@ -233,7 +252,10 @@ describe("join and manage labels", () => {
 
   it("locks submit model A labels", () => {
     expect(SUBMIT_DRAFT).toBe("Save as draft");
+    expect(SUBMIT_SAVE_PHOTOS).toBe("Save photos as draft");
     expect(SUBMIT_AND_SEND).toBe("Save and submit");
+    expect(SUBMIT_UPDATE).toBe("Update letter");
+    expect(SUBMIT_PHOTO_NOTE).toMatch(/Words save on their own/);
     expect(SUBMIT_PREPARING_PHOTOS).toBe("Preparing photos…");
     expect(SUBMIT_DRAFT_SAVED).toBe("Draft saved");
     expect(SUBMIT_SAVE_RETRYING).toBe("Couldn't save, retrying…");
@@ -262,10 +284,10 @@ describe("join and manage labels", () => {
   });
 
   it("labels manage-row actions and capsule contributors", () => {
-    expect(MANAGE_TAG_SUBMIT).toBe("Submit capsule");
-    expect(MANAGE_TAG_SUBMITTED).toBe("Capsule already submitted");
-    expect(MANAGE_TAG_READ).toBe("Read latest capsule");
-    expect(MANAGE_TAG_NOT_OPEN).toBe("Next capsule not open");
+    expect(MANAGE_TAG_SUBMIT).toBe("Write your letter");
+    expect(MANAGE_TAG_SUBMITTED).toBe("Letter is in");
+    expect(MANAGE_TAG_READ).toBe("Read");
+    expect(MANAGE_TAG_NOT_OPEN).toBe("Not open yet");
     expect(contributorsLine(["Ada", "Sam", "Sam"])).toBe(`${CONTRIBUTORS_PREFIX} Ada, Sam, Sam`);
     expect(contributorsLine([])).toBe("");
     expect(IN_THIS_ISSUE).toBe("In this issue");

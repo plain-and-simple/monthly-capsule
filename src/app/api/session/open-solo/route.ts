@@ -1,4 +1,5 @@
 import { listAccountGroups } from "@/lib/memberships";
+import { accountSessionVersion } from "@/lib/session-policy";
 import { mintSessionToken, requireAccount } from "@/lib/session";
 import { seeOther, seeOtherWithCookies } from "@/lib/session-redirect";
 
@@ -17,6 +18,7 @@ export async function GET(request: Request) {
   const token = await mintSessionToken({
     memberId: membership.member.id,
     groupId: membership.group.id,
+    sessionVersion: accountSessionVersion(account),
   });
   return seeOtherWithCookies(request, `/g/${membership.group.id}`, { session: token });
 }

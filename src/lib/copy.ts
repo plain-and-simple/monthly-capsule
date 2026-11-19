@@ -6,6 +6,21 @@ export const LANDING_PROMISE = "Friends write. You get one capsule.";
 export const LANDING_HEADLINE = LANDING_PROMISE;
 export const LANDING_MONTH_GOES =
   "The window opens. Everyone writes, adds a few photos, and submits. The window closes and the capsule goes out.";
+export const SAMPLE_KICKER = "A sample page";
+export const SAMPLE_MONTH = "October";
+export const SAMPLE_ONE_NAME = "Mina";
+export const SAMPLE_ONE_LETTER =
+  "The kitchen table is still sticky from pie. We ate it standing up.";
+export const SAMPLE_TWO_NAME = "Jonah";
+export const SAMPLE_TWO_LETTER = "Rain on the bus window. I kept the seat for you anyway.";
+export const PRIVACY_TITLE = "Privacy";
+export const PRIVACY_READ =
+  "People in the group can read the letters and see the photos. There is no public page, and there is no way to search for a group.";
+export const PRIVACY_PHOTOS =
+  "Photos stay in the group. They are stored privately and shown only to people who are in that group.";
+export const PRIVACY_LEAVE =
+  "Sign out when you are done, especially on a shared computer. To stop being in a group, ask the owner to remove you.";
+export const PRIVACY_BAN = "Plain and Simple can ban an account.";
 export const LANDING_CREATE_LABEL = "Create";
 export const LANDING_CREATE_CTA = "Create a capsule group";
 export const LANDING_MANAGE_HEADING = "Manage your capsule";
@@ -46,6 +61,11 @@ export const GROUP_INVITE_SOLO_CTA = "Invite someone";
 export const ROUTE_ERROR_HOME = "← Home";
 export const LANDING_LEDE =
   "A private page for a small group. Everyone sends a short letter and a few photos during the month. When the window closes, it all arrives as one thing to read.";
+export const LANDING_INVITE_NOTE =
+  "Have an invite link? Open it. You will create an account or sign in, then enter the Group PIN.";
+export const CREATE_GROUP_NEEDS_CODE = "Creating a group needs a code from Plain and Simple.";
+export const SCHEDULE_OPEN_EXAMPLE = "Open on the 25th means the 25th of the month before.";
+export const STUDIO_RATE_LIMITED = "Too many tries. Wait a few minutes.";
 
 export const CREATE_SUCCESS_HINT = "Show once — save it.";
 export const CREATE_SUCCESS_COPY = "Copy";
@@ -111,7 +131,11 @@ export const ROSTER_SUBMITTED = "Submitted";
 export const ROSTER_NOT_YET = "Not yet";
 export const GROUP_NEXT_CAPSULE = "Next capsule";
 export const SUBMIT_DRAFT = "Save as draft";
+export const SUBMIT_SAVE_PHOTOS = "Save photos as draft";
 export const SUBMIT_AND_SEND = "Save and submit";
+export const SUBMIT_UPDATE = "Update letter";
+export const SUBMIT_PHOTO_NOTE =
+  "Words save on their own. Photos save when you save or submit.";
 export const SUBMIT_PREPARING_PHOTOS = "Preparing photos…";
 export const SUBMIT_SAVED_DRAFT = "Saved as draft";
 export const SUBMIT_DRAFT_SAVED = "Draft saved";
@@ -152,10 +176,10 @@ export const CAPSULE_THEME_HINT =
 export const CAPSULE_THEME_SAVE = "Save theme";
 export const CAPSULE_THEME_INVALID = "Pick a theme.";
 
-export const MANAGE_TAG_SUBMIT = "Submit capsule";
-export const MANAGE_TAG_SUBMITTED = "Capsule already submitted";
-export const MANAGE_TAG_READ = "Read latest capsule";
-export const MANAGE_TAG_NOT_OPEN = "Next capsule not open";
+export const MANAGE_TAG_SUBMIT = "Write your letter";
+export const MANAGE_TAG_SUBMITTED = "Letter is in";
+export const MANAGE_TAG_READ = "Read";
+export const MANAGE_TAG_NOT_OPEN = "Not open yet";
 export const CONTRIBUTORS_PREFIX = "Contributors:";
 export const IN_THIS_ISSUE = "In this issue";
 export const DOWNLOAD_PDF_LABEL = "Download PDF";

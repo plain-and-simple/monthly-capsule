@@ -1,9 +1,17 @@
 export const DEFAULT_CREATE_GROUP_CODE = "plainandsimple";
 export const STUDIO_CODE_ERROR = "That code doesn’t work";
 
-export function resolveCreateGroupCode(envValue: string | undefined): string {
-  const trimmed = envValue?.trim();
-  return trimmed ? trimmed : DEFAULT_CREATE_GROUP_CODE;
+export function resolveCreateGroupCode(
+  envValue: string | undefined,
+  nodeEnv: string | undefined = process.env.NODE_ENV,
+): string {
+  const trimmed = envValue?.trim() ?? "";
+  const publicFallback =
+    !trimmed || trimmed.toLowerCase() === DEFAULT_CREATE_GROUP_CODE.toLowerCase();
+  if (nodeEnv === "production" && publicFallback) {
+    throw new Error("CREATE_GROUP_CODE must be set to a private value");
+  }
+  return trimmed || DEFAULT_CREATE_GROUP_CODE;
 }
 
 export function studioCodeMatches(input: string, expected: string): boolean {

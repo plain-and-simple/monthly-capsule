@@ -242,16 +242,6 @@ export default async function GroupHomePage({
             </div>
           </div>
 
-          <CycleForm
-            groupId={group.id}
-            submitOpen={open}
-            unsent={unsent}
-            thisMonthLabel={nextLabel}
-            writtenPhrase={open ? writtenCountPhrase(written, total) : undefined}
-            nextOpenDate={nextOpenDate}
-            canForce={actorIsOwner}
-          />
-
           <div className="stack stack--tight">
             <PeopleRoster
               people={people}
@@ -268,6 +258,16 @@ export default async function GroupHomePage({
               </p>
             ) : null}
           </div>
+
+          <CycleForm
+            groupId={group.id}
+            submitOpen={open}
+            unsent={unsent}
+            thisMonthLabel={nextLabel}
+            writtenPhrase={open ? writtenCountPhrase(written, total) : undefined}
+            nextOpenDate={nextOpenDate}
+            canForce={actorIsOwner}
+          />
 
           {earlier.length > 0 ? (
             <div className="stack stack--tight">

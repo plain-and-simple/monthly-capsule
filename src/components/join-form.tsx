@@ -74,7 +74,6 @@ export function JoinForm({
                 autoComplete="one-time-code"
                 maxLength={6}
                 required
-                placeholder="XXXXXX"
                 spellCheck={false}
               />
               <span className="field__hint">From whoever sent you the link.</span>

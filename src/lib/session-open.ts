@@ -26,12 +26,19 @@ import {
 import { verifyPin } from "@/lib/pin";
 import { clientIp, loginAttemptsBlocked, pinAttemptsBlocked, recordLoginAttempt, recordPinAttempt } from "@/lib/rate-limit";
 import { parseAuthFormReturn, parseMembershipNext, parseReturnPath } from "@/lib/return-path";
+import { accountSessionVersion } from "@/lib/session-policy";
 import { getAccountSession, getSession } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase";
 import type { Account, SessionPayload } from "@/lib/types";
 
 export type SessionOpenResult =
-  | { ok: true; path: string; account?: { accountId: string }; session?: SessionPayload; clearSession?: boolean }
+  | {
+      ok: true;
+      path: string;
+      account?: { accountId: string; sessionVersion: number | null };
+      session?: SessionPayload;
+      clearSession?: boolean;
+    }
   | { ok: false; error: string; path: string };
 
 function formReturn(formData: FormData, fallback: string): string {
@@ -76,7 +83,7 @@ export async function planManageLogin(formData: FormData): Promise<SessionOpenRe
   }
 
   if (next) {
-    return { ok: true, path: next, account: { accountId: account.id } };
+    return { ok: true, path: next, account: { accountId: account.id, sessionVersion: accountSessionVersion(account) } };
   }
 
   const groups = await listAccountGroups(account.id);
@@ -86,15 +93,19 @@ export async function planManageLogin(formData: FormData): Promise<SessionOpenRe
     return {
       ok: true,
       path: managePath(destination),
-      account: { accountId: account.id },
-      session: { memberId: membership.member.id, groupId: membership.group.id },
+      account: { accountId: account.id, sessionVersion: accountSessionVersion(account) },
+      session: {
+        memberId: membership.member.id,
+        groupId: membership.group.id,
+        sessionVersion: accountSessionVersion(account),
+      },
     };
   }
 
   return {
     ok: true,
     path: managePath(destination),
-    account: { accountId: account.id },
+    account: { accountId: account.id, sessionVersion: accountSessionVersion(account) },
   };
 }
 
@@ -122,7 +133,7 @@ export async function planSignUp(formData: FormData): Promise<SessionOpenResult>
   return {
     ok: true,
     path: next ?? "/manage",
-    account: { accountId: account.id },
+    account: { accountId: account.id, sessionVersion: accountSessionVersion(account) },
   };
 }
 
@@ -199,7 +210,7 @@ export async function planJoinGroup(formData: FormData): Promise<SessionOpenResu
   return {
     ok: true,
     path: `/g/${groupId}`,
-    session: { memberId: member.id, groupId },
+    session: { memberId: member.id, groupId, sessionVersion: accountSessionVersion(account) },
   };
 }
 
@@ -257,7 +268,7 @@ export async function planSaveLogin(formData: FormData): Promise<SessionOpenResu
   return {
     ok: true,
     path: back,
-    account: { accountId: account.id },
+    account: { accountId: account.id, sessionVersion: accountSessionVersion(account) },
   };
 }
 

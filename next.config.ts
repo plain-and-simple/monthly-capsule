@@ -1,6 +1,26 @@
 import type { NextConfig } from "next";
 
+function contentSecurityPolicy(): string {
+  const scriptSrc =
+    process.env.NODE_ENV === "production"
+      ? "script-src 'self' 'unsafe-inline'"
+      : "script-src 'self' 'unsafe-inline' 'unsafe-eval'";
+  return [
+    "default-src 'self'",
+    scriptSrc,
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: blob: https://*.supabase.co",
+    "font-src 'self'",
+    "connect-src 'self'",
+    "frame-ancestors 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "object-src 'none'",
+  ].join("; ");
+}
+
 const nextConfig: NextConfig = {
+  poweredByHeader: false,
   // Hosting lock: https://capsule.plainandsimple.app
   // Separate Vercel project. Do not set basePath, assetPrefix, or rewrites
   // that mount this app under /capsule on the marketing domain.
@@ -35,6 +55,20 @@ const nextConfig: NextConfig = {
     serverActions: {
       bodySizeLimit: "16mb",
     },
+  },
+  async headers() {
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          { key: "Content-Security-Policy", value: contentSecurityPolicy() },
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "X-Frame-Options", value: "DENY" },
+          { key: "Referrer-Policy", value: "no-referrer" },
+          { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+        ],
+      },
+    ];
   },
 };
 

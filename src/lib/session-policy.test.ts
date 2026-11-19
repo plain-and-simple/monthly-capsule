@@ -17,6 +17,7 @@ import {
   SEE_OTHER,
   SIGNUP_PATH,
   STUDIO_PATH,
+  accountAccessAllowed,
   cookieWriteAllowed,
   decideAccountSession,
   decideGroupGate,
@@ -82,6 +83,37 @@ describe("invalid / missing account cookie", () => {
       }),
     ).toEqual({ action: "signed_in" });
   });
+
+  it("a ban or a stale session version clears via the Route Handler", () => {
+    expect(
+      decideAccountSession({
+        cookiePresent: true,
+        payloadValid: true,
+        accountFound: true,
+        accessAllowed: false,
+      }),
+    ).toEqual({ action: "clear_via_route", path: CLEAR_ACCOUNT_SESSION_PATH });
+  });
+});
+
+describe("account session version", () => {
+  it("lets version 0 honor cookies minted before versions existed", () => {
+    expect(
+      accountAccessAllowed({ banned: false, tokenVersion: null, accountVersion: 0 }),
+    ).toBe(true);
+    expect(accountAccessAllowed({ banned: false, tokenVersion: 0, accountVersion: 0 })).toBe(true);
+  });
+
+  it("rejects a banned account and a token from before a reset", () => {
+    expect(accountAccessAllowed({ banned: true, tokenVersion: 1, accountVersion: 1 })).toBe(false);
+    expect(accountAccessAllowed({ banned: false, tokenVersion: null, accountVersion: 1 })).toBe(
+      false,
+    );
+    expect(accountAccessAllowed({ banned: false, tokenVersion: 1, accountVersion: 2 })).toBe(
+      false,
+    );
+    expect(accountAccessAllowed({ banned: false, tokenVersion: 2, accountVersion: 2 })).toBe(true);
+  });
 });
 
 describe("single-group manage redirect", () => {
@@ -133,6 +165,7 @@ describe("RSC cookie-write regression", () => {
     const clearer = readFileSync(resolve(here, "../app/api/session/clear/route.ts"), "utf8");
     expect(clearer).toContain("seeOtherWithCookies");
     expect(clearer).toContain("clearAccount");
+    expect(clearer).toContain("clearSession");
     expect(clearer).toContain('export async function GET');
     expect(clearer).not.toContain('from "next/navigation"');
 
@@ -307,6 +340,7 @@ describe("open-group hang regression", () => {
     const next = source.indexOf("\nexport const requireGroupMember", start + 1);
     const body = source.slice(start, next === -1 ? undefined : next);
     expect(body).toContain("decideGroupGate");
+    expect(body).toContain("accountAccessAllowed");
     expect(body).toContain('decision.action === "manage"');
     expect(body).toContain("fetchMaybeSingleWithRetry");
     expect(body).toContain("TransientError");

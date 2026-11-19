@@ -2,6 +2,7 @@ import Link from "next/link";
 import { AppHeader } from "@/components/app-header";
 import { OpenGroupForm } from "@/components/open-group-form";
 import {
+  CREATE_GROUP_NEEDS_CODE,
   JOIN_EXISTING_CTA,
   LANDING_CREATE_CTA,
   MANAGE_EMPTY_HEADING,
@@ -9,7 +10,13 @@ import {
   MANAGE_EMPTY_TITLE,
   groupDisplayName,
 } from "@/lib/copy";
-import { manageGroupActionTag, membershipRoleLabel } from "@/lib/group-status";
+import {
+  GROUP_STATUS_READY,
+  GROUP_STATUS_RESTING,
+  decorateManagedGroup,
+  manageGroupActionTag,
+  membershipRoleLabel,
+} from "@/lib/group-status";
 import { listAccountGroups } from "@/lib/memberships";
 import { openSubmitYearMonth } from "@/lib/cycle";
 import { getSession, requireAccount } from "@/lib/session";
@@ -97,7 +104,7 @@ export default async function ManagePage() {
                   <Link className="btn btn--secondary btn--block" href="/create">
                     {LANDING_CREATE_CTA}
                   </Link>
-                  <p className="btn-note">Creating a group needs a studio code.</p>
+                  <p className="btn-note">{CREATE_GROUP_NEEDS_CODE}</p>
                 </div>
                 <div className="panel">
                   <p className="small">
@@ -121,6 +128,10 @@ export default async function ManagePage() {
                     const myStatus =
                       (openMonthId && statusByMember.get(`${member.id}:${openMonthId}`)) || "none";
                     const name = groupDisplayName(group.name);
+                    const decorated = decorateManagedGroup(group as Group, {
+                      closedYearMonths: closed,
+                      compiledYearMonths: compiled,
+                    });
                     return (
                       <li key={group.id}>
                         <OpenGroupForm
@@ -134,8 +145,9 @@ export default async function ManagePage() {
                           roleLabel={membershipRoleLabel(member.role)}
                           status={manageGroupActionTag({
                             submitOpen,
-                            hasCompiledCapsule: compiled.length > 0,
+                            hasCompiledCapsule: decorated.status === GROUP_STATUS_READY,
                             myStatus,
+                            opensOn: decorated.status === GROUP_STATUS_RESTING ? decorated.meta : null,
                           })}
                         />
                       </li>
