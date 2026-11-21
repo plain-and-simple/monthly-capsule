@@ -1,13 +1,14 @@
 import "server-only";
 import {
   buildCapsuleArchive,
-  capsuleHasArchive,
   parseCapsuleArchive,
   type CapsuleArchive,
   type CapsuleArchiveLetter,
 } from "@/lib/capsule-archive";
 import { parseCapsuleTheme } from "@/lib/capsule-theme";
 import { generateAndStoreCapsulePdf } from "@/lib/capsule-pdf-store";
+import { canFinishCompile, codedError, opsFailureCode, planArchiveWrite } from "@/lib/compile-policy";
+import { reportOpsAlert } from "@/lib/ops-alert-mail";
 import {
   DEFAULT_MONTH_VERSION,
   latestEdition,
@@ -256,20 +257,54 @@ async function writeCapsulePdfKeepsake(input: {
   version: number;
   archive: CapsuleArchive;
   pdfStoragePath?: string | null;
+}): Promise<string | null> {
+  if (input.pdfStoragePath) return input.pdfStoragePath;
+  const stored = await generateAndStoreCapsulePdf({
+    capsuleId: input.capsuleId,
+    groupId: input.group.id,
+    groupName: input.group.name,
+    yearMonth: input.yearMonth,
+    version: input.version,
+    archive: input.archive,
+  });
+  return stored.storagePath;
+}
+
+/**
+ * Archive first, then the PDF. A month stays uncompiled until both exist.
+ * A valid archive is kept, including when the month is uncompiled and has no PDF.
+ * Only a missing or unparsable archive is written. The PDF comes from that archive.
+ */
+async function finishIfKeepsakeReady(input: {
+  group: Group;
+  yearMonth: string;
+  monthId: string;
+  monthStatus: Month["status"];
+  version: number;
+  capsuleId: string;
+  existingArchive: unknown;
+  existingPdfPath?: string | null;
+  archive: CapsuleArchive;
+  created: boolean;
 }) {
-  if (input.pdfStoragePath) return;
-  try {
-    await generateAndStoreCapsulePdf({
-      capsuleId: input.capsuleId,
-      groupId: input.group.id,
-      groupName: input.group.name,
-      yearMonth: input.yearMonth,
-      version: input.version,
-      archive: input.archive,
-    });
-  } catch (error) {
-    console.error("capsule pdf generate failed", error);
-  }
+  const plan = planArchiveWrite({
+    existingArchive: input.existingArchive,
+    incoming: input.archive,
+    monthStatus: input.monthStatus,
+    pdfStoragePath: input.existingPdfPath,
+  });
+  const archiveWritten = plan.write ? await writeCapsuleArchive(input.capsuleId, plan.archive) : true;
+  if (!archiveWritten) throw codedError("archive_failed");
+  const pdfStoragePath = await writeCapsulePdfKeepsake({
+    capsuleId: input.capsuleId,
+    group: input.group,
+    yearMonth: input.yearMonth,
+    version: input.version,
+    archive: plan.archive,
+    pdfStoragePath: input.existingPdfPath,
+  });
+  if (!canFinishCompile({ archiveWritten, pdfStoragePath })) throw codedError("pdf_failed");
+  return finishCompile(input.group, input.yearMonth, input.monthId, input.created);
 }
 
 export async function ensureCapsuleArchive(
@@ -303,19 +338,18 @@ export async function compileGroupMonth(group: Group, yearMonth: string, version
   const { data: existing } = await admin.from("capsules").select("*").eq("month_id", monthId).maybeSingle();
 
   if (existing) {
-    const capsuleId = existing.id as string;
-    if (!capsuleHasArchive(existing.archive)) {
-      await writeCapsuleArchive(capsuleId, archive);
-    }
-    await writeCapsulePdfKeepsake({
-      capsuleId,
+    return finishIfKeepsakeReady({
       group,
       yearMonth,
+      monthId,
+      monthStatus: month.status,
       version: monthVersion,
-      archive: parseCapsuleArchive(existing.archive) ?? archive,
-      pdfStoragePath: (existing as Capsule).pdf_storage_path,
+      capsuleId: existing.id as string,
+      existingArchive: existing.archive,
+      existingPdfPath: (existing as Capsule).pdf_storage_path,
+      archive,
+      created: false,
     });
-    return finishCompile(group, yearMonth, monthId, false);
   }
 
   const withArchive = await admin
@@ -324,14 +358,17 @@ export async function compileGroupMonth(group: Group, yearMonth: string, version
     .select("id")
     .maybeSingle();
   if (!withArchive.error && withArchive.data) {
-    await writeCapsulePdfKeepsake({
-      capsuleId: withArchive.data.id as string,
+    return finishIfKeepsakeReady({
       group,
       yearMonth,
+      monthId,
+      monthStatus: month.status,
       version: monthVersion,
+      capsuleId: withArchive.data.id as string,
+      existingArchive: archive,
       archive,
+      created: true,
     });
-    return finishCompile(group, yearMonth, monthId, true);
   }
 
   const withoutArchive = await admin
@@ -340,15 +377,17 @@ export async function compileGroupMonth(group: Group, yearMonth: string, version
     .select("id")
     .maybeSingle();
   if (!withoutArchive.error && withoutArchive.data) {
-    await writeCapsuleArchive(withoutArchive.data.id as string, archive);
-    await writeCapsulePdfKeepsake({
-      capsuleId: withoutArchive.data.id as string,
+    return finishIfKeepsakeReady({
       group,
       yearMonth,
+      monthId,
+      monthStatus: month.status,
       version: monthVersion,
+      capsuleId: withoutArchive.data.id as string,
+      existingArchive: null,
       archive,
+      created: true,
     });
-    return finishCompile(group, yearMonth, monthId, true);
   }
 
   const { data: raced } = await admin
@@ -356,19 +395,19 @@ export async function compileGroupMonth(group: Group, yearMonth: string, version
     .select("id, archive, pdf_storage_path")
     .eq("month_id", monthId)
     .maybeSingle();
-  if (!raced) throw new Error("Could not compile capsule");
-  if (!capsuleHasArchive(raced.archive)) {
-    await writeCapsuleArchive(raced.id as string, archive);
-  }
-  await writeCapsulePdfKeepsake({
-    capsuleId: raced.id as string,
+  if (!raced) throw codedError("compile_failed");
+  return finishIfKeepsakeReady({
     group,
     yearMonth,
+    monthId,
+    monthStatus: month.status,
     version: monthVersion,
-    archive: parseCapsuleArchive(raced.archive) ?? archive,
-    pdfStoragePath: raced.pdf_storage_path as string | null | undefined,
+    capsuleId: raced.id as string,
+    existingArchive: raced.archive,
+    existingPdfPath: raced.pdf_storage_path as string | null | undefined,
+    archive,
+    created: false,
   });
-  return finishCompile(group, yearMonth, monthId, false);
 }
 
 export async function latestUnsentYearMonth(groupId: string): Promise<string | null> {
@@ -412,17 +451,29 @@ export async function compileDueCapsules(now: Date = new Date()) {
 
   const results: { groupId: string; yearMonth: string; version: number; created: boolean }[] = [];
   for (const group of (groups ?? []) as Group[]) {
-    const yearMonth = compileTargetYearMonth(group, now);
-    const rows = toCycleMonthRows(await listGroupMonthRows(group.id));
-    const open = openEdition(rows, yearMonth);
-    const version = open?.version ?? latestEdition(rows, yearMonth)?.version;
-    const result = await compileGroupMonth(group, yearMonth, version);
-    results.push({
-      groupId: group.id,
-      yearMonth,
-      version: version ?? DEFAULT_MONTH_VERSION,
-      created: result.created,
-    });
+    let yearMonth = "";
+    try {
+      yearMonth = compileTargetYearMonth(group, now);
+      const rows = toCycleMonthRows(await listGroupMonthRows(group.id));
+      const open = openEdition(rows, yearMonth);
+      const version = open?.version ?? latestEdition(rows, yearMonth)?.version;
+      const result = await compileGroupMonth(group, yearMonth, version);
+      results.push({
+        groupId: group.id,
+        yearMonth,
+        version: version ?? DEFAULT_MONTH_VERSION,
+        created: result.created,
+      });
+    } catch (caught) {
+      const code = opsFailureCode(caught);
+      console.error("compile failed", { groupId: group.id, yearMonth, error: code });
+      await reportOpsAlert({
+        route: "compileDueCapsules",
+        code,
+        groupId: group.id,
+        memberId: null,
+      });
+    }
   }
   return results;
 }

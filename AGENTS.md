@@ -9,7 +9,7 @@ Chandler is the product manager. Research, plan, ship. Dogfood. Prefer a usable 
 ## Hard stops
 
 - **PIN is bcrypt-only.** Generated at create/regen, shown once, never recovered. Do not display, email, or reconstruct a stored Group PIN. Do not add PIN-reminder UI. Owner regen is the only way to get a new PIN (old one dies; sessions stay valid).
-- **Do not generate a PDF during email send.** Resend has a short timeout. Compile (or first download) stores `capsules.pdf_storage_path`. Email attaches that object only if it already exists. PDF failure must not block compile or email.
+- **Do not generate a PDF during email send.** Resend has a short timeout. Compile (or first download) stores `capsules.pdf_storage_path`. Email attaches that object only if it already exists. PDF failure must not mark the month compiled, must not send email, and must not store a partial PDF.
 - **Do not silently drop photos.** Max is 6 (`MAX_PHOTOS`). If someone picks 10, keep 6, skip compressing the rest, and show `PHOTOS_MAX` (`You can add 6 photos. Extra photos were not added.`).
 - **On-screen newspaper wrap is every theme**, not Warm-only. Classic, Warm, Minimal, and Heritage all put photos beside the writing. Theme owns type, paper, and leftover chrome — not “letter then a photo dump.” The PDF is the B2 magazine layout, not this weave.
 - **Do not reopen** hosting/`basePath`, phone/SMS, rich editor, video, co-owners, or regenerate-past-month.
@@ -33,7 +33,7 @@ People typically write about two paragraphs and put photos on the sides so it re
 - Producer `monthly-capsule-b2/2`. An older stored PDF rebuilds once on download. Theme palettes still follow the catalog paper/ink/accent.
 - Each placed photo is cropped with the template face-aware window, resized to that box at 200 ppi (never above 220, never upscaled), and encoded as a baseline sRGB JPEG before Chromium prints. The page shows that JPEG at the box size with no CSS crop. A source under about 150 ppi is kept whole and logged. Camera originals are never stored. The PDF is still built once and reused.
 - Session-gated download: `/g/[uuid]/capsule/[YYYY-MM]/pdf` (and `/vN/pdf` for later editions).
-- Missing PDFs generate on first download. Email never calls generate-during-send. Compile and the PDF routes need a 60s function budget and 1024 MB.
+- Missing PDFs generate on first download. Email never calls generate-during-send. Compile and the PDF routes need a 60s function budget and 2048 MB. The email cron route needs a 60s budget.
 
 ## Submit photos
 

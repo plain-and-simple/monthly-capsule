@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   B2_AVAIL,
@@ -21,12 +24,15 @@ import {
   SPREAD_PAGE_UNFILLED_MAX,
   SPREAD_WORD_MIN,
   TEMPLATE_REPEAT_PENALTY,
+  CapsuleLayoutError,
+  assertLetterFullyPlaced,
   auditPageContent,
   bindPhotosToSlots,
   bodyLinePitch,
   faceFullyVisible,
   heroScore,
   layoutCapsuleDocument,
+  letterFullyPlaced,
   magazineRowCounts,
   measureTextWidth,
   orderPhotos,
@@ -1087,6 +1093,129 @@ describe("b2 body line pitch", () => {
     );
     expect(columns.size).toBeGreaterThanOrEqual(2);
     for (const id of B2_TEMPLATE_IDS) expect(seen, id).toContain(id);
+  });
+});
+
+const b2SourcePath = resolve(dirname(fileURLToPath(import.meta.url)), "./capsule-b2.ts");
+
+/** Paragraph breaks every few words. This is the shape that used to vanish at 800 words. */
+function paragraphHeavy(count: number): string {
+  const tokens = Array.from({ length: count }, (_, index) => `lineword${index}`);
+  const lines: string[] = [];
+  for (let index = 0; index < tokens.length; index += 7) {
+    lines.push(tokens.slice(index, index + 7).join(" "));
+  }
+  const paragraphs: string[] = [];
+  for (let index = 0; index < lines.length; index += 3) {
+    paragraphs.push(lines.slice(index, index + 3).join("\n"));
+  }
+  return paragraphs.join("\n\n");
+}
+
+function plainWords(count: number): string {
+  return Array.from({ length: count }, (_, index) => `word${index}`).join(" ");
+}
+
+function exactChars(length: number): string {
+  const sentence = "The porch light stayed on through the rain and the street looked softer. ";
+  let text = "";
+  while (text.length < length) text += sentence;
+  return text.slice(0, length);
+}
+
+function syntheticShots(label: string, count: number): B2Photo[] {
+  return Array.from({ length: count }, (_, index) =>
+    photo(
+      `synthetic-${label}-${index}`,
+      index % 2 === 0 ? 1200 : 1600,
+      index % 2 === 0 ? 1600 : 1000,
+      [],
+      index,
+    ),
+  );
+}
+
+describe("b2 long letters stay on the page", () => {
+  const cases = [
+    { label: "800-word paragraphs", body: () => paragraphHeavy(800) },
+    { label: "1120 plain words", body: () => plainWords(1120) },
+    { label: "12000 characters", body: () => exactChars(12_000) },
+    { label: "20000 characters", body: () => exactChars(20_000) },
+  ];
+
+  for (const photoCount of [0, 6]) {
+    for (const item of cases) {
+      it(`keeps a ${item.label} letter with ${photoCount} photos`, () => {
+        const body = item.body();
+        if (item.label.endsWith("characters")) expect(body.length).toBe(item.label.startsWith("12000") ? 12_000 : 20_000);
+        const shots = syntheticShots(item.label.replace(/\s+/g, "-"), photoCount);
+        const plan = layout([{ body, photos: shots }]);
+        const pages = personPages(plan, "Wren");
+        expect(pages.length, item.label).toBeGreaterThan(1);
+        expect(pages.every((page) => page.templateId === "spread"), item.label).toBe(true);
+        expect(bodyWords(pages), item.label).toEqual(words(body));
+        expectPhotosOnce(pages, shots);
+        expectClean(plan.pages);
+        expect(letterFullyPlaced(body, shots, pages), item.label).toBe(true);
+        for (const line of pages.flatMap((page) => page.lines)) {
+          if (line.role === "body") expect(line.size).toBe(B2_BODY_SIZE);
+        }
+      }, 120_000);
+    }
+  }
+
+  it("keeps an empty month and one short letter", () => {
+    const empty = layout([]);
+    expect(empty.pages[0]?.lines.some((line) => line.text === "No letters this month.")).toBe(true);
+    const body = "A short synthetic note.";
+    const one = layout([{ body }]);
+    const pages = personPages(one, "Wren");
+    expect(pages.length).toBeGreaterThan(0);
+    expect(bodyWords(pages)).toEqual(words(body));
+    expectClean(one.pages);
+  });
+
+  it("rejects a plan that drops a word or a photo", () => {
+    expect(
+      letterFullyPlaced("alpha beta", [{ storagePath: "synthetic-a" }], [
+        {
+          lines: [
+            { text: "alpha", role: "body" },
+            { text: "beta", role: "body" },
+          ],
+          photos: [{ storagePath: "synthetic-a" }],
+        },
+      ]),
+    ).toBe(true);
+    expect(
+      letterFullyPlaced("alphabeta", [], [
+        {
+          lines: [
+            { text: "alpha", role: "body" },
+            { text: "beta", role: "body" },
+          ],
+          photos: [],
+        },
+      ]),
+    ).toBe(true);
+    expect(
+      letterFullyPlaced("alpha beta", [], [{ lines: [{ text: "alpha", role: "body" }], photos: [] }]),
+    ).toBe(false);
+    expect(
+      letterFullyPlaced("alpha", [{ storagePath: "synthetic-a" }], [
+        { lines: [{ text: "alpha", role: "body" }], photos: [] },
+      ]),
+    ).toBe(false);
+    expect(() => assertLetterFullyPlaced("alpha", [], [{ lines: [], photos: [] }])).toThrow(CapsuleLayoutError);
+    const error = new CapsuleLayoutError();
+    expect(error.code).toBe("layout_incomplete");
+    expect(error.message).toBe("layout_incomplete");
+    const source = readFileSync(b2SourcePath, "utf8");
+    const pick = source.slice(source.indexOf("function pickBuilt"), source.indexOf("function luminance"));
+    expect(pick).toContain("throw new CapsuleLayoutError()");
+    expect(pick).not.toContain("lines: []");
+    expect(source).not.toContain("Math.min(4, minPages");
+    expect(source).not.toContain("pages: [{ lines: [], photos: [] }]");
   });
 });
 
