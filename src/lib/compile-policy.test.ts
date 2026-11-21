@@ -3,7 +3,8 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { CapsuleLayoutError } from "./capsule-b2";
-import { canFinishCompile, codedError, opsFailureCode } from "./compile-policy";
+import { buildCapsuleArchive } from "./capsule-archive";
+import { canFinishCompile, codedError, opsFailureCode, planArchiveWrite } from "./compile-policy";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -42,5 +43,88 @@ describe("compile keepsake gate", () => {
     expect(slice).not.toContain("letter.body");
     expect(slice).not.toMatch(/reportOpsAlert\(\{[^}]*\bbody:/);
     expect(slice.indexOf("compileGroupMonth")).toBeLessThan(slice.indexOf("catch"));
+  });
+});
+
+const storedArchive = buildCapsuleArchive({
+  yearMonth: "2026-10",
+  groupName: "Fixture",
+  memberCount: 1,
+  letters: [{ preferred_name: "Member", body: "Stored letter.", photos: [] }],
+});
+
+const incomingArchive = buildCapsuleArchive({
+  yearMonth: "2026-10",
+  groupName: "Fixture",
+  memberCount: 1,
+  letters: [{ preferred_name: "Member", body: "Replacement letter.", photos: [] }],
+});
+
+describe("archive write plan", () => {
+  it("writes when no archive is stored", () => {
+    for (const existingArchive of [null, undefined]) {
+      const plan = planArchiveWrite({
+        existingArchive,
+        incoming: incomingArchive,
+        monthStatus: "closed",
+        pdfStoragePath: null,
+      });
+      expect(plan.write).toBe(true);
+      expect(plan.archive).toBe(incomingArchive);
+    }
+  });
+
+  it("keeps a valid archive when the month is uncompiled and the pdf is missing", () => {
+    for (const monthStatus of ["open", "closed"] as const) {
+      const plan = planArchiveWrite({
+        existingArchive: storedArchive,
+        incoming: incomingArchive,
+        monthStatus,
+        pdfStoragePath: null,
+      });
+      expect(plan.write).toBe(false);
+      expect(plan.archive.letters[0]?.body).toBe("Stored letter.");
+      expect(plan.archive).not.toBe(incomingArchive);
+    }
+  });
+
+  it("keeps a valid archive when the month is compiled and the pdf is missing", () => {
+    const plan = planArchiveWrite({
+      existingArchive: storedArchive,
+      incoming: incomingArchive,
+      monthStatus: "compiled",
+      pdfStoragePath: undefined,
+    });
+    expect(plan.write).toBe(false);
+    expect(plan.archive.letters[0]?.body).toBe("Stored letter.");
+    expect(plan.archive).not.toBe(incomingArchive);
+  });
+
+  it("writes when the stored value does not parse", () => {
+    for (const existingArchive of [{}, { month_id: "x" }, "not-an-archive"]) {
+      const plan = planArchiveWrite({
+        existingArchive,
+        incoming: incomingArchive,
+        monthStatus: "closed",
+        pdfStoragePath: null,
+      });
+      expect(plan.write).toBe(true);
+      expect(plan.archive).toBe(incomingArchive);
+    }
+  });
+
+  it("finish generates the pdf from the kept archive", () => {
+    const compile = readFileSync(resolve(here, "./compile.ts"), "utf8");
+    expect(compile).not.toContain("snapshotted again");
+    const ready = compile.slice(
+      compile.indexOf("async function finishIfKeepsakeReady"),
+      compile.indexOf("export async function ensureCapsuleArchive"),
+    );
+    expect(ready).toContain("planArchiveWrite");
+    expect(ready).not.toContain("hadPdf");
+    expect(ready).not.toContain('monthStatus !== "compiled"');
+    expect(ready.indexOf("planArchiveWrite")).toBeLessThan(ready.indexOf("writeCapsuleArchive"));
+    expect(ready).toContain("archive: plan.archive");
+    expect(ready).not.toContain("archive: input.archive");
   });
 });

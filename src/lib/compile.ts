@@ -1,14 +1,13 @@
 import "server-only";
 import {
   buildCapsuleArchive,
-  capsuleHasArchive,
   parseCapsuleArchive,
   type CapsuleArchive,
   type CapsuleArchiveLetter,
 } from "@/lib/capsule-archive";
 import { parseCapsuleTheme } from "@/lib/capsule-theme";
 import { generateAndStoreCapsulePdf } from "@/lib/capsule-pdf-store";
-import { canFinishCompile, codedError, opsFailureCode } from "@/lib/compile-policy";
+import { canFinishCompile, codedError, opsFailureCode, planArchiveWrite } from "@/lib/compile-policy";
 import { reportOpsAlert } from "@/lib/ops-alert-mail";
 import {
   DEFAULT_MONTH_VERSION,
@@ -273,8 +272,8 @@ async function writeCapsulePdfKeepsake(input: {
 
 /**
  * Archive first, then the PDF. A month stays uncompiled until both exist.
- * An uncompiled row with no PDF is snapshotted again on the next attempt.
- * A compiled row keeps its archive and only fills a missing PDF.
+ * A valid archive is kept, including when the month is uncompiled and has no PDF.
+ * Only a missing or unparsable archive is written. The PDF comes from that archive.
  */
 async function finishIfKeepsakeReady(input: {
   group: Group;
@@ -288,20 +287,20 @@ async function finishIfKeepsakeReady(input: {
   archive: CapsuleArchive;
   created: boolean;
 }) {
-  const hadPdf = Boolean(input.existingPdfPath);
-  let archiveForPdf = parseCapsuleArchive(input.existingArchive) ?? input.archive;
-  let archiveWritten = capsuleHasArchive(input.existingArchive);
-  if ((!hadPdf && input.monthStatus !== "compiled") || !archiveWritten) {
-    archiveWritten = await writeCapsuleArchive(input.capsuleId, input.archive);
-    archiveForPdf = input.archive;
-  }
+  const plan = planArchiveWrite({
+    existingArchive: input.existingArchive,
+    incoming: input.archive,
+    monthStatus: input.monthStatus,
+    pdfStoragePath: input.existingPdfPath,
+  });
+  const archiveWritten = plan.write ? await writeCapsuleArchive(input.capsuleId, plan.archive) : true;
   if (!archiveWritten) throw codedError("archive_failed");
   const pdfStoragePath = await writeCapsulePdfKeepsake({
     capsuleId: input.capsuleId,
     group: input.group,
     yearMonth: input.yearMonth,
     version: input.version,
-    archive: archiveForPdf,
+    archive: plan.archive,
     pdfStoragePath: input.existingPdfPath,
   });
   if (!canFinishCompile({ archiveWritten, pdfStoragePath })) throw codedError("pdf_failed");
