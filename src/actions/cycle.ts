@@ -30,7 +30,9 @@ import {
   isCycleSubmitOpen,
   isNextRedirectError,
 } from "@/lib/cycle";
+import { opsFailureCode } from "@/lib/compile-policy";
 import { EMAIL_ACTION_TIMEOUT_MS, ownerEmailFailed, withTimeout } from "@/lib/email-policy";
+import { reportOpsAlert } from "@/lib/ops-alert-mail";
 import { holdGroupMonthEmail, sendGroupMonthEmail } from "@/lib/email";
 import { forceCloseConfirmAccepted } from "@/lib/manage";
 import { capsuleHref, planForceOpen } from "@/lib/month-version";
@@ -109,6 +111,7 @@ export async function forceCloseCompile(
   formData: FormData,
 ): Promise<ForceCloseState> {
   const groupId = String(formData.get("groupId") ?? "");
+  let yearMonth = "";
 
   try {
     const { member, group } = await requireGroupMember(groupId);
@@ -120,6 +123,7 @@ export async function forceCloseCompile(
     const rows = toCycleMonthRows(months);
     const closed = await closedYearMonths(groupId);
     const target = forceCloseTarget(group, rows, closed);
+    yearMonth = target.yearMonth;
     const admin = createAdminClient();
     if (group.force_open_year_month) {
       await admin.from("groups").update({ force_open_year_month: null }).eq("id", groupId);
@@ -137,6 +141,14 @@ export async function forceCloseCompile(
     };
   } catch (error) {
     if (isNextRedirectError(error)) throw error;
+    const code = opsFailureCode(error);
+    console.error("compile failed", { groupId, yearMonth, error: code });
+    await reportOpsAlert({
+      route: "forceCloseCompile",
+      code,
+      groupId,
+      memberId: null,
+    });
     return { error: "Could not close." };
   }
 }

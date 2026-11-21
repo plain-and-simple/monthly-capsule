@@ -2056,9 +2056,140 @@ function bundleSpread(
   return best ? best.pages : null;
 }
 
+export class CapsuleLayoutError extends Error {
+  readonly code = "layout_incomplete";
+
+  constructor() {
+    super("layout_incomplete");
+    this.name = "CapsuleLayoutError";
+  }
+}
+
+/** Body copy and every photo, in order. Line breaks and a split word still count. */
+export function letterFullyPlaced(
+  body: string,
+  photos: readonly { storagePath: string }[],
+  pages: readonly {
+    lines: readonly { text: string; role?: string }[];
+    photos: readonly { storagePath: string }[];
+  }[],
+): boolean {
+  const source = body.replace(/\s+/g, "");
+  const placed = pages
+    .flatMap((page) => page.lines.filter((line) => line.role == null || line.role === "body").map((line) => line.text))
+    .join(" ")
+    .replace(/\s+/g, "");
+  if (placed !== source) return false;
+  const expected = photos.map((photo) => photo.storagePath).sort();
+  const got = pages.flatMap((page) => page.photos.map((photo) => photo.storagePath)).sort();
+  if (expected.length !== got.length) return false;
+  return expected.every((path, index) => path === got[index]);
+}
+
+export function assertLetterFullyPlaced(
+  body: string,
+  photos: readonly { storagePath: string }[],
+  pages: readonly {
+    lines: readonly { text: string; role?: string }[];
+    photos: readonly { storagePath: string }[];
+  }[],
+): void {
+  if (!letterFullyPlaced(body, photos, pages)) throw new CapsuleLayoutError();
+}
+
+function tokenSlicePlaced(tokens: readonly Token[], leaf: SpreadLeaf): boolean {
+  const source = joinTokens(tokens).replace(/\s+/g, "");
+  const placed = leaf.lines.map((line) => line.text).join(" ").replace(/\s+/g, "");
+  return placed === source;
+}
+
+/** Largest prefix of `tokens` that trySpreadLeaf can place with these photos. */
+function maxFittingTokens(photos: readonly B2Photo[], tokens: readonly Token[], ink: string): number {
+  if (tokens.length === 0) return 0;
+  let lo = 0;
+  let hi = Math.min(tokens.length, 1600);
+  let best = 0;
+  while (lo <= hi) {
+    const mid = Math.ceil((lo + hi) / 2);
+    if (mid === 0) {
+      lo = 1;
+      continue;
+    }
+    const slice = tokens.slice(0, mid);
+    const leaf = trySpreadLeaf(photos, slice, ink);
+    if (leaf && leaf.photos.length === photos.length && tokenSlicePlaced(slice, leaf)) {
+      best = mid;
+      lo = mid + 1;
+    } else {
+      hi = mid - 1;
+    }
+  }
+  return best;
+}
+
+function placeTokenSlice(
+  photos: readonly B2Photo[],
+  tokens: readonly Token[],
+  count: number,
+  ink: string,
+): { leaf: SpreadLeaf; count: number } | null {
+  if (count <= 0) return null;
+  const slice = tokens.slice(0, count);
+  const leaf = trySpreadLeaf(photos, slice, ink);
+  if (!leaf || leaf.photos.length !== photos.length || !tokenSlicePlaced(slice, leaf)) return null;
+  return { leaf, count };
+}
+
+/**
+ * One page per photo, then as many text pages as the rest of the letter needs.
+ * Used when the 2–3 page search cannot hold every word.
+ */
+function paginateLongSpread(ordered: readonly B2Photo[], tokens: readonly Token[], ink: string): SpreadLeaf[] | null {
+  const sampleCap = tokens.length === 0 ? 1 : Math.max(1, maxFittingTokens([], tokens, ink));
+  const textPages = tokens.length === 0 ? 0 : Math.ceil(tokens.length / sampleCap);
+  const pageCount = Math.max(1, ordered.length, textPages);
+  const groups = ordered.map((photo) => [photo]);
+  const leaves: SpreadLeaf[] = [];
+  let cursor = 0;
+
+  for (let index = 0; index < groups.length; index += 1) {
+    const group = groups[index]!;
+    const remaining = tokens.slice(cursor);
+    const pagesLeft = Math.max(1, pageCount - index);
+    const target = remaining.length === 0 ? 0 : Math.ceil(remaining.length / pagesLeft);
+    const maxFit = remaining.length === 0 ? 0 : maxFittingTokens(group, remaining, ink);
+    const balanced = Math.min(remaining.length, maxFit, target);
+    const placed =
+      placeTokenSlice(group, remaining, balanced, ink) ??
+      (maxFit !== balanced ? placeTokenSlice(group, remaining, Math.min(remaining.length, maxFit), ink) : null);
+    if (placed) {
+      leaves.push(placed.leaf);
+      cursor += placed.count;
+      continue;
+    }
+    const photoOnly = trySpreadLeaf(group, [], ink);
+    if (!photoOnly || photoOnly.photos.length !== group.length) return null;
+    leaves.push(photoOnly);
+  }
+
+  let guard = 0;
+  while (cursor < tokens.length) {
+    guard += 1;
+    if (guard > 240) return null;
+    const remaining = tokens.slice(cursor);
+    const take = maxFittingTokens([], remaining, ink);
+    const placed = placeTokenSlice([], remaining, take, ink);
+    if (!placed) return null;
+    leaves.push(placed.leaf);
+    cursor += placed.count;
+  }
+  return leaves.length > 0 ? leaves : null;
+}
+
 /**
  * A spread only when one page cannot hold the letter. Photos and text are split
  * so each page reaches the footer instead of leaving a photo page and an empty text page.
+ * Page count follows the letter. A plan that drops a word or a photo is rejected.
  */
 function buildSpread(ordered: B2Photo[], text: string, ink: string, force: boolean): Built | null {
   const tokens = tokenize(text);
@@ -2090,28 +2221,35 @@ function buildSpread(ordered: B2Photo[], text: string, ink: string, force: boole
       return best.pages;
     };
 
-    for (let pages = minPages; pages <= Math.min(4, minPages + 1); pages += 1) {
-      chosen = attempt(pages, true);
-      if (chosen) break;
-    }
-    if (!chosen) {
-      for (let pages = minPages; pages <= Math.min(4, Math.max(minPages, 2)); pages += 1) {
-        chosen = attempt(pages, false);
-        if (chosen) break;
+    // The photo search only builds two or three pages. Longer letters paginate below.
+    if (minPages <= 3) {
+      for (let pages = minPages; pages <= Math.min(3, minPages + 1); pages += 1) {
+        const laid = attempt(pages, true);
+        if (laid && letterFullyPlaced(text, ordered, laid)) {
+          chosen = laid;
+          break;
+        }
+      }
+      if (!chosen) {
+        for (let pages = minPages; pages <= Math.min(3, Math.max(minPages, 2)); pages += 1) {
+          const laid = attempt(pages, false);
+          if (laid && letterFullyPlaced(text, ordered, laid)) {
+            chosen = laid;
+            break;
+          }
+        }
       }
     }
+    if (!chosen) chosen = paginateLongSpread(ordered, tokens, ink);
   } finally {
     spreadLeafCache = previousCache;
   }
-  if (!chosen || chosen.length === 0) return null;
-  const words = wordCount(chosen.flatMap((page) => page.lines).map((line) => line.text).join(" "));
-  if (tokens.length > 0 && words !== tokens.length) return null;
-  const photoCount = chosen.reduce((sum, page) => sum + page.photos.length, 0);
-  if (photoCount !== ordered.length) return null;
+  if (!chosen || chosen.length === 0 || !letterFullyPlaced(text, ordered, chosen)) return null;
   const markedPages = chosen.map((page) => ({
     lines: page.lines,
     photos: markLead(page.photos, ordered).map(clampPhotoToPage),
   }));
+  if (!letterFullyPlaced(text, ordered, markedPages)) return null;
   const fontSize = Math.min(
     B2_BODY_SIZE,
     ...markedPages.flatMap((page) => page.lines.map((line) => line.size).concat(B2_BODY_SIZE)),
@@ -2248,7 +2386,9 @@ function candidateList(ordered: B2Photo[], text: string, ink: string): Built[] {
 }
 
 function pickBuilt(ordered: B2Photo[], text: string, ink: string, previousTemplateId: string | null): Built {
-  const candidates = candidateList(ordered, text, ink);
+  const candidates = candidateList(ordered, text, ink).filter((built) =>
+    letterFullyPlaced(text, ordered, built.pages),
+  );
   let best: { built: Built; score: number } | null = null;
   for (const built of candidates) {
     const score = scoreCandidate({
@@ -2267,21 +2407,8 @@ function pickBuilt(ordered: B2Photo[], text: string, ink: string, previousTempla
   }
   if (best) return best.built;
   const forced = buildSpread(ordered, text, ink, true);
-  if (forced && forced.pages.some((page) => page.lines.length > 0 || page.photos.length > 0 || !text.trim())) {
-    return forced;
-  }
-  return {
-    templateId: "text-only",
-    pages: [{ lines: [], photos: [] }],
-    fontSize: 12,
-    blankRatio: 1,
-    meanCrop: 0,
-    heroIsLargest: true,
-    objectIsBiggest: false,
-    hasPerson: false,
-    affinity: 0,
-    letterboxCount: 0,
-  };
+  if (forced && letterFullyPlaced(text, ordered, forced.pages)) return forced;
+  throw new CapsuleLayoutError();
 }
 
 function luminance(hex: string): number {

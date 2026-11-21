@@ -67,13 +67,14 @@ describe("Resend accept vs stamp", () => {
     expect(shouldMarkCapsuleEmailed({ attempted: 0, accepted: 0 })).toBe(false);
   });
 
-  it("stamps when at least one recipient was accepted", () => {
+  it("stamps only when every deliverable recipient was accepted", () => {
     expect(resendSendAccepted({ data: { id: "re_123" }, error: null })).toEqual({
       ok: true,
       id: "re_123",
     });
     expect(shouldMarkCapsuleEmailed({ attempted: 1, accepted: 1 })).toBe(true);
-    expect(shouldMarkCapsuleEmailed({ attempted: 2, accepted: 1 })).toBe(true);
+    expect(shouldMarkCapsuleEmailed({ attempted: 2, accepted: 2 })).toBe(true);
+    expect(shouldMarkCapsuleEmailed({ attempted: 2, accepted: 1 })).toBe(false);
     expect(shouldMarkCapsuleEmailed({ attempted: 2, accepted: 0 })).toBe(false);
   });
 
@@ -241,6 +242,7 @@ describe("send path must not stamp blindly", () => {
     expect(cron).toContain('searchParams.get("dry") === "1"');
     expect(cron).toContain("sendDueCycleEmails");
     expect(cron).toContain("sendDueCapsuleEmails");
+    expect(cron).toContain("export const maxDuration = 60");
     const cycleMail = readFileSync(resolve(here, "./cycle-mail.ts"), "utf8");
     expect(cycleMail).toContain("resendSendAccepted");
     expect(cycleMail).toContain("claimCycleEmail");
@@ -264,8 +266,15 @@ describe("send path must not stamp blindly", () => {
     expect(capsuleSend).toContain("maskEmail");
     expect(capsuleSend).toContain("idempotencyKey");
     expect(capsuleSend).toContain("releaseCapsuleDelivery");
+    expect(capsuleSend).toContain("error !== RESEND_TIMEOUT_MESSAGE");
+    const policy = readFileSync(resolve(here, "./email-policy.ts"), "utf8");
+    expect(policy).toContain("input.accepted === input.attempted");
     const vercel = readFileSync(resolve(here, "../../vercel.json"), "utf8");
     expect(vercel).toContain('"/api/cron/email"');
     expect(vercel).not.toContain("/api/cron/cycle");
+    expect(vercel).toContain('"memory": 2048');
+    expect(vercel).not.toContain('"memory": 1024');
+    expect(vercel).toContain("src/app/api/cron/email/route.ts");
+    expect(vercel).toContain('"maxDuration": 60');
   });
 });

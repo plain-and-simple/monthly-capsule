@@ -82,8 +82,9 @@ export function resendSendAccepted(
   return { ok: true, id };
 }
 
+/** Stamp only when every deliverable recipient was accepted or already claimed. */
 export function shouldMarkCapsuleEmailed(input: { attempted: number; accepted: number }): boolean {
-  return input.attempted > 0 && input.accepted > 0;
+  return input.attempted > 0 && input.accepted === input.attempted;
 }
 
 export function extractResendFromEmail(value: string): string | null {
@@ -166,7 +167,7 @@ export function formatSkippedNoEmail(input: {
   return `Skipped ${input.skippedNoEmail} with no email.`;
 }
 
-/** Owner Send is success once at least one recipient was accepted. */
+/** Owner Send is success only when every deliverable recipient was accepted. */
 export function ownerEmailFailed(result: { markedSent: boolean }): boolean {
   return !result.markedSent;
 }

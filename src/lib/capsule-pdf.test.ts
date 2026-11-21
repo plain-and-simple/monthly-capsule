@@ -1056,12 +1056,51 @@ const LONG_BODY_SNIP =
   "The river path stayed muddy after the storm, so we took the long way around the school and talked about the porch light that has been blinking since August.";
 
 describe("pdf wiring locks", () => {
-  it("compile stores a pdf and does not fail the capsule if generation throws", () => {
+  it("compile finishes only after the archive and pdf path exist", () => {
     const compile = source("./compile.ts");
     expect(compile).toContain("generateAndStoreCapsulePdf");
     expect(compile).toContain("writeCapsulePdfKeepsake");
-    expect(compile).toContain("capsule pdf generate failed");
+    expect(compile).toContain("canFinishCompile");
+    expect(compile).toContain("finishIfKeepsakeReady");
+    expect(compile).not.toContain("capsule pdf generate failed");
+    const ready = compile.slice(
+      compile.indexOf("async function finishIfKeepsakeReady"),
+      compile.indexOf("export async function ensureCapsuleArchive"),
+    );
+    expect(ready.indexOf("canFinishCompile")).toBeGreaterThan(-1);
+    expect(ready.indexOf("canFinishCompile")).toBeLessThan(ready.indexOf("return finishCompile"));
+    expect(ready).not.toContain("catch");
+    const due = compile.slice(compile.indexOf("export async function compileDueCapsules"));
+    expect(due.indexOf("try")).toBeLessThan(due.indexOf("compileGroupMonth"));
+    expect(due).toContain("catch");
+    expect(due).toContain("compile failed");
+    expect(due).toContain("reportOpsAlert");
+    expect(due).toContain("groupId: group.id");
+    expect(due).toContain("yearMonth");
+    expect(due).not.toMatch(/reportOpsAlert\(\{[^}]*\bbody:/);
+    expect(due).not.toContain("ALERT_EMAIL");
+    expect(due).not.toContain("letter.body");
     expect(compile).toContain("pdf_storage_path");
+    const store = source("./capsule-pdf-store.ts");
+    expect(store).toContain("withTimeout");
+    expect(store).toContain("STORAGE_DOWNLOAD_TIMEOUT_MS");
+    expect(store).toContain("pdf_photos_missing");
+    expect(store).toContain("capsule pdf generate failed");
+    expect(store).not.toContain("console.error(\"capsule pdf generate failed\", error)");
+    expect(store).not.toContain("ALERT_EMAIL");
+    const generate = store.slice(store.indexOf("export async function generateAndStoreCapsulePdf"));
+    expect(generate.indexOf("buildCapsulePdfBytes")).toBeGreaterThan(-1);
+    expect(generate.indexOf("buildCapsulePdfBytes")).toBeLessThan(generate.indexOf("uploadCapsulePdf"));
+    expect(generate.indexOf("uploadCapsulePdf")).toBeLessThan(generate.indexOf("pdf_storage_path"));
+    expect(generate.indexOf("try")).toBeLessThan(generate.indexOf("finally"));
+    expect(generate.slice(0, generate.indexOf("finally"))).not.toContain("catch");
+    const pdf = source("./capsule-pdf.ts");
+    const bytesFn = pdf.slice(pdf.indexOf("export async function buildCapsulePdfBytes"));
+    expect(bytesFn.indexOf("planForArchive")).toBeGreaterThan(-1);
+    expect(bytesFn.indexOf("try")).toBeLessThan(bytesFn.indexOf("finally"));
+    expect(bytesFn.slice(bytesFn.indexOf("const plan = planForArchive"), bytesFn.indexOf("finally"))).not.toContain(
+      "catch",
+    );
     expect(source("../app/globals.css")).toContain("letter__photo--left");
     expect(source("../app/globals.css")).toContain("float: right");
   });
@@ -1097,5 +1136,107 @@ describe("pdf wiring locks", () => {
     expect(email).toContain("attachments");
     expect(email).not.toContain("generateAndStoreCapsulePdf");
     expect(email).not.toContain("ensureCapsulePdf");
+  });
+});
+
+function pdfWords(text: string): string[] {
+  return text.trim().split(/\s+/).filter(Boolean);
+}
+
+/** Paragraph breaks every few words. This is the shape that used to vanish at 800 words. */
+function paragraphHeavy(count: number): string {
+  const tokens = Array.from({ length: count }, (_, index) => `lineword${index}`);
+  const lines: string[] = [];
+  for (let index = 0; index < tokens.length; index += 7) {
+    lines.push(tokens.slice(index, index + 7).join(" "));
+  }
+  const paragraphs: string[] = [];
+  for (let index = 0; index < lines.length; index += 3) {
+    paragraphs.push(lines.slice(index, index + 3).join("\n"));
+  }
+  return paragraphs.join("\n\n");
+}
+
+function plainWords(count: number): string {
+  return Array.from({ length: count }, (_, index) => `word${index}`).join(" ");
+}
+
+function exactChars(length: number): string {
+  const sentence = "The porch light stayed on through the rain and the street looked softer. ";
+  let text = "";
+  while (text.length < length) text += sentence;
+  return text.slice(0, length);
+}
+
+function syntheticArchivePhotos(label: string, count: number) {
+  return Array.from({ length: count }, (_, index) => ({
+    storage_path: `synthetic/${label}/${index}.jpg`,
+    width: index % 2 === 0 ? 1200 : 1600,
+    height: index % 2 === 0 ? 1600 : 1000,
+    sort_order: index,
+  }));
+}
+
+describe("long letters stay in the pdf plan", () => {
+  const cases = [
+    { label: "800-word paragraphs", body: () => paragraphHeavy(800) },
+    { label: "1120 plain words", body: () => plainWords(1120) },
+    { label: "12000 characters", body: () => exactChars(12_000) },
+    { label: "20000 characters", body: () => exactChars(20_000) },
+  ];
+
+  for (const photoCount of [0, 6]) {
+    for (const item of cases) {
+      it(`keeps a ${item.label} letter with ${photoCount} photos`, () => {
+        const body = item.body();
+        if (item.label.endsWith("characters")) {
+          expect(body.length).toBe(item.label.startsWith("12000") ? 12_000 : 20_000);
+        }
+        const photos = syntheticArchivePhotos(item.label.replace(/\s+/g, "-"), photoCount);
+        const archive = buildCapsuleArchive({
+          yearMonth: "2026-10",
+          groupName: "Sample Group",
+          memberCount: 1,
+          theme: "classic",
+          letters: [{ preferred_name: "Sample Writer", body, photos }],
+        });
+        const events = planCapsulePdfLayout(archive);
+        const text = events.filter((event) => event.kind === "text").map((event) => event.text ?? "");
+        expect(text.length, item.label).toBeGreaterThan(0);
+        expect(new Set(events.filter((event) => event.kind === "text").map((event) => event.page)).size).toBeGreaterThan(
+          1,
+        );
+        expect(pdfWords(text.join(" ")), item.label).toEqual(pdfWords(body));
+        const placed = events
+          .filter((event) => event.kind === "photo" && event.person === "Sample Writer")
+          .map((event) => event.storage_path);
+        expect(placed.slice().sort(), item.label).toEqual(photos.map((photo) => photo.storage_path).sort());
+      }, 120_000);
+    }
+  }
+
+  it("keeps an empty month and one short letter", () => {
+    const empty = planCapsulePdfLayout(
+      buildCapsuleArchive({
+        yearMonth: "2026-10",
+        groupName: "Sample Group",
+        memberCount: 0,
+        letters: [],
+      }),
+    );
+    expect(empty.filter((event) => event.kind === "text")).toHaveLength(0);
+    expect(source("./capsule-b2.ts")).toContain('text: "No letters this month."');
+    const body = "A short synthetic note.";
+    const one = planCapsulePdfLayout(
+      buildCapsuleArchive({
+        yearMonth: "2026-10",
+        groupName: "Sample Group",
+        memberCount: 1,
+        letters: [{ preferred_name: "Sample Writer", body, photos: [] }],
+      }),
+    );
+    expect(pdfWords(one.filter((event) => event.kind === "text").map((event) => event.text ?? "").join(" "))).toEqual(
+      pdfWords(body),
+    );
   });
 });
