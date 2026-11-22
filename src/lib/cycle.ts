@@ -60,14 +60,14 @@ export function forceOpenStillActive(
 }
 
 /**
- * Force-open always targets this Chicago calendar month.
- * Same-month compiled editions become v2+; we do not walk to next month.
+ * Chicago calendar month of `now`.
+ * Open submit early does not use this. It targets nextCycleYearMonth.
  */
 export function forceOpenYearMonth(now: Date = new Date()): string {
   return yearMonthString(chicagoDate(now));
 }
 
-/** @deprecated Use forceOpenYearMonth — kept so older tests/callers compile during the rename. */
+/** @deprecated Do not use for force-open. */
 export function nextClosedToOpenYearMonth(
   _schedule: ScheduleDays,
   _closedYearMonths: readonly string[],

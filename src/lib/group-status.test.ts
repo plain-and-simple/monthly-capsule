@@ -128,6 +128,25 @@ describe("manage group status", () => {
     );
     expect(submitWindowCloseDay(group, "2026-09", new Date("2026-09-04T17:00:00Z"))).toBe(8);
   });
+
+  it("keeps the scheduled close when an early force-open is still ahead of it", () => {
+    const wrap = {
+      submit_start_day: 29,
+      submit_end_day: 5,
+      email_day: 6,
+      force_open_year_month: "2026-12",
+    };
+    const nov22 = new Date("2026-11-22T18:00:00Z");
+    expect(submitWindowCloseDay(wrap, "2026-12", nov22)).toBe(5);
+    const row = decorateManagedGroup(wrap, {
+      closedYearMonths: [],
+      compiledYearMonths: [],
+      now: nov22,
+    });
+    expect(row.status).toBe(GROUP_STATUS_OPEN);
+    expect(row.meta).toBe("Open until Dec 5");
+    expect(row.meta).not.toBe("Open until Dec 31");
+  });
 });
 
 describe("next open date label", () => {

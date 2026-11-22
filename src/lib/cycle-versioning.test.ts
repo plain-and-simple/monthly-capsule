@@ -6,9 +6,10 @@ import { describe, expect, it } from "vitest";
 const here = dirname(fileURLToPath(import.meta.url));
 
 describe("force-open same-month versioning wiring", () => {
-  it("force-open targets this Chicago month and plans a new edition", () => {
+  it("force-open targets the next cycle and plans a new edition", () => {
     const source = readFileSync(resolve(here, "../actions/cycle.ts"), "utf8");
-    expect(source).toContain("forceOpenYearMonth");
+    expect(source).toContain("nextCycleYearMonth");
+    expect(source).not.toContain("forceOpenYearMonth");
     expect(source).toContain("planForceOpen");
     expect(source).not.toContain("incrementYearMonth");
     expect(source).not.toContain("nextClosedToOpenYearMonth");

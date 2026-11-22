@@ -14,13 +14,12 @@ import {
   forceCloseTarget,
   forceCloseYearMonth,
   forceOpenStillActive,
-  forceOpenYearMonth,
   isCycleSubmitOpen,
   isNextRedirectError,
-  nextClosedToOpenYearMonth,
   openSubmitYearMonth,
   type CycleGroup,
 } from "./cycle";
+import { nextCycleYearMonth } from "./group-status";
 import { planForceOpen } from "./month-version";
 
 const schedule: CycleGroup = {
@@ -44,15 +43,28 @@ const afterWindow = chicago("2026-09-09T05:30:00Z"); // Sept 9
 const beforeLateStart = chicago("2026-09-08T17:00:00Z"); // Sept 8, start=10
 
 describe("F1 force open when closed", () => {
-  it("targets this Chicago calendar month after the window ends, not next month", () => {
+  it("opens the next cycle after the window ends, not this month", () => {
     expect(isCycleSubmitOpen(schedule, [], afterWindow)).toBe(false);
-    expect(forceOpenYearMonth(afterWindow)).toBe("2026-09");
-    expect(nextClosedToOpenYearMonth(schedule, [], afterWindow)).toBe("2026-09");
+    expect(nextCycleYearMonth(schedule, afterWindow, [])).toBe("2026-10");
+    expect(nextCycleYearMonth(schedule, afterWindow, ["2026-09"])).toBe("2026-10");
   });
 
-  it("targets this month when still waiting for submit_start_day", () => {
+  it("opens this cycle while still waiting for submit_start_day", () => {
     expect(isCycleSubmitOpen(lateStart, [], beforeLateStart)).toBe(false);
-    expect(forceOpenYearMonth(beforeLateStart)).toBe("2026-09");
+    expect(nextCycleYearMonth(lateStart, beforeLateStart, [])).toBe("2026-09");
+  });
+
+  it("opens the December cycle on Nov 22 when writing starts on the 29th", () => {
+    const wrapOpen: CycleGroup = {
+      submit_start_day: 29,
+      submit_end_day: 5,
+      email_day: 6,
+      force_open_year_month: null,
+    };
+    const nov22 = chicago("2026-11-22T18:00:00Z");
+    expect(isCycleSubmitOpen(wrapOpen, [], nov22)).toBe(false);
+    expect(nextCycleYearMonth(wrapOpen, nov22, [])).toBe("2026-12");
+    expect(nextCycleYearMonth(wrapOpen, nov22, [])).not.toBe("2026-11");
   });
 
   it("lets members submit to a force-opened current month after the window", () => {
@@ -77,12 +89,21 @@ describe("F2 already open — same-month versions, not next month", () => {
     );
   });
 
-  it("compiled this month force-opens v2 of this month, not October", () => {
-    expect(forceOpenYearMonth(duringWindow)).toBe("2026-09");
+  it("after the window, a compiled month opens the next cycle, not v2", () => {
+    const yearMonth = nextCycleYearMonth(schedule, afterWindow, ["2026-09"]);
+    expect(yearMonth).toBe("2026-10");
     expect(
-      planForceOpen([{ year_month: "2026-09", version: 1, status: "compiled" }], "2026-09"),
-    ).toEqual({ action: "create", version: 2 });
+      planForceOpen([{ year_month: "2026-09", version: 1, status: "compiled" }], yearMonth),
+    ).toEqual({ action: "create", version: 1 });
     expect(CYCLE_VERSION_CAP).toBe("This month cannot take another version.");
+  });
+
+  it("versions that cycle when the close is still ahead", () => {
+    const yearMonth = nextCycleYearMonth(schedule, duringWindow, []);
+    expect(yearMonth).toBe("2026-09");
+    expect(
+      planForceOpen([{ year_month: yearMonth, version: 1, status: "compiled" }], yearMonth),
+    ).toEqual({ action: "create", version: 2 });
   });
 });
 

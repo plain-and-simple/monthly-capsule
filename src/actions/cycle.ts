@@ -26,10 +26,10 @@ import {
   decideForceOpen,
   decideForceSkip,
   forceCloseTarget,
-  forceOpenYearMonth,
   isCycleSubmitOpen,
   isNextRedirectError,
 } from "@/lib/cycle";
+import { nextCycleYearMonth } from "@/lib/group-status";
 import { opsFailureCode } from "@/lib/compile-policy";
 import { EMAIL_ACTION_TIMEOUT_MS, ownerEmailFailed, withTimeout } from "@/lib/email-policy";
 import { reportOpsAlert } from "@/lib/ops-alert-mail";
@@ -79,12 +79,13 @@ export async function forceOpenSubmit(
 
   try {
     const { member, group } = await requireGroupMember(groupId);
+    const now = new Date();
     const closed = await closedYearMonths(groupId);
-    const decision = decideForceOpen(member.role, isCycleSubmitOpen(group, closed));
+    const decision = decideForceOpen(member.role, isCycleSubmitOpen(group, closed, now));
     if (decision === "forbidden") return { error: CYCLE_OWNER_ONLY };
     if (decision === "already_open") return { error: CYCLE_ALREADY_OPEN };
 
-    const yearMonth = forceOpenYearMonth();
+    const yearMonth = nextCycleYearMonth(group, now, closed);
     const rows = toCycleMonthRows(await listGroupMonthRows(groupId));
     const plan = planForceOpen(rows, yearMonth);
     if (plan.action === "already_open") return { error: CYCLE_ALREADY_OPEN };

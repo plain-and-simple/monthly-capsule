@@ -301,6 +301,14 @@ describe("previous-month open picker", () => {
     expect(create).not.toMatch(/name="email_day"[\s\S]{0,120}variant="open"/);
   });
 
+  it("requires a group name on create and in settings", () => {
+    const create = readFileSync(resolve(here, "../components/create-form.tsx"), "utf8");
+    const settings = readFileSync(resolve(here, "../components/settings-form.tsx"), "utf8");
+    expect(create).not.toContain('placeholder="Optional"');
+    expect(create).toMatch(/name="name"[\s\S]{0,200}required/);
+    expect(settings).toMatch(/name="name"[\s\S]{0,200}required/);
+  });
+
   it("saves the cycle from the action result, not a cached pre-update group row", () => {
     const action = readFileSync(resolve(here, "../actions/settings.ts"), "utf8");
     expect(action).toContain("requireOwnerUncached");

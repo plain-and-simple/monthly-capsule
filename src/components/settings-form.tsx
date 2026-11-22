@@ -13,6 +13,7 @@ import {
   REMINDER_EMAIL_CHECKBOX,
   REMINDER_EMAIL_NOTE,
 } from "@/lib/copy";
+import { parseGroupName } from "@/lib/group-name";
 import {
   SEND_CYCLE_EMAIL_VALUE,
   SEND_OPEN_EMAIL_FIELD,
@@ -42,6 +43,7 @@ export function SettingsForm({
     null,
   );
   const { busy: nameBusy, markBusy: markNameBusy } = useInstantBusy(namePending);
+  const [nameError, setNameError] = useState<string | null>(null);
   const [draft, setDraft] = useState<ScheduleDays | null>(null);
   const days = scheduleFormDays(group, scheduleState, draft);
   const prompts = scheduleCatchUpPrompts({
@@ -161,15 +163,35 @@ export function SettingsForm({
           <input type="hidden" name="groupId" value={group.id} />
           <label className="field">
             <span className="field__label">Name</span>
-            <input className="input" name="name" maxLength={40} defaultValue={group.name} />
+            <input
+              className="input"
+              name="name"
+              maxLength={40}
+              required
+              defaultValue={group.name}
+              onChange={() => setNameError(null)}
+            />
           </label>
-          {nameState?.error ? <p className="err">{nameState.error}</p> : null}
+          {nameError || nameState?.error ? (
+            <p className="err">{nameError || nameState?.error}</p>
+          ) : null}
           {nameState?.ok ? <p className="small">Saved.</p> : null}
           <div>
             <PendingSubmitButton
               className="btn btn--secondary"
               busy={nameBusy}
               pendingLabel="Saving…"
+              onClick={(event) => {
+                const form = event.currentTarget.form;
+                if (!form) return;
+                const parsed = parseGroupName(String(new FormData(form).get("name") ?? ""));
+                if (typeof parsed !== "string") {
+                  event.preventDefault();
+                  setNameError(parsed.error);
+                  return;
+                }
+                setNameError(null);
+              }}
             >
               Save name
             </PendingSubmitButton>

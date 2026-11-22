@@ -178,7 +178,11 @@ export function shortMonthDayYear(yearMonth: string, day: number): string {
   return `${monthName(parsed.month).slice(0, 3)} ${day}, ${parsed.year}`;
 }
 
-/** Close day shown while a window is open: schedule end, or month-end after force-open. */
+/**
+ * Close day shown while a window is open.
+ * Scheduled end day, unless this cycle was force-opened after that day
+ * had already passed — then the last day of the cycle month.
+ */
 export function submitWindowCloseDay(
   group: Pick<CycleGroup, "submit_end_day" | "force_open_year_month">,
   yearMonth: string,
@@ -186,8 +190,11 @@ export function submitWindowCloseDay(
 ): number {
   const forceYM = group.force_open_year_month;
   if (forceYM && forceYM === yearMonth && forceOpenStillActive(forceYM, group, now)) {
-    const parsed = parseYearMonth(yearMonth);
-    if (parsed) return lastDayOfMonth(parsed.year, parsed.month);
+    const close = cycleCloseChicagoDate(yearMonth, group.submit_end_day);
+    if (compareChicagoDate(chicagoDate(now), close) > 0) {
+      const parsed = parseYearMonth(yearMonth);
+      if (parsed) return lastDayOfMonth(parsed.year, parsed.month);
+    }
   }
   return group.submit_end_day;
 }
