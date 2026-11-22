@@ -147,6 +147,35 @@ describe("manage group status", () => {
     expect(row.meta).toBe("Open until Dec 5");
     expect(row.meta).not.toBe("Open until Dec 31");
   });
+
+  it("uses month-end when reopening a compiled cycle, even before the scheduled close", () => {
+    const nov22 = new Date("2026-11-22T18:00:00Z");
+    const wrap = {
+      submit_start_day: 29,
+      submit_end_day: 5,
+      email_day: 6,
+      force_open_year_month: "2026-12" as string | null,
+    };
+    expect(submitWindowCloseDay(wrap, "2026-12", nov22)).toBe(5);
+    expect(submitWindowCloseDay(wrap, "2026-12", nov22, ["2026-11"])).toBe(5);
+    expect(
+      submitWindowCloseDay({ ...wrap, force_open_year_month: "2026-11" }, "2026-11", nov22, ["2026-11"]),
+    ).toBe(30);
+
+    const sep5 = new Date("2026-09-05T17:00:00Z");
+    const reopened = { ...group, force_open_year_month: "2026-09" };
+    expect(submitWindowCloseDay(reopened, "2026-09", sep5)).toBe(8);
+    expect(submitWindowCloseDay(reopened, "2026-09", sep5, ["2026-09"])).toBe(30);
+    expect(submitWindowCloseDay(group, "2026-09", sep5, ["2026-09"])).toBe(8);
+
+    const row = decorateManagedGroup(reopened, {
+      closedYearMonths: ["2026-09"],
+      compiledYearMonths: ["2026-09"],
+      now: sep5,
+    });
+    expect(row.status).toBe(GROUP_STATUS_OPEN);
+    expect(row.meta).toBe("Open until Sep 30");
+  });
 });
 
 describe("next open date label", () => {

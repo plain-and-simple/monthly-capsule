@@ -9,6 +9,12 @@ import {
 } from "@/lib/copy";
 import { forceOpenStillActive, openSubmitYearMonth, type CycleGroup } from "@/lib/cycle";
 import { chicagoWeekdayTheDay, monthName, ordinal } from "@/lib/dates";
+import {
+  closedOrCompiledYearMonths,
+  compiledYearMonths,
+  planForceOpen,
+  type CycleMonthRow,
+} from "@/lib/month-version";
 import type { Role } from "@/lib/types";
 import {
   capsuleMonthLabel,
@@ -93,7 +99,10 @@ export function decorateManagedGroup(
   if (status === GROUP_STATUS_OPEN && openYearMonth) {
     return {
       status,
-      meta: `Open until ${shortMonthDay(openYearMonth, submitWindowCloseDay(group, openYearMonth, now))}`,
+      meta: `Open until ${shortMonthDay(
+        openYearMonth,
+        submitWindowCloseDay(group, openYearMonth, now, input.compiledYearMonths),
+      )}`,
     };
   }
   if (status === GROUP_STATUS_READY) {
@@ -180,23 +189,73 @@ export function shortMonthDayYear(yearMonth: string, day: number): string {
 
 /**
  * Close day shown while a window is open.
- * Scheduled end day, unless this cycle was force-opened after that day
- * had already passed — then the last day of the cycle month.
+ * Natural windows stay on the scheduled end day.
+ * A force-open stays on that day while it is still ahead, unless this cycle
+ * already has a compiled edition (a new version), then the last day of the
+ * cycle month. After the scheduled close has passed, a force-open uses that
+ * last day too.
  */
 export function submitWindowCloseDay(
   group: Pick<CycleGroup, "submit_end_day" | "force_open_year_month">,
   yearMonth: string,
   now: Date = new Date(),
+  compiledKeys: readonly string[] = [],
 ): number {
   const forceYM = group.force_open_year_month;
   if (forceYM && forceYM === yearMonth && forceOpenStillActive(forceYM, group, now)) {
+    const parsed = parseYearMonth(yearMonth);
+    const monthEnd = parsed ? lastDayOfMonth(parsed.year, parsed.month) : null;
+    if (compiledKeys.includes(yearMonth) && monthEnd) return monthEnd;
     const close = cycleCloseChicagoDate(yearMonth, group.submit_end_day);
-    if (compareChicagoDate(chicagoDate(now), close) > 0) {
-      const parsed = parseYearMonth(yearMonth);
-      if (parsed) return lastDayOfMonth(parsed.year, parsed.month);
-    }
+    if (compareChicagoDate(chicagoDate(now), close) > 0 && monthEnd) return monthEnd;
   }
   return group.submit_end_day;
+}
+
+export type AllowedForceOpen = {
+  nextYearMonth: string;
+  reopenYearMonth: string | null;
+};
+
+function latestCompiledYearMonth(rows: readonly CycleMonthRow[]): string | null {
+  const keys = compiledYearMonths(rows);
+  if (keys.length === 0) return null;
+  return keys.reduce((latest, key) => (key > latest ? key : latest));
+}
+
+/**
+ * Keys an owner may force-open while submit is closed.
+ * Path 1 is always the next cycle. Path 2 is the latest compiled key when
+ * that reopen is still in its Chicago month and can take a new edition.
+ */
+export function allowedForceOpenYearMonths(
+  group: Pick<CycleGroup, "submit_end_day">,
+  rows: readonly CycleMonthRow[],
+  now: Date = new Date(),
+): AllowedForceOpen {
+  const nextYearMonth = nextCycleYearMonth(group, now, closedOrCompiledYearMonths(rows));
+  const latest = latestCompiledYearMonth(rows);
+  if (!latest || latest === nextYearMonth || !forceOpenStillActive(latest, group, now)) {
+    return { nextYearMonth, reopenYearMonth: null };
+  }
+  const plan = planForceOpen(rows, latest);
+  if (plan.action === "already_open" || plan.action === "capped") {
+    return { nextYearMonth, reopenYearMonth: null };
+  }
+  return { nextYearMonth, reopenYearMonth: latest };
+}
+
+/** Posted cycle key, or null when it is missing or not one of the two allowed keys. */
+export function acceptForceOpenYearMonth(
+  posted: unknown,
+  allowed: AllowedForceOpen,
+): string | null {
+  if (typeof posted !== "string") return null;
+  const yearMonth = posted.trim();
+  if (!yearMonth) return null;
+  if (yearMonth === allowed.nextYearMonth) return yearMonth;
+  if (allowed.reopenYearMonth && yearMonth === allowed.reopenYearMonth) return yearMonth;
+  return null;
 }
 
 export function windowClosesPhrase(yearMonth: string, endDay: number): string {

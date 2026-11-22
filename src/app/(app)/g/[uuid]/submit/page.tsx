@@ -95,8 +95,11 @@ export default async function SubmitPage({
     : null;
 
   const title = yearMonth ? `Your ${capsuleMonthLabel(yearMonth).replace(/ \d{4}$/, "")} letter` : "Your letter";
+  const compiledKeys = submitWindow.rows
+    .filter((row) => row.status === "compiled")
+    .map((row) => row.year_month);
   const closes = yearMonth
-    ? windowClosesPhrase(yearMonth, submitWindowCloseDay(group, yearMonth))
+    ? windowClosesPhrase(yearMonth, submitWindowCloseDay(group, yearMonth, new Date(), compiledKeys))
     : "the window closes";
 
   return (

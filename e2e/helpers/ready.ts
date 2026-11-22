@@ -2,6 +2,7 @@ import { expect, type Page } from "@playwright/test";
 import {
   CONTRIBUTORS_PREFIX,
   CYCLE_CLOSE_COMPILE,
+  CYCLE_OPEN_EARLY,
   GROUP_FIRST_CAPSULE_HEADING,
   GROUP_PRIMARY_EDIT,
   GROUP_PRIMARY_SUBMIT,
@@ -113,7 +114,7 @@ export async function addSubmitPhoto(page: Page, name: string) {
 }
 
 export async function openSubmitIfClosed(page: Page) {
-  const openEarly = page.getByRole("button", { name: "Open submit early" });
+  const openEarly = page.getByRole("button", { name: CYCLE_OPEN_EARLY, exact: true });
   if ((await openEarly.count()) === 0) return;
   await openEarly.click();
   const opened = page.getByText(CYCLE_OPENED);
@@ -123,7 +124,7 @@ export async function openSubmitIfClosed(page: Page) {
   const err = page.locator(".err");
   await expect(opened.or(already).or(close).or(write).or(err).first()).toBeVisible({ timeout: 30_000 });
   if ((await err.count()) > 0 && (await opened.count()) === 0 && (await already.count()) === 0) {
-    throw new Error(`Open submit early failed: ${await err.first().innerText()}`);
+    throw new Error(`${CYCLE_OPEN_EARLY} failed: ${await err.first().innerText()}`);
   }
   await page.reload();
   const writeAfter = page.getByRole("link", { name: GROUP_PRIMARY_SUBMIT });
@@ -146,7 +147,7 @@ export async function submitLetterWithTwoPhotos(page: Page) {
   } else if (await edit.count()) {
     await edit.click();
   } else {
-    throw new Error("Submit is still closed after Open submit early.");
+    throw new Error(`Submit is still closed after ${CYCLE_OPEN_EARLY}.`);
   }
   await expect(page).toHaveURL(/\/submit$/);
   const letter = page.getByLabel("Letter");

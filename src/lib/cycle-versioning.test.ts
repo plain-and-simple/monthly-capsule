@@ -6,13 +6,50 @@ import { describe, expect, it } from "vitest";
 const here = dirname(fileURLToPath(import.meta.url));
 
 describe("force-open same-month versioning wiring", () => {
-  it("force-open targets the next cycle and plans a new edition", () => {
+  it("force-open reads a posted key and accepts only an allowed cycle", () => {
     const source = readFileSync(resolve(here, "../actions/cycle.ts"), "utf8");
-    expect(source).toContain("nextCycleYearMonth");
-    expect(source).not.toContain("forceOpenYearMonth");
-    expect(source).toContain("planForceOpen");
-    expect(source).not.toContain("incrementYearMonth");
-    expect(source).not.toContain("nextClosedToOpenYearMonth");
+    const openFn = source.slice(
+      source.indexOf("export async function forceOpenSubmit"),
+      source.indexOf("export async function forceCloseCompile"),
+    );
+    expect(openFn).toContain("allowedForceOpenYearMonths");
+    expect(openFn).toContain("acceptForceOpenYearMonth");
+    expect(openFn).toContain('formData.get("yearMonth")');
+    expect(openFn).toContain("CYCLE_OPEN_NOT_ALLOWED");
+    expect(openFn).toContain("planForceOpen");
+    expect(openFn).toContain('ensureMonth(groupId, yearMonth, "open", plan.version)');
+    expect(openFn).not.toContain("forceOpenYearMonth");
+    expect(openFn).not.toContain("nextCycleYearMonth");
+    expect(openFn).not.toContain("incrementYearMonth");
+    expect(openFn).not.toContain("nextClosedToOpenYearMonth");
+    expect(openFn.indexOf("if (!yearMonth)")).toBeLessThan(openFn.indexOf("force_open_year_month"));
+    expect(openFn.indexOf("CYCLE_OPEN_NOT_ALLOWED")).toBeLessThan(openFn.indexOf("ensureMonth"));
+
+    const helper = readFileSync(resolve(here, "./group-status.ts"), "utf8");
+    const allowedFn = helper.slice(
+      helper.indexOf("export function allowedForceOpenYearMonths"),
+      helper.indexOf("export function acceptForceOpenYearMonth"),
+    );
+    expect(allowedFn).toContain("nextCycleYearMonth");
+    expect(allowedFn).not.toContain("forceOpenYearMonth");
+
+    const form = readFileSync(resolve(here, "../components/cycle-form.tsx"), "utf8");
+    expect(form).toContain("CYCLE_OPEN_EARLY");
+    expect(form).toContain("cycleReopenNewVersion");
+    expect(form).toContain("capsuleMonthLabel");
+    expect(form).toContain('name="yearMonth"');
+    expect(form).toContain("nextYearMonth");
+    expect(form).toContain("reopenYearMonth");
+    expect(form).toContain("CYCLE_CLOSE_NOTE");
+    expect(form).toContain("btn btn--secondary");
+    expect(form).not.toContain("Open submit early");
+    expect(form).not.toContain("You can open again for a new version.");
+
+    const page = readFileSync(resolve(here, "../app/(app)/g/[uuid]/page.tsx"), "utf8");
+    expect(page).toContain("allowedForceOpenYearMonths");
+    expect(page).toContain("nextYearMonth={forceOpen.nextYearMonth}");
+    expect(page).toContain("reopenYearMonth={forceOpen.reopenYearMonth}");
+    expect(page).toContain("submitWindowCloseDay");
   });
 
   it("does not copy submissions onto a newly opened edition", () => {

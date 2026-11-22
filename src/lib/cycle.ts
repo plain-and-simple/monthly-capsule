@@ -20,6 +20,7 @@ export type CycleGroup = ScheduleDays & {
 };
 
 export const CYCLE_ALREADY_OPEN = "Already open.";
+export const CYCLE_OPEN_NOT_ALLOWED = "That month cannot be opened.";
 export const CYCLE_OWNER_ONLY = "Owner only.";
 export const CYCLE_CONFIRM_CLOSE = "Confirm to close.";
 export const CYCLE_OPENED = "Opened.";
@@ -61,7 +62,7 @@ export function forceOpenStillActive(
 
 /**
  * Chicago calendar month of `now`.
- * Open submit early does not use this. It targets nextCycleYearMonth.
+ * Force-open does not use this. Allowed targets come from allowedForceOpenYearMonths.
  */
 export function forceOpenYearMonth(now: Date = new Date()): string {
   return yearMonthString(chicagoDate(now));
