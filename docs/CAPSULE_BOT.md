@@ -45,7 +45,7 @@ This repo is PUBLIC. This file holds no secrets, member data, or logins, and it 
 - Product questions get settled with Chandler in one line. Don't invent product rules.
 - Anything run on Chandler's Mac mini runs under the macOS user `youcha-agent`. Grok CLI is installed there and signed in to GitHub, and it can be used for repo work on branches.
 
-## 5. Current state (as of 2026-11-15)
+## 5. Current state (as of 2026-11-22)
 **Live and done:**
 - PR #64, the B2 magazine PDF.
 - PR #65, PDF compression.
@@ -60,12 +60,29 @@ This repo is PUBLIC. This file holds no secrets, member data, or logins, and it 
   - **Prod E2E:** 18 passed, 3 skipped.
 - PR #62 is closed.
 - A past member login problem was an email-domain typo. Chandler doesn't want a typo hint added.
+- PR #69, sessions, send-once mail, and a plainer home, merged as ba735b14 on 2026-11-19:
+  - Password reset and ban end old cookies. Studio code fails closed in production and is rate-limited. Letter drafts clear on sign-out. Open, reminder, and capsule mail claim a send before Resend, and logs mask the recipient. The home page is one sign-in column, with a fictional sample spread and a short privacy page.
+  - The migration `supabase/migrations/20261119180000_session_studio_delivery.sql` is applied to prod.
+- PR #70, the admin studio-gate smoke test now passes without Supabase, merged as 26b9fb83 on 2026-11-19. A bad studio code is still refused when CI uses a dummy Supabase URL: either a redirect with the error copy, or a 500 that does not open Studio.
+- PR #71, the PDF resilience fix, merged as 8eeaf751 on 2026-11-20 at 9:57 PM CT:
+  - Long letters paginate onto as many spread pages as they need. A plan that would drop a word or a photo fails the PDF step, so compile does not store a blank or partial PDF. Each group is isolated. A month is marked compiled only after the archive is stored and `pdf_storage_path` is set. A valid archive is never rewritten. `email_sent_at` is stamped only after every deliverable recipient is accepted.
+  - `ALERT_EMAIL` is set and active in Vercel.
+- PR #72, capsule month labels, merged as cd5c6dd5 on 2026-11-22 at 8:50 AM CT (prod deploy `dpl_49m3WXKZYfAAb94oPhB1Gihbo9Jy`):
+  - Visible names show the writing month: the stored `year_month` cycle key minus one, including January rolling back to the previous December. That covers the submit title, Your groups, group home, the capsule page, the PDF cover and footer, and the open, reminder, and compiled email bodies. Email subjects stay as they are.
+  - Keys, URLs, PDF storage paths, and download filenames still use the stored cycle key. No migration, and no letter data was rewritten.
+- The first real open-notification emails went out successfully on 2026-11-22 at 9:30 AM CT.
+
+**Decisions (Chandler, 2026-11-22):**
+- Old stored PDFs keep their old cover labels and will not be re-rendered.
+- The September capsules that are missing PDFs will not be backfilled.
+- The QA account is kept for testing. Its login lives in the vault only and is never pasted into chat.
+- The Capsule error watch routine in section 6 is paused at Chandler's request.
+
+**Known issues:**
+- CI flake: vitest can fail with `Timeout calling onTaskUpdate` on slow runners. It passes on rerun.
 
 **Watch next:**
-- **Nov 22, 9 AM CT:** the first real open emails go out to the day-22 group. Spot-check that run.
-  - It's the first real send. CI only covers the planning logic.
-  - Low-risk edge case: if the stamp write fails after Resend accepts an email, that member could get a second email.
-  - The Settings checkboxes are still unverified on prod, because they're hidden while the window is closed.
+- The Settings checkboxes are still unverified on prod, because they're hidden while the window is closed.
 
 **Backlog (not started unless Chandler says so):**
 1. **New theme on the B2 layout.** Needs a look from Chandler first, then a private preview render.
@@ -74,9 +91,6 @@ This repo is PUBLIC. This file holds no secrets, member data, or logins, and it 
 4. **Housekeeping.**
    - Vercel log access for the watch.
    - The README sender mismatch.
-   - Clear the localStorage letter copy on sign-out.
-   - ALERT_EMAIL is unset in Vercel.
-   - Decide whether to keep or delete the QA account.
 5. **Testing policy (Chandler 2026-09-15).** Heavy browser e2e lives in the repo's CI and Cursor. The bot does only a thin Ready smoke test. No fleet of QA bots.
 
 ## 6. Routine to recreate
