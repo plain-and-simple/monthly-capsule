@@ -22,8 +22,7 @@ import {
 } from "@/lib/copy";
 import { CYCLE_EMAIL_PROMPT, CYCLE_OPENED } from "@/lib/cycle";
 import { FORCE_CLOSE_CONFIRM_VALUE } from "@/lib/manage";
-import { capsuleTitle } from "@/lib/month-version";
-import { monthLabel } from "@/lib/schedule";
+import { capsuleMonthTitle } from "@/lib/month-version";
 
 export function CycleForm({
   groupId,
@@ -76,7 +75,7 @@ export function CycleForm({
           <div className="stack">
             <div className="stack stack--tight">
               <p className="cycle-tools__title">
-                The {capsuleTitle(monthLabel(askYearMonth), askVersion ?? 1)} capsule is ready
+                The {capsuleMonthTitle(askYearMonth, askVersion ?? 1)} capsule is ready
               </p>
               <p className="muted small">{CYCLE_EMAIL_PROMPT}</p>
             </div>
@@ -115,7 +114,7 @@ export function CycleForm({
           <div className="stack">
             <div className="stack stack--tight">
               <p className="cycle-tools__title">
-                The {capsuleTitle(monthLabel(later.yearMonth), later.version)} capsule was never
+                The {capsuleMonthTitle(later.yearMonth, later.version)} capsule was never
                 emailed
               </p>
               <p className="muted small">Everyone can read it on the site.</p>

@@ -11,6 +11,7 @@ import { forceOpenStillActive, openSubmitYearMonth, type CycleGroup } from "@/li
 import { chicagoWeekdayTheDay, monthName, ordinal } from "@/lib/dates";
 import type { Role } from "@/lib/types";
 import {
+  capsuleMonthLabel,
   chicagoDate,
   clampDayOfMonth,
   compareChicagoDate,
@@ -19,7 +20,6 @@ import {
   cycleOpenChicagoDate,
   incrementYearMonth,
   lastDayOfMonth,
-  monthLabel,
   parseYearMonth,
   yearMonthString,
 } from "@/lib/schedule";
@@ -99,7 +99,7 @@ export function decorateManagedGroup(
   if (status === GROUP_STATUS_READY) {
     return {
       status,
-      meta: `${monthLabel(latestClosedYearMonth)} capsule is ready to read`,
+      meta: `${capsuleMonthLabel(latestClosedYearMonth)} capsule is ready to read`,
     };
   }
 
@@ -107,6 +107,30 @@ export function decorateManagedGroup(
     status,
     meta: `Opens ${nextOpenShort(group, now, input.closedYearMonths)}`,
   };
+}
+
+/**
+ * Next stored cycle key (YYYY-MM) whose close is still ahead.
+ * Days 20–31 open in M−1; this key is still M. A force-closed month is skipped.
+ */
+export function nextCycleYearMonth(
+  group: Pick<CycleGroup, "submit_end_day">,
+  now: Date,
+  closedYearMonths: readonly string[],
+): string {
+  const today = chicagoDate(now);
+  const closed = new Set(closedYearMonths);
+  let cycle = yearMonthString(today);
+  for (let i = 0; i < 3; i += 1) {
+    if (!closed.has(cycle)) {
+      const close = cycleCloseChicagoDate(cycle, group.submit_end_day);
+      if (compareChicagoDate(today, close) <= 0) {
+        return cycle;
+      }
+    }
+    cycle = incrementYearMonth(cycle);
+  }
+  return cycle;
 }
 
 /**
@@ -119,19 +143,7 @@ export function nextOpenChicagoDate(
   now: Date,
   closedYearMonths: readonly string[],
 ) {
-  const today = chicagoDate(now);
-  const closed = new Set(closedYearMonths);
-  let cycle = yearMonthString(today);
-  for (let i = 0; i < 3; i += 1) {
-    if (!closed.has(cycle)) {
-      const open = cycleOpenChicagoDate(cycle, group.submit_start_day);
-      const close = cycleCloseChicagoDate(cycle, group.submit_end_day);
-      if (compareChicagoDate(today, close) <= 0) {
-        return open;
-      }
-    }
-    cycle = incrementYearMonth(cycle);
-  }
+  const cycle = nextCycleYearMonth(group, now, closedYearMonths);
   return cycleOpenChicagoDate(cycle, group.submit_start_day);
 }
 
@@ -225,8 +237,7 @@ export function nextOpenMonthLabel(
   closedYearMonths: readonly string[],
   now: Date = new Date(),
 ): string {
-  const open = nextOpenChicagoDate(group, now, closedYearMonths);
-  return monthLabel(yearMonthString(open));
+  return capsuleMonthLabel(nextCycleYearMonth(group, now, closedYearMonths));
 }
 
 export function nextOpenPhrase(fromYearMonth: string, startDay: number): string {

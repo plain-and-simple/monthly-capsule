@@ -286,3 +286,20 @@ export function monthLabel(yearMonth: string): string {
     timeZone: CHICAGO_TZ,
   }).format(new Date(Date.UTC(year, month - 1, 15)));
 }
+
+/** Cycle key minus one month. January rolls to the previous December. */
+export function writingYearMonth(cycleYearMonth: string): string {
+  const parsed = parseYearMonth(cycleYearMonth);
+  if (!parsed) return cycleYearMonth;
+  return previousYearMonth(parsed);
+}
+
+/**
+ * Stored YYYY-MM is the cycle / delivery month. The name people see is the
+ * writing month (M−1).
+ */
+export function capsuleMonthLabel(cycleYearMonth: string): string {
+  const writing = writingYearMonth(cycleYearMonth);
+  if (!parseYearMonth(writing)) return cycleYearMonth;
+  return monthLabel(writing);
+}

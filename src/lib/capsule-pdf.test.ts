@@ -9,6 +9,7 @@ import { buildCapsuleArchive } from "./capsule-archive";
 import {
   buildCapsulePdfBytes,
   planCapsulePdfLayout,
+  planForArchive,
   capsulePdfFilename,
   capsulePdfHref,
   capsulePdfNeedsUnicodeRerender,
@@ -1049,6 +1050,41 @@ describe("pdf layout locks", () => {
     expect(source("./capsule-pdf-store.ts")).not.toContain("createMonth");
     expect(source("./capsule-pdf-response.ts")).not.toContain("planForceOpen");
     expect(source("./capsule-pdf-store.ts")).toContain("input.version");
+  });
+});
+
+describe("pdf writing-month title", () => {
+  function coverMonth(yearMonth: string, monthVersion = 1): string | undefined {
+    const archive = buildCapsuleArchive({
+      yearMonth,
+      groupName: "Regression Kitchen",
+      memberCount: 1,
+      monthVersion,
+      letters: [{ preferred_name: "Alex Rivera", body: "Synthetic note.", photos: [] }],
+    });
+    const plan = planForArchive(archive);
+    return plan.pages[0]?.lines.find((line) => line.role === "cover" && /\d{4}/.test(line.text))?.text;
+  }
+
+  it("labels the default plan with the writing month", () => {
+    expect(coverMonth("2026-11")).toBe("October 2026");
+    expect(coverMonth("2027-01")).toBe("December 2026");
+    expect(coverMonth("2026-11", 2)).toBe("October 2026 · v2");
+  });
+
+  it("puts that writing month on the footer and leaves the stored key off the cover", () => {
+    const archive = buildCapsuleArchive({
+      yearMonth: "2026-11",
+      groupName: "Regression Kitchen",
+      memberCount: 1,
+      letters: [{ preferred_name: "Alex Rivera", body: "Synthetic note.", photos: [] }],
+    });
+    const plan = planForArchive(archive);
+    const cover = plan.pages[0]?.lines.filter((line) => line.role === "cover").map((line) => line.text) ?? [];
+    const footer = plan.pages[0]?.lines.find((line) => line.role === "footer" && line.text.includes("·"));
+    expect(cover.join(" ")).not.toContain("November 2026");
+    expect(footer?.text).toContain("October 2026");
+    expect(footer?.text).not.toContain("November 2026");
   });
 });
 

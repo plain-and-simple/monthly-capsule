@@ -7,7 +7,7 @@ import { submitWindowCloseDay, windowClosesPhrase } from "@/lib/group-status";
 import { resolveSubmitWindow } from "@/lib/cycle-store";
 import { capsuleHref, normalizeMonthVersion } from "@/lib/month-version";
 import { signedPhotoUrls } from "@/lib/photos";
-import { monthLabel } from "@/lib/schedule";
+import { capsuleMonthLabel } from "@/lib/schedule";
 import { requireGroupMember } from "@/lib/session";
 import { parseFlashError } from "@/lib/session-policy";
 import { createAdminClient } from "@/lib/supabase";
@@ -94,7 +94,7 @@ export default async function SubmitPage({
     ? capsuleHref(uuid, latestCompiled.year_month as string, normalizeMonthVersion(latestCompiled.version))
     : null;
 
-  const title = yearMonth ? `Your ${monthLabel(yearMonth).replace(/ \d{4}$/, "")} letter` : "Your letter";
+  const title = yearMonth ? `Your ${capsuleMonthLabel(yearMonth).replace(/ \d{4}$/, "")} letter` : "Your letter";
   const closes = yearMonth
     ? windowClosesPhrase(yearMonth, submitWindowCloseDay(group, yearMonth))
     : "the window closes";

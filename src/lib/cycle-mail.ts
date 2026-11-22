@@ -30,7 +30,7 @@ import {
 import { cycleSendKey, maskEmail } from "@/lib/email-send";
 import { shortMonthDayYear } from "@/lib/group-status";
 import { activeRosterMembers } from "@/lib/roster";
-import { monthLabel } from "@/lib/schedule";
+import { capsuleMonthLabel } from "@/lib/schedule";
 import { createAdminClient } from "@/lib/supabase";
 import type { Account, Group, Member, Submission } from "@/lib/types";
 
@@ -297,7 +297,7 @@ export async function sendGroupCycleEmail(
   }
 
   const link = `${appUrl()}${letterPath(group.id)}`;
-  const labeled = monthLabel(yearMonth);
+  const labeled = capsuleMonthLabel(yearMonth);
   const closeLabel = shortMonthDayYear(yearMonth, group.submit_end_day);
   const subject = kind === "open" ? openEmailSubject() : reminderEmailSubject();
   const html =

@@ -1,3 +1,5 @@
+import { capsuleMonthLabel } from "@/lib/schedule";
+
 export const DEFAULT_MONTH_VERSION = 1;
 export const MAX_MONTH_VERSIONS = 24;
 
@@ -102,6 +104,10 @@ export function capsuleVersionSuffix(version: number): string {
 export function capsuleTitle(monthLabelText: string, version: number): string {
   const suffix = capsuleVersionSuffix(version);
   return suffix ? `${monthLabelText} · ${suffix}` : monthLabelText;
+}
+
+export function capsuleMonthTitle(cycleYearMonth: string, version: number): string {
+  return capsuleTitle(capsuleMonthLabel(cycleYearMonth), version);
 }
 
 export type CapsuleEditionRef = {

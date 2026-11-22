@@ -24,8 +24,8 @@ import {
 import { nextOpenPhrase } from "@/lib/group-status";
 import { resolveCapsuleRecipients } from "@/lib/recipients";
 import { findGroupCapsule, listGroupMonthRows } from "@/lib/compile";
-import { capsuleHref, capsuleTitle, normalizeMonthVersion } from "@/lib/month-version";
-import { emailTargetYearMonth, monthLabel } from "@/lib/schedule";
+import { capsuleHref, capsuleMonthTitle, normalizeMonthVersion } from "@/lib/month-version";
+import { emailTargetYearMonth } from "@/lib/schedule";
 import { includedSubmissions } from "@/lib/submit";
 import { createAdminClient } from "@/lib/supabase";
 import type { Account, Capsule, Group, Member, Month, Submission } from "@/lib/types";
@@ -276,7 +276,7 @@ async function sendCapsuleEmail(
   }
 
   const edition = normalizeMonthVersion(month.version);
-  const labeled = capsuleTitle(monthLabel(month.year_month), edition);
+  const labeled = capsuleMonthTitle(month.year_month, edition);
   const link = `${appUrl()}${capsuleHref(group.id, month.year_month, edition)}`;
   const archive = parseCapsuleArchive(capsule.archive);
   let letters = archive

@@ -28,13 +28,13 @@ import { ROSTER_SELECT, canForceCycle, toRoster } from "@/lib/manage";
 import { activeRosterMembers, periodRoster, periodWrittenCount } from "@/lib/roster";
 import {
   capsuleHref,
-  capsuleTitle,
+  capsuleMonthTitle,
   closedCountForMonth,
   earlierCapsuleRows,
   earlierCapsuleTitle,
   normalizeMonthVersion,
 } from "@/lib/month-version";
-import { monthLabel } from "@/lib/schedule";
+import { capsuleMonthLabel } from "@/lib/schedule";
 import { requireGroupMember } from "@/lib/session";
 import { parseFlashError } from "@/lib/session-policy";
 import { writtenCountPhrase } from "@/lib/submit";
@@ -125,9 +125,9 @@ export default async function GroupHomePage({
 
   const featuredMonth = open ? yearMonth : latestCapsule?.yearMonth;
   const featuredLabel = open && yearMonth
-    ? capsuleTitle(monthLabel(yearMonth), version ?? 1)
+    ? capsuleMonthTitle(yearMonth, version ?? 1)
     : latestCapsule
-      ? capsuleTitle(monthLabel(latestCapsule.yearMonth), latestCapsule.version)
+      ? capsuleMonthTitle(latestCapsule.yearMonth, latestCapsule.version)
       : name;
   const closeDay =
     open && yearMonth ? submitWindowCloseDay(group, yearMonth) : group.submit_end_day;
@@ -142,7 +142,7 @@ export default async function GroupHomePage({
     : "";
   const nextOpenDate = nextOpenDateLabel(group, closed);
   const nextLabel = open && yearMonth
-    ? capsuleTitle(monthLabel(yearMonth), version ?? 1)
+    ? capsuleMonthTitle(yearMonth, version ?? 1)
     : nextOpenMonthLabel(group, closed);
 
   return (
@@ -188,7 +188,7 @@ export default async function GroupHomePage({
                 ) : latestCapsule ? (
                   <>
                     <h2 className="serif" style={{ fontSize: "1.5rem" }}>
-                      The {capsuleTitle(monthLabel(latestCapsule.yearMonth), latestCapsule.version)}{" "}
+                      The {capsuleMonthTitle(latestCapsule.yearMonth, latestCapsule.version)}{" "}
                       capsule is ready
                     </h2>
                     {emailPhrase ? <p className="muted small">{emailPhrase}</p> : null}
@@ -283,7 +283,7 @@ export default async function GroupHomePage({
                       <span className="listitem__body">
                         <span className="listitem__title">
                           {earlierCapsuleTitle(
-                            monthLabel(row.yearMonth),
+                            capsuleMonthLabel(row.yearMonth),
                             row.version,
                             closedCountForMonth(compiled, row.yearMonth),
                           )}

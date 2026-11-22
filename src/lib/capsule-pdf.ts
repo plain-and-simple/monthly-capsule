@@ -13,8 +13,7 @@ import {
 } from "@/lib/capsule-pdf-fonts";
 import { capsuleThemeMeta, parseCapsuleTheme, type CapsuleTheme } from "@/lib/capsule-theme";
 import { contributorsLine, DOWNLOAD_PDF_LABEL, groupDisplayName } from "@/lib/copy";
-import { capsulePath, capsuleTitle, DEFAULT_MONTH_VERSION } from "@/lib/month-version";
-import { monthLabel } from "@/lib/schedule";
+import { capsuleMonthTitle, capsulePath, DEFAULT_MONTH_VERSION } from "@/lib/month-version";
 import { missedCountPhrase } from "@/lib/submit";
 
 export {
@@ -389,10 +388,10 @@ export async function preparePdfJpegFitted(bytes: Uint8Array, maxEdge: number): 
   }
 }
 
-function planForArchive(archive: CapsuleArchive, monthLabelText?: string): DocumentPlan {
+export function planForArchive(archive: CapsuleArchive, monthLabelText?: string): DocumentPlan {
   const theme = parseCapsuleTheme(archive.theme);
   const groupName = groupDisplayName(archive.group_name);
-  const title = monthLabelText ?? capsuleTitle(monthLabel(archive.year_month), archive.month_version);
+  const title = monthLabelText ?? capsuleMonthTitle(archive.year_month, archive.month_version);
   return layoutCapsuleDocument({
     groupName,
     monthLabel: title,
@@ -495,7 +494,7 @@ export async function buildCapsulePdfBytes(input: {
     const groupName = groupDisplayName(input.archive.group_name);
     const title =
       input.monthLabelText ??
-      capsuleTitle(monthLabel(input.archive.year_month), input.archive.month_version);
+      capsuleMonthTitle(input.archive.year_month, input.archive.month_version);
     const plan = planForArchive(input.archive, input.monthLabelText);
     recordB2Layout(plan, input.layout);
     const prepStart = performance.now();
