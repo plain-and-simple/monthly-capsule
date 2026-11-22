@@ -28,6 +28,21 @@ describe("same-month force-open editions", () => {
     expect(planForceOpen([septV1], "2026-09").action).not.toBe("already_open");
   });
 
+  it("creates v2 then v3 and leaves the prior edition rows unchanged", () => {
+    const v1: CycleMonthRow = { year_month: "2026-09", version: 1, status: "compiled" };
+    const v1Before = { ...v1 };
+    expect(planForceOpen([v1], "2026-09")).toEqual({ action: "create", version: 2 });
+    expect(planForceOpen([v1], "2026-09").action).not.toBe("reopen");
+    expect(v1).toEqual(v1Before);
+
+    const v2: CycleMonthRow = { year_month: "2026-09", version: 2, status: "compiled" };
+    const rows = [v1, v2];
+    const before = rows.map((row) => ({ ...row }));
+    expect(planForceOpen(rows, "2026-09")).toEqual({ action: "create", version: 3 });
+    expect(planForceOpen(rows, "2026-09").action).not.toBe("reopen");
+    expect(rows).toEqual(before);
+  });
+
   it("reopens a closed-not-compiled edition instead of minting v2", () => {
     expect(
       planForceOpen([{ year_month: "2026-09", version: 1, status: "closed" }], "2026-09"),

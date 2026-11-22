@@ -26,6 +26,7 @@ import {
   DEFAULT_SUBMIT_END_DAY,
   DEFAULT_SUBMIT_START_DAY,
 } from "@/lib/constants";
+import { isGroupNameError, parseGroupName } from "@/lib/group-name";
 import { inviteMessageWithPin } from "@/lib/manage";
 
 function readAccountFields(form: HTMLFormElement) {
@@ -46,6 +47,10 @@ export function CreateForm({ signedInAs }: { signedInAs?: string | null }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [savedPin, setSavedPin] = useState(false);
+  const [nameError, setNameError] = useState<string | null>(null);
+  const serverNameError =
+    state && !state.ok && isGroupNameError(state.error) ? state.error : null;
+  const shownNameError = nameError ?? serverNameError;
 
   if (state?.ok) {
     const hero = createSuccessHero({ name: state.groupName, pin: state.pin });
@@ -266,8 +271,15 @@ export function CreateForm({ signedInAs }: { signedInAs?: string | null }) {
             ) : null}
             <label className="field">
               <span className="field__label">Group name</span>
-              <input className="input" name="name" maxLength={40} placeholder="Optional" />
+              <input
+                className="input"
+                name="name"
+                maxLength={40}
+                required
+                onChange={() => setNameError(null)}
+              />
               <span className="field__hint">What everyone sees. Keep it short.</span>
+              {shownNameError ? <span className="err">{shownNameError}</span> : null}
             </label>
             <div className="field">
               <span className="field__label">Schedule</span>
@@ -308,6 +320,17 @@ export function CreateForm({ signedInAs }: { signedInAs?: string | null }) {
               className="btn btn--primary btn--block"
               busy={busy}
               pendingLabel="Creating…"
+              onClick={(event) => {
+                const form = event.currentTarget.form;
+                if (!form) return;
+                const parsed = parseGroupName(String(new FormData(form).get("name") ?? ""));
+                if (typeof parsed !== "string") {
+                  event.preventDefault();
+                  setNameError(parsed.error);
+                  return;
+                }
+                setNameError(null);
+              }}
             >
               Create group
             </PendingSubmitButton>

@@ -14,15 +14,18 @@ import { OwnerEmailSubmit } from "@/components/email-group-form";
 import { PendingSubmitButton, useInstantBusy } from "@/components/pending-submit-button";
 import {
   CYCLE_CLOSE_COMPILE,
+  CYCLE_CLOSE_NOTE,
   CYCLE_EMAIL_LATER,
   CYCLE_NOT_NOW,
   CYCLE_OPEN_EARLY,
   CYCLE_SEND,
   GROUP_NEXT_CAPSULE,
+  cycleReopenNewVersion,
 } from "@/lib/copy";
 import { CYCLE_EMAIL_PROMPT, CYCLE_OPENED } from "@/lib/cycle";
 import { FORCE_CLOSE_CONFIRM_VALUE } from "@/lib/manage";
 import { capsuleMonthTitle } from "@/lib/month-version";
+import { capsuleMonthLabel } from "@/lib/schedule";
 
 export function CycleForm({
   groupId,
@@ -32,6 +35,8 @@ export function CycleForm({
   writtenPhrase,
   nextOpenDate,
   canForce = true,
+  nextYearMonth,
+  reopenYearMonth = null,
 }: {
   groupId: string;
   submitOpen: boolean;
@@ -40,6 +45,8 @@ export function CycleForm({
   writtenPhrase?: string;
   nextOpenDate?: string;
   canForce?: boolean;
+  nextYearMonth: string;
+  reopenYearMonth?: string | null;
 }) {
   const [openState, openAction, openPending] = useActionState<ForceOpenState, FormData>(
     forceOpenSubmit,
@@ -189,23 +196,37 @@ export function CycleForm({
                   </button>
                 )
               ) : canForce ? (
-                <form action={openAction} onSubmit={markOpenBusy} aria-busy={openBusy || undefined}>
-                  <input type="hidden" name="groupId" value={groupId} />
-                  <PendingSubmitButton
-                    className="btn btn--secondary"
-                    busy={openBusy}
-                    pendingLabel="Opening…"
-                  >
-                    {CYCLE_OPEN_EARLY}
-                  </PendingSubmitButton>
-                </form>
+                <>
+                  {nextYearMonth ? (
+                    <form action={openAction} onSubmit={markOpenBusy} aria-busy={openBusy || undefined}>
+                      <input type="hidden" name="groupId" value={groupId} />
+                      <input type="hidden" name="yearMonth" value={nextYearMonth} />
+                      <PendingSubmitButton
+                        className="btn btn--secondary"
+                        busy={openBusy}
+                        pendingLabel="Opening…"
+                      >
+                        {CYCLE_OPEN_EARLY}
+                      </PendingSubmitButton>
+                    </form>
+                  ) : null}
+                  {reopenYearMonth ? (
+                    <form action={openAction} onSubmit={markOpenBusy} aria-busy={openBusy || undefined}>
+                      <input type="hidden" name="groupId" value={groupId} />
+                      <input type="hidden" name="yearMonth" value={reopenYearMonth} />
+                      <PendingSubmitButton
+                        className="btn btn--secondary"
+                        busy={openBusy}
+                        pendingLabel="Opening…"
+                      >
+                        {cycleReopenNewVersion(capsuleMonthLabel(reopenYearMonth))}
+                      </PendingSubmitButton>
+                    </form>
+                  ) : null}
+                </>
               ) : null}
             </div>
-            {canForce && submitOpen ? (
-              <p className="muted tiny">
-                Closing makes this version of the capsule. You can open again for a new version.
-              </p>
-            ) : null}
+            {canForce && submitOpen ? <p className="muted tiny">{CYCLE_CLOSE_NOTE}</p> : null}
             {closeState?.ok && closeState.message ? <p className="small">{closeState.message}</p> : null}
             {emailState?.error && !later ? <p className="err">{emailState.error}</p> : null}
           </div>

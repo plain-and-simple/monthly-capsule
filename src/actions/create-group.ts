@@ -7,6 +7,7 @@ import {
   DEFAULT_SUBMIT_START_DAY,
 } from "@/lib/constants";
 import { appUrl } from "@/lib/env";
+import { parseGroupName } from "@/lib/group-name";
 import { createAccount, linkMembership } from "@/lib/memberships";
 import { generatePin, hashPin } from "@/lib/pin";
 import { validateSchedule } from "@/lib/schedule";
@@ -27,9 +28,9 @@ export async function createGroup(_prev: CreateState, formData: FormData): Promi
     return codeError;
   }
 
-  const name = String(formData.get("name") ?? "").trim();
-  if (name.length > 40) {
-    return { ok: false, error: "Name is too long." };
+  const name = parseGroupName(String(formData.get("name") ?? ""));
+  if (typeof name !== "string") {
+    return { ok: false, error: name.error };
   }
 
   const start = Number(formData.get("submit_start_day") || DEFAULT_SUBMIT_START_DAY);

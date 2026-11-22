@@ -17,6 +17,7 @@ import {
 } from "@/lib/copy";
 import { groupDisplayName } from "@/lib/copy";
 import {
+  allowedForceOpenYearMonths,
   capsuleEmailLine,
   nextOpenDateLabel,
   nextOpenMonthLabel,
@@ -53,10 +54,12 @@ export default async function GroupHomePage({
   const { uuid } = await params;
   const error = parseFlashError((await searchParams).error);
   const { group, member } = await requireGroupMember(uuid);
-  const [{ open, yearMonth, version, closed }, unsent] = await Promise.all([
+  const [{ open, yearMonth, version, closed, rows }, unsent] = await Promise.all([
     resolveSubmitWindow(group),
     canForceCycle(member.role) ? latestUnsentCapsule(uuid) : Promise.resolve(null),
   ]);
+  const now = new Date();
+  const forceOpen = allowedForceOpenYearMonths(group, rows, now);
   const admin = createAdminClient();
   const name = groupDisplayName(group.name);
 
@@ -130,7 +133,14 @@ export default async function GroupHomePage({
       ? capsuleMonthTitle(latestCapsule.yearMonth, latestCapsule.version)
       : name;
   const closeDay =
-    open && yearMonth ? submitWindowCloseDay(group, yearMonth) : group.submit_end_day;
+    open && yearMonth
+      ? submitWindowCloseDay(
+          group,
+          yearMonth,
+          now,
+          compiled.map((row) => row.yearMonth),
+        )
+      : group.submit_end_day;
   const closes = featuredMonth ? windowClosesPhrase(featuredMonth, closeDay) : "";
   const emailYearMonth = open && yearMonth ? yearMonth : latestCapsule?.yearMonth ?? yearMonth;
   const emailPhrase = emailYearMonth
@@ -267,6 +277,8 @@ export default async function GroupHomePage({
             writtenPhrase={open ? writtenCountPhrase(written, total) : undefined}
             nextOpenDate={nextOpenDate}
             canForce={actorIsOwner}
+            nextYearMonth={forceOpen.nextYearMonth}
+            reopenYearMonth={forceOpen.reopenYearMonth}
           />
 
           {earlier.length > 0 ? (

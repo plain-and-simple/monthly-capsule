@@ -16,6 +16,7 @@ import {
   CYCLE_CONFIRM_CLOSE,
   CYCLE_EMAIL_TIMEOUT,
   CYCLE_NO_CAPSULE,
+  CYCLE_OPEN_NOT_ALLOWED,
   CYCLE_OWNER_ONLY,
   CYCLE_SENT,
   CYCLE_SKIPPED,
@@ -26,16 +27,16 @@ import {
   decideForceOpen,
   decideForceSkip,
   forceCloseTarget,
-  forceOpenYearMonth,
   isCycleSubmitOpen,
   isNextRedirectError,
 } from "@/lib/cycle";
+import { acceptForceOpenYearMonth, allowedForceOpenYearMonths } from "@/lib/group-status";
 import { opsFailureCode } from "@/lib/compile-policy";
 import { EMAIL_ACTION_TIMEOUT_MS, ownerEmailFailed, withTimeout } from "@/lib/email-policy";
 import { reportOpsAlert } from "@/lib/ops-alert-mail";
 import { holdGroupMonthEmail, sendGroupMonthEmail } from "@/lib/email";
 import { forceCloseConfirmAccepted } from "@/lib/manage";
-import { capsuleHref, planForceOpen } from "@/lib/month-version";
+import { capsuleHref, closedOrCompiledYearMonths, planForceOpen } from "@/lib/month-version";
 import { requireGroupMember } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase";
 
@@ -79,13 +80,17 @@ export async function forceOpenSubmit(
 
   try {
     const { member, group } = await requireGroupMember(groupId);
-    const closed = await closedYearMonths(groupId);
-    const decision = decideForceOpen(member.role, isCycleSubmitOpen(group, closed));
+    const now = new Date();
+    const rows = toCycleMonthRows(await listGroupMonthRows(groupId));
+    const closed = closedOrCompiledYearMonths(rows);
+    const decision = decideForceOpen(member.role, isCycleSubmitOpen(group, closed, now));
     if (decision === "forbidden") return { error: CYCLE_OWNER_ONLY };
     if (decision === "already_open") return { error: CYCLE_ALREADY_OPEN };
 
-    const yearMonth = forceOpenYearMonth();
-    const rows = toCycleMonthRows(await listGroupMonthRows(groupId));
+    const allowed = allowedForceOpenYearMonths(group, rows, now);
+    const yearMonth = acceptForceOpenYearMonth(formData.get("yearMonth"), allowed);
+    if (!yearMonth) return { error: CYCLE_OPEN_NOT_ALLOWED };
+
     const plan = planForceOpen(rows, yearMonth);
     if (plan.action === "already_open") return { error: CYCLE_ALREADY_OPEN };
     if (plan.action === "capped") return { error: CYCLE_VERSION_CAP };

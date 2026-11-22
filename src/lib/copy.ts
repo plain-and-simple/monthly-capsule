@@ -152,8 +152,15 @@ export const SIGNED_OUT_TOAST = "Signed out";
 
 export const SCHEDULE_SECTION = "Schedule";
 export const CYCLE_SECTION = "Capsule cycle";
-export const CYCLE_OPEN_EARLY = "Open submit early";
+export const CYCLE_OPEN_EARLY = "Open next month early";
+export const CYCLE_CLOSE_NOTE =
+  "Closing makes this version of the capsule. After that you can open next month early, or reopen this month for a new version.";
 export const CYCLE_CLOSE_COMPILE = "Close & make capsule";
+
+/** `label` is capsuleMonthLabel(cycle key). No version suffix. */
+export function cycleReopenNewVersion(label: string): string {
+  return `Reopen ${label} for a new version`;
+}
 export const CYCLE_SEND = "Send";
 export const CYCLE_SEND_AGAIN = "Send again";
 export const CYCLE_SEND_AGAIN_HINT = "Sends again from Capsule with the locked subject.";

@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { parseThemeFormValue } from "@/lib/capsule-theme";
+import { parseGroupName } from "@/lib/group-name";
 import { closedYearMonthsFromRows, listGroupMonthRows } from "@/lib/compile";
 import { CAPSULE_THEME_INVALID } from "@/lib/copy";
 import {
@@ -100,9 +101,9 @@ export async function updateGroupName(
   formData: FormData,
 ): Promise<SettingsState> {
   const groupId = String(formData.get("groupId") ?? "");
-  const name = String(formData.get("name") ?? "").trim();
-  if (name.length > 40) {
-    return { error: "Name is too long." };
+  const name = parseGroupName(String(formData.get("name") ?? ""));
+  if (typeof name !== "string") {
+    return { error: name.error };
   }
 
   await requireOwnerUncached(groupId);

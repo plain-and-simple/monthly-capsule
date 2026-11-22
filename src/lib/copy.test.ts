@@ -1,13 +1,16 @@
 import { describe, expect, it } from "vitest";
+import { capsuleMonthLabel } from "./schedule";
 import {
   ACCOUNT_PASSWORD_LABEL,
   CHROME_MARK,
   CREATE_SUCCESS_COPY,
   CREATE_SUCCESS_HINT,
   CYCLE_CLOSE_COMPILE,
+  CYCLE_CLOSE_NOTE,
   CYCLE_EMAIL_LATER,
   CYCLE_NOT_NOW,
   CYCLE_OPEN_EARLY,
+  cycleReopenNewVersion,
   CYCLE_SECTION,
   CYCLE_SEND,
   CYCLE_SEND_AGAIN,
@@ -265,7 +268,14 @@ describe("join and manage labels", () => {
 
   it("locks owner force-cycle labels", () => {
     expect(CYCLE_SECTION).toBe("Capsule cycle");
-    expect(CYCLE_OPEN_EARLY).toBe("Open submit early");
+    expect(CYCLE_OPEN_EARLY).toBe("Open next month early");
+    expect(CYCLE_CLOSE_NOTE).toBe(
+      "Closing makes this version of the capsule. After that you can open next month early, or reopen this month for a new version.",
+    );
+    expect(cycleReopenNewVersion(capsuleMonthLabel("2026-11"))).toBe(
+      "Reopen October 2026 for a new version",
+    );
+    expect(cycleReopenNewVersion(capsuleMonthLabel("2026-11"))).not.toMatch(/v\d/);
     expect(CYCLE_CLOSE_COMPILE).toBe("Close & make capsule");
     expect(CYCLE_SEND).toBe("Send");
     expect(CYCLE_SEND_AGAIN).toBe("Send again");
