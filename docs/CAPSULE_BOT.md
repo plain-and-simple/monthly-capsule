@@ -71,6 +71,11 @@ This repo is PUBLIC. This file holds no secrets, member data, or logins, and it 
   - Visible names show the writing month: the stored `year_month` cycle key minus one, including January rolling back to the previous December. That covers the submit title, Your groups, group home, the capsule page, the PDF cover and footer, and the open, reminder, and compiled email bodies. Email subjects stay as they are.
   - Keys, URLs, PDF storage paths, and download filenames still use the stored cycle key. No migration, and no letter data was rewritten.
 - The first real open-notification emails went out successfully on 2026-11-22 at 9:30 AM CT.
+- PR #74, open-early and required group name, squash-merged as d9dc19fb on 2026-11-22 at 3:07 PM CT (prod deploy `dpl_78cxepdD2TrEvcbuWYAwVbmeMEK4`, Ready at 3:08 PM CT). No migration.
+  - **Open early:** "Open next month early" targets the next cycle (`nextCycleYearMonth`), the same key the group page already shows, not the current calendar month. Visible labels stay on the writing month (cycle key minus one). An early open keeps the scheduled close day when that date is still ahead.
+  - **Reopen a compiled month:** after a capsule is compiled, the owner also sees "Reopen {writing month} for a new version." That creates a new months row at the next edition (v2, then v3, and so on). It does not replace, overwrite, or delete the prior version, its letters, or its compiled PDF. A reopened compiled cycle uses the last day of that cycle month as the due date.
+  - **Group name:** required on create (UI and server) and cannot be cleared in Settings. Names are trimmed; empty or whitespace is rejected; the 40-character cap is unchanged. No existing groups were rewritten. The display fallback "Untitled group" stays for any already-empty name.
+  - CI was green (Unit and E2E smoke). The Vercel preview was Ready; it sits behind SSO, so the live preview was not clicked through.
 
 **Decisions (Chandler, 2026-11-22):**
 - Old stored PDFs keep their old cover labels and will not be re-rendered.
