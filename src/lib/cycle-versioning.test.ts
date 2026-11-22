@@ -59,6 +59,61 @@ describe("force-open same-month versioning wiring", () => {
     expect(source).not.toMatch(/copy.*submission/i);
   });
 
+  it("a compiled reopen inserts the next edition and does not rewrite prior rows", () => {
+    const compile = readFileSync(resolve(here, "./compile.ts"), "utf8");
+    const createFn = compile.slice(
+      compile.indexOf("async function createMonth"),
+      compile.indexOf("export async function ensureMonth"),
+    );
+    expect(createFn).toContain(".insert({ group_id: groupId, year_month: yearMonth, version, status })");
+    expect(createFn).not.toContain(".update(");
+    expect(createFn).not.toContain(".delete(");
+    expect(createFn).not.toContain("upsert");
+    expect(createFn).not.toContain('.from("submissions")');
+    expect(createFn).not.toContain('.from("capsules")');
+    expect(createFn).not.toContain("pdf_storage_path");
+    expect(createFn).not.toContain(".storage");
+
+    const ensureFn = compile.slice(
+      compile.indexOf("export async function ensureMonth"),
+      compile.indexOf("async function clearForceOpenIfMatch"),
+    );
+    expect(ensureFn).toContain("if (!existing) return createMonth(groupId, yearMonth, edition, status)");
+    const compiledGuard = ensureFn.slice(
+      ensureFn.indexOf('existing.status === "compiled"'),
+      ensureFn.indexOf("return existing"),
+    );
+    expect(compiledGuard).toContain('throw new Error("Cannot reopen a compiled edition")');
+    expect(compiledGuard).not.toContain(".update(");
+    expect(compiledGuard).not.toContain(".delete(");
+    expect(compiledGuard).not.toContain(".insert(");
+    expect(ensureFn).not.toContain(".delete(");
+    expect(ensureFn).not.toContain('.from("submissions")');
+    expect(ensureFn).not.toContain('.from("capsules")');
+    expect(ensureFn).not.toContain("pdf_storage_path");
+    expect(ensureFn).not.toContain(".storage");
+    expect(ensureFn.match(/\.update\(/g)).toHaveLength(2);
+    expect(ensureFn).not.toMatch(/\.update\(\{[^}]*\bversion\b/);
+    expect(ensureFn).not.toMatch(/\.update\(\{[^}]*year_month/);
+
+    const cycle = readFileSync(resolve(here, "../actions/cycle.ts"), "utf8");
+    const openFn = cycle.slice(
+      cycle.indexOf("export async function forceOpenSubmit"),
+      cycle.indexOf("export async function forceCloseCompile"),
+    );
+    expect(openFn).toContain('ensureMonth(groupId, yearMonth, "open", plan.version)');
+    expect(openFn).toContain('.from("groups")');
+    expect(openFn).toContain(".update({ force_open_year_month: yearMonth })");
+    expect(openFn.match(/\.update\(/g)).toHaveLength(1);
+    expect(openFn).not.toContain(".delete(");
+    expect(openFn).not.toContain('.from("months")');
+    expect(openFn).not.toContain('.from("submissions")');
+    expect(openFn).not.toContain('.from("capsules")');
+    expect(openFn).not.toContain("pdf_storage_path");
+    expect(openFn).not.toContain(".storage");
+    expect(openFn).not.toContain('plan.action === "reopen"');
+  });
+
   it("compile snapshots archive for that month_id / edition", () => {
     const source = readFileSync(resolve(here, "./compile.ts"), "utf8");
     expect(source).toContain("snapshotMonthArchive(group, yearMonth, monthId, monthVersion)");

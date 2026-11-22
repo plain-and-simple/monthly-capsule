@@ -290,6 +290,25 @@ describe("allowed force-open keys", () => {
     );
   });
 
+  it("offers that month again after compiled v2, as a new v3", () => {
+    const v1: CycleMonthRow = { year_month: "2026-11", version: 1, status: "compiled" };
+    const v2: CycleMonthRow = { year_month: "2026-11", version: 2, status: "compiled" };
+    const v1Before = { ...v1 };
+    expect(planForceOpen([v1], "2026-11")).toEqual({ action: "create", version: 2 });
+    expect(v1).toEqual(v1Before);
+
+    const rows = [v1, v2];
+    const before = rows.map((row) => ({ ...row }));
+    expect(planForceOpen(rows, "2026-11")).toEqual({ action: "create", version: 3 });
+    expect(planForceOpen(rows, "2026-11").action).not.toBe("reopen");
+    expect(rows).toEqual(before);
+
+    const allowed = allowedForceOpenYearMonths(wrapOpen, rows, nov22);
+    expect(allowed.nextYearMonth).toBe("2026-12");
+    expect(allowed.reopenYearMonth).toBe("2026-11");
+    expect(acceptForceOpenYearMonth("2026-11", allowed)).toBe("2026-11");
+  });
+
   it("offers October and a new September version after a Sep 9 compile", () => {
     const rows = [compiled("2026-09")];
     const allowed = allowedForceOpenYearMonths(schedule, rows, afterWindow);
