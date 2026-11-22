@@ -8,13 +8,16 @@ import {
   emailTargetYearMonth,
   isSubmitOpen,
   incrementYearMonth,
+  capsuleMonthLabel,
   lastDayOfMonth,
+  monthLabel,
   nextYearMonth,
   openDayOptionLabel,
   parseScheduleForm,
   previousYearMonth,
   scheduleFormDays,
   validateSchedule,
+  writingYearMonth,
   yearMonthString,
 } from "./schedule";
 
@@ -233,5 +236,34 @@ describe("compile and email targets", () => {
     expect(yearMonthString({ year: 2026, month: 1, day: 1 })).toBe("2026-01");
     expect(nextYearMonth({ year: 2026, month: 12, day: 20 })).toBe("2027-01");
     expect(incrementYearMonth("2026-09")).toBe("2026-10");
+  });
+});
+
+describe("writing month labels", () => {
+  it("keeps monthLabel as the stored calendar month", () => {
+    expect(monthLabel("2026-11")).toBe("November 2026");
+    expect(monthLabel("2026-10")).toBe("October 2026");
+    expect(monthLabel("2027-01")).toBe("January 2027");
+  });
+
+  it("names the writing month one cycle month earlier", () => {
+    expect(writingYearMonth("2026-11")).toBe("2026-10");
+    expect(capsuleMonthLabel("2026-11")).toBe("October 2026");
+    expect(writingYearMonth("2026-10")).toBe("2026-09");
+    expect(capsuleMonthLabel("2026-10")).toBe("September 2026");
+  });
+
+  it("rolls January back to the previous December", () => {
+    expect(writingYearMonth("2027-01")).toBe("2026-12");
+    expect(capsuleMonthLabel("2027-01")).toBe("December 2026");
+    expect(writingYearMonth("2026-01")).toBe("2025-12");
+    expect(capsuleMonthLabel("2026-01")).toBe("December 2025");
+  });
+
+  it("passes invalid input through", () => {
+    expect(writingYearMonth("nope")).toBe("nope");
+    expect(capsuleMonthLabel("nope")).toBe("nope");
+    expect(writingYearMonth("2026-13")).toBe("2026-13");
+    expect(capsuleMonthLabel("2026-13")).toBe("2026-13");
   });
 });

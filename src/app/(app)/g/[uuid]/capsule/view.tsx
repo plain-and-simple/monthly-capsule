@@ -12,9 +12,8 @@ import {
   groupDisplayName,
 } from "@/lib/copy";
 import { canForceCycle } from "@/lib/manage";
-import { capsuleTitle, DEFAULT_MONTH_VERSION } from "@/lib/month-version";
+import { capsuleMonthTitle, DEFAULT_MONTH_VERSION } from "@/lib/month-version";
 import { signedPhotoUrls } from "@/lib/photos";
-import { monthLabel } from "@/lib/schedule";
 import { requireGroupMember } from "@/lib/session";
 import { missedCountPhrase } from "@/lib/submit";
 import { createAdminClient } from "@/lib/supabase";
@@ -72,7 +71,7 @@ export async function CapsuleView({
     })),
   }));
 
-  const title = capsuleTitle(monthLabel(yearMonth), month.version);
+  const title = capsuleMonthTitle(yearMonth, month.version);
 
   return (
     <main className="main">

@@ -129,7 +129,7 @@ describe("privacy and chrome locks", () => {
     expect(source).toContain("earlierCapsuleTitle");
     expect(source).toContain("closedCountForMonth");
     expect(source).toContain("GROUP_EARLIER_CAPSULES");
-    expect(source).toContain("capsuleTitle");
+    expect(source).toContain("capsuleMonthTitle");
     expect(source).toContain("submitWindowCloseDay");
     expect(source).toContain("capsuleEmailLine");
     expect(source).toContain("nextOpenMonthLabel");

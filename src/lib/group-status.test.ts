@@ -97,7 +97,7 @@ describe("manage group status", () => {
       now: new Date("2026-09-10T17:00:00Z"),
     });
     expect(row.status).toBe(GROUP_STATUS_READY);
-    expect(row.meta).toMatch(/September 2026 capsule is ready to read/);
+    expect(row.meta).toMatch(/August 2026 capsule is ready to read/);
   });
 
   it("keeps the resting meta on a short date with no year", () => {
@@ -219,8 +219,18 @@ describe("next open date label", () => {
     ).toBe("");
   });
 
-  it("names the next closed cycle by month, not the open date", () => {
-    expect(nextOpenMonthLabel(group, [], new Date("2026-09-10T17:00:00Z"))).toBe("October 2026");
+  it("names the next closed cycle by the writing month, not the open date", () => {
+    expect(nextOpenMonthLabel(group, [], new Date("2026-09-10T17:00:00Z"))).toBe("September 2026");
+  });
+
+  it("does not shift a late open day a second time", () => {
+    expect(
+      nextOpenMonthLabel({ ...group, submit_start_day: 22 }, [], new Date("2026-09-10T17:00:00Z")),
+    ).toBe("September 2026");
+  });
+
+  it("names the January cycle as the previous December", () => {
+    expect(nextOpenMonthLabel(group, [], new Date("2026-12-15T18:00:00Z"))).toBe("December 2026");
   });
 });
 

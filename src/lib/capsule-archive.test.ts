@@ -35,6 +35,8 @@ describe("capsule archive snapshot", () => {
     expect(snapshot.version).toBe(1);
     expect(snapshot.month_version).toBe(1);
     expect(snapshot.year_month).toBe("2026-10");
+    expect(snapshot.html).toContain("September 2026");
+    expect(snapshot.html).not.toContain("October 2026");
     expect(snapshot.letters).toHaveLength(1);
     expect(snapshot.letters[0]?.photos[0]?.storage_path).toBe("g/m/p.jpg");
     expect(snapshot.html).toContain("Hello world");

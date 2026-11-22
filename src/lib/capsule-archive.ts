@@ -10,7 +10,7 @@ import {
 } from "@/lib/capsule-theme";
 import { contributorsLine } from "@/lib/copy";
 import { parseFaceBoxes, type FaceBox } from "@/lib/face-boxes";
-import { monthLabel } from "@/lib/schedule";
+import { capsuleMonthLabel } from "@/lib/schedule";
 
 export const CAPSULE_ARCHIVE_VERSION = 1 as const;
 
@@ -175,7 +175,7 @@ export function renderArchiveHtml(input: {
     Number.isInteger(input.month_version) && Number(input.month_version) >= 1
       ? Number(input.month_version)
       : 1;
-  const labeled = monthLabel(input.year_month);
+  const labeled = capsuleMonthLabel(input.year_month);
   const cover = renderCoverHtml({
     theme,
     groupName: input.group_name,
