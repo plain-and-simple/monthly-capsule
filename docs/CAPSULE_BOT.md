@@ -45,7 +45,7 @@ This repo is PUBLIC. This file holds no secrets, member data, or logins, and it 
 - Product questions get settled with Chandler in one line. Don't invent product rules.
 - Anything run on Chandler's Mac mini runs under the macOS user `youcha-agent`. Grok CLI is installed there and signed in to GitHub, and it can be used for repo work on branches.
 
-## 5. Current state (as of 2026-11-22)
+## 5. Current state (as of 2026-11-23)
 **Live and done:**
 - PR #64, the B2 magazine PDF.
 - PR #65, PDF compression.
@@ -76,6 +76,12 @@ This repo is PUBLIC. This file holds no secrets, member data, or logins, and it 
   - **Reopen a compiled month:** after a capsule is compiled, the owner also sees "Reopen {writing month} for a new version." That creates a new months row at the next edition (v2, then v3, and so on). It does not replace, overwrite, or delete the prior version, its letters, or its compiled PDF. A reopened compiled cycle uses the last day of that cycle month as the due date.
   - **Group name:** required on create (UI and server) and cannot be cleared in Settings. Names are trimmed; empty or whitespace is rejected; the 40-character cap is unchanged. No existing groups were rewritten. The display fallback "Untitled group" stays for any already-empty name.
   - CI was green (Unit and E2E smoke). The Vercel preview was Ready; it sits behind SSO, so the live preview was not clicked through.
+- PR #76, transient group-lookup retries, squash-merged as 01479446 on 2026-11-23 at 8:43 AM CT (prod deploy `dpl_HxYbB3ZD4B7v8HdFAZYG5MZpUb5W`, Ready at 8:44 AM CT). No migration.
+  - Admin membership lookups retry up to 3 times (200 ms, then 400 ms) as distinct network requests. Each attempt uses `cache: no-store` and a unique `x-retry-attempt` header so Next.js request memoization cannot replay one PGRST303 401 for the whole server request.
+  - Only PGRST303, HTTP 5xx, and network errors are retried.
+  - The group page (`/g/[id]`) catches a remaining TransientError and shows a calm "Couldn't load this group. Try again in a moment." screen with a Try again button that reloads, instead of the generic error page.
+  - The ops alert for that failure is sent at most once per request.
+  - CI was green (Unit and E2E smoke). The Vercel preview was Ready.
 
 **Decisions (Chandler, 2026-11-22):**
 - Old stored PDFs keep their old cover labels and will not be re-rendered.
