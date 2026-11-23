@@ -58,6 +58,9 @@ export const SHOW_PASSWORD = "Show";
 export const HIDE_PASSWORD = "Hide";
 export const GROUP_INVITE_SOLO = "You're the only person here.";
 export const GROUP_INVITE_SOLO_CTA = "Invite someone";
+export const GROUP_LOAD_RETRY_HEADING = "Couldn't load this group.";
+export const GROUP_LOAD_RETRY_HINT = "Try again in a moment.";
+export const GROUP_LOAD_RETRY_BUTTON = "Try again";
 export const ROUTE_ERROR_HOME = "← Home";
 export const LANDING_LEDE =
   "A private page for a small group. Everyone sends a short letter and a few photos during the month. When the window closes, it all arrives as one thing to read.";

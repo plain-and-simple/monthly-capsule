@@ -15,6 +15,19 @@ export type OpsAlertEmail = {
 
 export type OpsAlertDecision = "send" | "throttled" | "skipped_unset";
 
+export type OnceFlag = { sent: boolean };
+
+export function createOnceFlag(): OnceFlag {
+  return { sent: false };
+}
+
+/** True only the first time. Use one flag per server request. */
+export function claimOnce(flag: OnceFlag): boolean {
+  if (flag.sent) return false;
+  flag.sent = true;
+  return true;
+}
+
 const lastSentAt = new Map<string, number>();
 
 export function resetOpsAlertThrottle(): void {

@@ -348,6 +348,29 @@ describe("open-group hang regression", () => {
     expect(body.indexOf("throw error")).toBeLessThan(body.indexOf("decideGroupGate"));
     expect(source).toContain("export const requireGroupMember = cache(loadGroupMember)");
     expect(source).toContain("export async function requireOwnerUncached");
+    expect(body.match(/reportOpsAlert\(/g)).toHaveLength(1);
+    expect(body).toContain("claimOnce(groupLoadAlertFlag())");
+    expect(body).toContain("createAdminClient({ fetch: attemptFetch })");
+  });
+
+  it("group home shows a calm reload state for a transient load", () => {
+    const source = readFileSync(resolve(here, "./session.ts"), "utf8");
+    const page = readFileSync(resolve(here, "../app/(app)/g/[uuid]/page.tsx"), "utf8");
+    const layout = readFileSync(resolve(here, "../app/(app)/g/[uuid]/layout.tsx"), "utf8");
+    const retry = readFileSync(resolve(here, "../components/group-load-retry.tsx"), "utf8");
+    expect(source).toContain("export async function readGroupMember");
+    expect(source).toContain('if (isTransientError(error)) return { status: "retry" }');
+    expect(page).toContain("readGroupMember");
+    expect(page).toContain("GroupLoadRetry");
+    expect(page).toContain('loaded.status === "retry"');
+    expect(page).not.toContain("reportOpsAlert");
+    expect(layout).toContain("readGroupMember");
+    expect(layout).toContain('loaded.status === "retry"');
+    expect(layout).not.toContain("reportOpsAlert");
+    expect(retry).toContain("GROUP_LOAD_RETRY_HEADING");
+    expect(retry).toContain("GROUP_LOAD_RETRY_HINT");
+    expect(retry).toContain("GROUP_LOAD_RETRY_BUTTON");
+    expect(retry).toContain("location.reload");
   });
 });
 

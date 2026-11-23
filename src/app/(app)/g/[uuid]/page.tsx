@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { CycleForm } from "@/components/cycle-form";
 import { GroupChrome } from "@/components/group-chrome";
+import { GroupLoadRetry } from "@/components/group-load-retry";
 import { PendingLink } from "@/components/pending-link";
 import { PeopleRoster } from "@/components/people-roster";
 import { SaveLoginForm } from "@/components/save-login-form";
@@ -36,7 +37,7 @@ import {
   normalizeMonthVersion,
 } from "@/lib/month-version";
 import { capsuleMonthLabel } from "@/lib/schedule";
-import { requireGroupMember } from "@/lib/session";
+import { readGroupMember } from "@/lib/session";
 import { parseFlashError } from "@/lib/session-policy";
 import { writtenCountPhrase } from "@/lib/submit";
 import { createAdminClient } from "@/lib/supabase";
@@ -53,7 +54,9 @@ export default async function GroupHomePage({
 }) {
   const { uuid } = await params;
   const error = parseFlashError((await searchParams).error);
-  const { group, member } = await requireGroupMember(uuid);
+  const loaded = await readGroupMember(uuid);
+  if (loaded.status === "retry") return <GroupLoadRetry />;
+  const { group, member } = loaded;
   const [{ open, yearMonth, version, closed, rows }, unsent] = await Promise.all([
     resolveSubmitWindow(group),
     canForceCycle(member.role) ? latestUnsentCapsule(uuid) : Promise.resolve(null),

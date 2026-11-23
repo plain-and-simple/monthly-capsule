@@ -77,6 +77,9 @@ import {
   ROLE_OWNER_LABEL,
   GROUP_EARLIER_CAPSULES,
   GROUP_FIRST_CAPSULE_HEADING,
+  GROUP_LOAD_RETRY_BUTTON,
+  GROUP_LOAD_RETRY_HEADING,
+  GROUP_LOAD_RETRY_HINT,
   GROUP_NO_PREVIOUS_CAPSULES,
   GROUP_PRIMARY_VIEW,
   ROSTER_NOT_YET,
@@ -251,6 +254,12 @@ describe("join and manage labels", () => {
     expect(GROUP_FIRST_CAPSULE_HEADING).toBe("Your first capsule");
     expect(GROUP_NO_PREVIOUS_CAPSULES).toBe("No previous capsules yet");
     expect(GROUP_EARLIER_CAPSULES).toBe("Earlier capsules");
+  });
+
+  it("locks the group load retry state", () => {
+    expect(GROUP_LOAD_RETRY_HEADING).toBe("Couldn't load this group.");
+    expect(GROUP_LOAD_RETRY_HINT).toBe("Try again in a moment.");
+    expect(GROUP_LOAD_RETRY_BUTTON).toBe("Try again");
   });
 
   it("locks submit model A labels", () => {

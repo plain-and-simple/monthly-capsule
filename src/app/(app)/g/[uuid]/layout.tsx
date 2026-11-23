@@ -1,5 +1,5 @@
 import { AppHeader } from "@/components/app-header";
-import { requireGroupMember } from "@/lib/session";
+import { readGroupMember } from "@/lib/session";
 
 export default async function GroupLayout({
   children,
@@ -9,11 +9,12 @@ export default async function GroupLayout({
   params: Promise<{ uuid: string }>;
 }) {
   const { uuid } = await params;
-  const { member } = await requireGroupMember(uuid);
+  const loaded = await readGroupMember(uuid);
+  if (loaded.status === "retry") return children;
 
   return (
     <>
-      <AppHeader name={member.preferred_name} showSignOut homeHref="/manage" />
+      <AppHeader name={loaded.member.preferred_name} showSignOut homeHref="/manage" />
       {children}
     </>
   );

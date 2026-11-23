@@ -9,6 +9,7 @@ import { cookieSecret } from "@/lib/env";
 import { sessionCookieOptions } from "@/lib/hosting";
 import { fetchMaybeSingleWithRetry } from "@/lib/membership-lookup";
 import { findAccountById } from "@/lib/memberships";
+import { claimOnce, createOnceFlag } from "@/lib/ops-alert";
 import { reportOpsAlert } from "@/lib/ops-alert-mail";
 import {
   accountAccessAllowed,
@@ -66,6 +67,8 @@ export async function clearSession(): Promise<void> {
   });
 }
 
+const groupLoadAlertFlag = cache(createOnceFlag);
+
 async function loadGroupMember(groupId: string): Promise<{
   member: Member;
   group: Group;
@@ -76,32 +79,43 @@ async function loadGroupMember(groupId: string): Promise<{
   let member: Member | null = null;
   let group: Group | null = null;
   if (lookup && session) {
-    const admin = createAdminClient();
     try {
       const [memberRow, groupRow] = await Promise.all([
-        fetchMaybeSingleWithRetry(async () => {
-          const { data, error } = await admin
+        fetchMaybeSingleWithRetry(async ({ fetch: attemptFetch }) => {
+          const admin = createAdminClient({ fetch: attemptFetch });
+          const { data, error, status } = await admin
             .from("members")
             .select("*")
             .eq("id", session.memberId)
             .maybeSingle();
-          return { data, error };
+          return {
+            data,
+            error: error ? { message: error.message, code: error.code, name: error.name } : null,
+            status,
+          };
         }),
-        fetchMaybeSingleWithRetry(async () => {
-          const { data, error } = await admin.from("groups").select("*").eq("id", groupId).maybeSingle();
-          return { data, error };
+        fetchMaybeSingleWithRetry(async ({ fetch: attemptFetch }) => {
+          const admin = createAdminClient({ fetch: attemptFetch });
+          const { data, error, status } = await admin.from("groups").select("*").eq("id", groupId).maybeSingle();
+          return {
+            data,
+            error: error ? { message: error.message, code: error.code, name: error.name } : null,
+            status,
+          };
         }),
       ]);
       member = (memberRow as Member | null) ?? null;
       group = (groupRow as Group | null) ?? null;
     } catch (error) {
       if (isTransientError(error)) {
-        await reportOpsAlert({
-          route: "loadGroupMember",
-          code: error.code,
-          groupId,
-          memberId: session.memberId,
-        });
+        if (claimOnce(groupLoadAlertFlag())) {
+          await reportOpsAlert({
+            route: "loadGroupMember",
+            code: error.code,
+            groupId,
+            memberId: session.memberId,
+          });
+        }
         throw error;
       }
       throw error;
@@ -142,6 +156,19 @@ async function loadGroupMember(groupId: string): Promise<{
 }
 
 export const requireGroupMember = cache(loadGroupMember);
+
+/** Group home renders a retry state. Other callers still see the thrown error. */
+export async function readGroupMember(groupId: string): Promise<
+  { status: "ready"; member: Member; group: Group } | { status: "retry" }
+> {
+  try {
+    const loaded = await requireGroupMember(groupId);
+    return { status: "ready", member: loaded.member, group: loaded.group };
+  } catch (error) {
+    if (isTransientError(error)) return { status: "retry" };
+    throw error;
+  }
+}
 
 function assertOwner(ctx: { member: Member; group: Group }, groupId: string) {
   if (ctx.member.role !== "owner") {
