@@ -4,6 +4,8 @@ import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   buildOpsAlertEmail,
+  claimOnce,
+  createOnceFlag,
   decideOpsAlert,
   markOpsAlertSent,
   OPS_ALERT_THROTTLE_MS,
@@ -51,6 +53,10 @@ describe("ops alerts", () => {
     expect(decideOpsAlert({ alertTo: "alerts@example.com", code: "PGRST303", now: now + 1_000 })).toBe(
       "throttled",
     );
+
+    const flag = createOnceFlag();
+    expect(claimOnce(flag)).toBe(true);
+    expect(claimOnce(flag)).toBe(false);
 
     const readme = readFileSync(resolve(here, "../../README.md"), "utf8");
     const envExample = readFileSync(resolve(here, "../../.env.example"), "utf8");
