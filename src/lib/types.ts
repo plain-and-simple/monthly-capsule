@@ -13,6 +13,8 @@ export type Group = {
   email_day: number;
   force_open_year_month: string | null;
   capsule_theme: CapsuleTheme;
+  /** Absent on rows read before the Slack awards migration. Treat as off. */
+  slack_awards_enabled?: boolean;
   created_at: string;
 };
 

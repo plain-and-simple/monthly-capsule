@@ -9,8 +9,9 @@ import {
   type LetterRun,
 } from "@/lib/capsule-theme";
 import type { CapsuleArchivePhoto } from "@/lib/capsule-archive";
-import { contributorsLine, PHOTO_UNAVAILABLE } from "@/lib/copy";
+import { contributorsLine, PHOTO_UNAVAILABLE, SLACK_AWARDS_EMPTY, SLACK_AWARDS_SECTION } from "@/lib/copy";
 import { initials } from "@/lib/group-status";
+import { slackAwardsLines, type SlackAwardsData } from "@/lib/slack-awards";
 
 export type CapsuleViewPhoto = CapsuleArchivePhoto & { url: string | null };
 
@@ -27,12 +28,14 @@ export function CapsuleDocument({
   title,
   letters,
   missedPhrase,
+  slackAwards = null,
 }: {
   theme: CapsuleTheme | string | null | undefined;
   groupName: string;
   title: string;
   letters: CapsuleViewLetter[];
   missedPhrase: string;
+  slackAwards?: SlackAwardsData | null;
 }) {
   const resolved = parseCapsuleTheme(theme);
   const names = letters.map((letter) => letter.preferred_name);
@@ -47,10 +50,30 @@ export function CapsuleDocument({
         <PersonSection key={letter.key} theme={resolved} letter={letter} />
       ))}
 
+      <SlackAwardsSection awards={slackAwards} />
+
       <div className="capsule__colophon">
         <p>{missedPhrase}</p>
       </div>
     </article>
+  );
+}
+
+function SlackAwardsSection({ awards }: { awards: SlackAwardsData | null }) {
+  if (!awards) return null;
+  const lines = slackAwardsLines(awards);
+  return (
+    <section className="slack-awards" aria-label={SLACK_AWARDS_SECTION}>
+      <h2>{SLACK_AWARDS_SECTION}</h2>
+      {lines.length === 0 ? <p className="muted">{SLACK_AWARDS_EMPTY}</p> : null}
+      {lines.length > 0 ? (
+        <ul>
+          {lines.map((line, index) => (
+            <li key={`${index}-${line}`}>{line}</li>
+          ))}
+        </ul>
+      ) : null}
+    </section>
   );
 }
 

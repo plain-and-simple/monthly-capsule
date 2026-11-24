@@ -186,6 +186,26 @@ export const CAPSULE_THEME_HINT =
 export const CAPSULE_THEME_SAVE = "Save theme";
 export const CAPSULE_THEME_INVALID = "Pick a theme.";
 
+export const SLACK_AWARDS_SECTION = "Slack awards";
+export const SLACK_AWARDS_HINT =
+  "A short section in the capsule, filled from Slack. You can edit it before the capsule is made.";
+export const SLACK_AWARDS_TOGGLE = "Include Slack awards";
+export const SLACK_AWARDS_SAVE = "Save awards";
+export const SLACK_AWARDS_HIDE = "Hide this month";
+export const SLACK_AWARDS_REFRESH = "Refresh from Slack";
+export const SLACK_AWARDS_REPLACE = "Replace my edits";
+export const SLACK_AWARDS_REPLACE_NEEDED =
+  "These edits are saved. Confirm to replace them from Slack.";
+export const SLACK_AWARDS_REFRESHED = "Refreshed from Slack.";
+export const SLACK_AWARDS_FAILED = "Could not refresh from Slack.";
+export const SLACK_AWARDS_EMPTY = "Nothing to award this month.";
+export const SLACK_AWARDS_GOLD = "Gold";
+export const SLACK_AWARDS_SILVER = "Silver";
+export const SLACK_AWARDS_BRONZE = "Bronze";
+export const SLACK_AWARDS_CHANNEL = "Most active channel";
+export const SLACK_AWARDS_REPLIES = "Most replies";
+export const SLACK_AWARDS_REACTIONS = "Most reactions";
+
 export const MANAGE_TAG_SUBMIT = "Write your letter";
 export const MANAGE_TAG_SUBMITTED = "Letter is in";
 export const MANAGE_TAG_READ = "Read";

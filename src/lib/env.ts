@@ -51,3 +51,9 @@ export function alertEmail(): string | null {
 export function createGroupCode(): string {
   return resolveCreateGroupCode(process.env.CREATE_GROUP_CODE);
 }
+
+/** Slack awards bot token. Unset skips the section. Never log the return value. */
+export function slackBotToken(): string | null {
+  const value = process.env.SLACK_BOT_TOKEN?.trim();
+  return value || null;
+}

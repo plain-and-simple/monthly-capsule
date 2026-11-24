@@ -97,6 +97,7 @@ See `.env.example`.
 | `APP_URL` | Origin, no trailing slash. Local: `http://localhost:3000`. Prod: `https://capsule.plainandsimple.app` |
 | `CRON_SECRET` | Vercel Cron `Authorization: Bearer …` |
 | `CREATE_GROUP_CODE` | Studio code to create a group. Trim + case-insensitive. **Required in production** — set it on Vercel. Do not publish the production value. Local/dev may leave it unset to use the built-in local default in code. |
+| `SLACK_BOT_TOKEN` | Optional bot token for Slack awards. Unset skips the section. Read only from `process.env.SLACK_BOT_TOKEN`. Never log it. Setup: `docs/slack-awards.md`. |
 | `E2E_BASE_URL` | Playwright origin. Leave empty for `http://127.0.0.1:3000`. Never defaults to production. |
 | `E2E_EMAIL` / `E2E_PASSWORD` | Optional test account. Auth/submit/group tests skip when unset. |
 | `E2E_GROUP_PIN` / `E2E_GROUP_ID` | Optional join-path secrets. Join submit skips when unset. |
@@ -117,7 +118,7 @@ See `.env.example`.
 8. **Invite** `/g/[uuid]/invite` — copy join URL and share text. Owner can make a new PIN (shown once). Server never returns the current PIN.
 9. **Submit** `/g/[uuid]/submit` — letter + ≤6 photos; letter text autosaves as a draft while the window is open (first save ~1s, then ~2s debounce; photos only when you Save as draft or Save and submit); a browser copy restores unsaved text after reload; Save as draft (hidden from capsule) or Save and submit (included, needs letter or photo); still editable until the window closes; closed state links to the latest capsule. No account → Finish your account first.
 10. **Capsule** `/g/[uuid]/capsule/[YYYY-MM]` — first edition (v1). Later same-month compiles: `/g/[uuid]/capsule/[YYYY-MM]/v2`. Read-only archive; session required. Any member. Cover lists contributors. **Download PDF** at the same path + `/pdf`. Missing capsule is “not ready yet,” not a dead end.
-11. **Owner settings** `/g/[uuid]/settings` — **Capsule theme**, schedule day fields, group name, and Regenerate PIN. Open early / close live on group home. If the schedule dates put the open or reminder send day today or in the past and that email is still unsent, an inline note and an unchecked checkbox can send it on save.
+11. **Owner settings** `/g/[uuid]/settings` — **Capsule theme**, schedule day fields, group name, optional **Slack awards**, and Regenerate PIN. Open early / close live on group home. If the schedule dates put the open or reminder send day today or in the past and that email is still unsent, an inline note and an unchecked checkbox can send it on save. Slack awards stay off until the owner turns them on. Members do not see that form.
 
 ## End-to-end tests (Playwright)
 
@@ -199,6 +200,7 @@ Vercel Cron (`vercel.json`), UTC:
 
 - `GET /api/cron/compile` at `10 6 * * *` — after midnight Chicago (CST=06:00 UTC, CDT=05:00 UTC). Compiles the month whose submit window has ended.
 - `GET /api/cron/email` at `0 15 * * *` — 09:00/10:00 Chicago. Emails every due unsent edition (subject **Your monthly capsule is ready**, From **Capsule**). Same run sends due **open** and **reminder** emails for the submit window. `?dry=1` previews without sending.
+- After compile, and after a non-dry email run, groups with Slack awards on get a draft the Chicago day before submit close. A Slack error is logged (token masked) and does not block compile or email. See `docs/slack-awards.md`.
 
 Both require `Authorization: Bearer $CRON_SECRET`.
 
@@ -213,7 +215,7 @@ Both require `Authorization: Bearer $CRON_SECRET`.
 
 ## Schema (minimal)
 
-`accounts` (preferred_name, unique email, password_hash), `groups` (`force_open_year_month` nullable, `capsule_theme` text not null default `classic`), `members` (memberships: `preferred_name`, optional `account_id`, unique `group_id + email` where email is not null, unique `account_id + group_id` where account_id is not null), `months` (`version` default 1, unique `group_id + year_month + version`, at most one `open` row per group), `submissions` (unique `month_id + member_id` — no rollover across editions), `photos`, `capsules` (`month_id` unique, `email_held` default false, `archive` jsonb snapshot including `month_version` and `theme`, `pdf_storage_path` nullable), `cycle_email_sends` (unique `group_id + year_month + member_id`, nullable `open_email_sent_at` / `reminder_email_sent_at`), `pin_attempts` (5 / 15 minutes / IP+group), `login_attempts` (5 / 15 minutes / IP+email), `password_reset_tokens` (SHA-256 of the emailed secret, expiry, `used_at`), `password_reset_attempts` (5 / 15 minutes / IP+email).
+`accounts` (preferred_name, unique email, password_hash), `groups` (`force_open_year_month` nullable, `capsule_theme` text not null default `classic`, `slack_awards_enabled` boolean not null default false), `group_slack_awards` (unique `group_id + year_month`, `data` jsonb, `owner_edited` default false, `hidden` default false; owner/admin read and update, service role writes), `members` (memberships: `preferred_name`, optional `account_id`, unique `group_id + email` where email is not null, unique `account_id + group_id` where account_id is not null), `months` (`version` default 1, unique `group_id + year_month + version`, at most one `open` row per group), `submissions` (unique `month_id + member_id` — no rollover across editions), `photos`, `capsules` (`month_id` unique, `email_held` default false, `archive` jsonb snapshot including `month_version` and `theme`, `pdf_storage_path` nullable), `cycle_email_sends` (unique `group_id + year_month + member_id`, nullable `open_email_sent_at` / `reminder_email_sent_at`), `pin_attempts` (5 / 15 minutes / IP+group), `login_attempts` (5 / 15 minutes / IP+email), `password_reset_tokens` (SHA-256 of the emailed secret, expiry, `used_at`), `password_reset_attempts` (5 / 15 minutes / IP+email).
 
 ### Live SQL for CoS (`uqqxauszzorzhmngcnvf`)
 

@@ -17,6 +17,7 @@ import {
   type CycleMonthRow,
 } from "@/lib/month-version";
 import { compileTargetYearMonth } from "@/lib/schedule";
+import { loadVisibleSlackAwards } from "@/lib/slack-awards-store";
 import { includedSubmissions } from "@/lib/submit";
 import { createAdminClient } from "@/lib/supabase";
 import type { Capsule, Group, Month, Submission } from "@/lib/types";
@@ -234,6 +235,7 @@ export async function snapshotMonthArchive(
     }
   }
 
+  const slackAwards = await loadVisibleSlackAwards(group, yearMonth);
   return buildCapsuleArchive({
     yearMonth,
     groupName: group.name,
@@ -241,6 +243,7 @@ export async function snapshotMonthArchive(
     memberCount: memberCount ?? 0,
     monthVersion,
     theme: parseCapsuleTheme(group.capsule_theme),
+    slackAwards,
   });
 }
 

@@ -102,6 +102,7 @@ export async function CapsuleView({
             title={title}
             letters={letters}
             missedPhrase={missedCountPhrase(archive.missed_count)}
+            slackAwards={archive.slack_awards ?? null}
           />
         </div>
       </div>

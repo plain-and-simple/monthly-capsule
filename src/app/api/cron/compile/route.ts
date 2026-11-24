@@ -3,6 +3,8 @@ import { compileDueCapsules } from "@/lib/compile";
 import { authorizeCron } from "@/lib/cron-auth";
 import { purgeExpiredPasswordResetTokens } from "@/lib/password-reset-store";
 import { purgeOldPasswordResetAttempts, purgeOldPinAttempts, purgeOldStudioAttempts } from "@/lib/rate-limit";
+import { afterPrimaryWork } from "@/lib/slack-awards";
+import { refreshDueSlackAwards } from "@/lib/slack-awards-job";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -17,6 +19,9 @@ export async function GET(request: Request) {
   await purgeOldPasswordResetAttempts();
   await purgeOldStudioAttempts();
   await purgeExpiredPasswordResetTokens();
-  const results = await compileDueCapsules();
+  const results = await afterPrimaryWork(
+    () => compileDueCapsules(),
+    () => refreshDueSlackAwards(),
+  );
   return NextResponse.json({ ok: true, results });
 }
