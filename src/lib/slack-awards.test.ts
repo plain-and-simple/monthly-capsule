@@ -478,6 +478,9 @@ describe("slack web api", () => {
           response_metadata: { next_cursor: "" },
         });
       }
+      if (method === "conversations.join") {
+        return json({ ok: true, channel: { id: params.get("channel") } });
+      }
       if (method === "conversations.history") {
         if (params.get("channel") !== "channel-lantern") {
           return json({ ok: true, messages: [], response_metadata: { next_cursor: "" } });
@@ -564,11 +567,16 @@ describe("slack web api", () => {
 
     const methods = calls.map((call) => call.method);
     expect(methods.filter((method) => method === "conversations.replies")).toEqual(["conversations.replies"]);
+    expect(calls.filter((call) => call.method === "conversations.join").map((call) => call.params.get("channel"))).toEqual([
+      "channel-kettle",
+    ]);
+    expect(methods.lastIndexOf("conversations.list")).toBeLessThan(methods.indexOf("conversations.join"));
+    expect(methods.indexOf("conversations.join")).toBeLessThan(methods.indexOf("conversations.history"));
     expect(calls.filter((call) => call.method === "conversations.history").map((call) => call.params.get("channel"))).toEqual([
       "channel-lantern",
+      "channel-kettle",
       "channel-stair",
     ]);
-    expect(calls.some((call) => call.params.get("channel") === "channel-kettle")).toBe(false);
     expect(calls.filter((call) => call.method === "conversations.list")[1]?.params.get("cursor")).toBe("next-page");
     const history = calls.find((call) => call.method === "conversations.history");
     expect(history?.params.get("oldest")).toBe(march.start.toFixed(6));
@@ -582,20 +590,117 @@ describe("slack web api", () => {
     expect(awards.mostReactions).toMatchObject({ name: "Nim", reactionTotal: 5, topEmoji: "star" });
     expect(awards.channel?.name).toBe("lantern-room");
   });
+
+  it("joins only public non-archived channels the bot is missing from", async () => {
+    const march = chicagoMonthUnixRange("2026-03")!;
+    const lanternTs = (march.start + 10).toFixed(6);
+    const kettleTs = (march.start + 40).toFixed(6);
+    const calls: { method: string; params: URLSearchParams }[] = [];
+
+    const fetchImpl: typeof fetch = async (url, init) => {
+      const method = String(url).split("/").pop() ?? "";
+      const params = new URLSearchParams(String(init?.body ?? ""));
+      calls.push({ method, params });
+      const json = (body: unknown) =>
+        new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
+
+      if (method === "conversations.list") {
+        expect(params.get("types")).toBe("public_channel");
+        expect(params.get("exclude_archived")).toBe("true");
+        return json({
+          ok: true,
+          channels: [
+            { id: "channel-lantern", name: "lantern-room", is_member: true, is_channel: true, is_private: false, is_archived: false },
+            { id: "channel-kettle", name: "kettle-wharf", is_member: false, is_channel: true, is_private: false, is_archived: false },
+            { id: "channel-attic", name: "attic-loft", is_member: true, is_channel: true, is_archived: true },
+            { id: "channel-vault", name: "vault-parlor", is_member: true, is_private: true, is_group: true },
+            { id: "channel-note", name: "note-slip", is_member: false, is_im: true },
+            { id: "channel-huddle", name: "huddle-nook", is_member: false, is_mpim: true },
+            { id: "channel-back", name: "back-room", is_member: false, is_channel: false },
+            { id: "channel-locked", name: "locked-gate", is_member: false, is_channel: true, is_private: false, is_archived: false },
+          ],
+          response_metadata: { next_cursor: "" },
+        });
+      }
+      if (method === "conversations.join") {
+        if (params.get("channel") === "channel-locked") {
+          return json({ ok: false, error: "restricted_action" });
+        }
+        return json({ ok: true, channel: { id: params.get("channel") } });
+      }
+      if (method === "conversations.history") {
+        const channel = params.get("channel");
+        if (channel === "channel-lantern") {
+          return json({
+            ok: true,
+            messages: [{ type: "message", user: "person-pip", text: "The lantern is lit.", ts: lanternTs, reply_count: 0 }],
+            response_metadata: { next_cursor: "" },
+          });
+        }
+        if (channel === "channel-kettle") {
+          return json({
+            ok: true,
+            messages: [{ type: "message", user: "person-nim", text: "The kettle sings.", ts: kettleTs, reply_count: 0 }],
+            response_metadata: { next_cursor: "" },
+          });
+        }
+        return json({ ok: true, messages: [], response_metadata: { next_cursor: "" } });
+      }
+      if (method === "users.info") {
+        const user = params.get("user");
+        const name = user === "person-nim" ? "Nim" : "Pip";
+        return json({ ok: true, user: { is_bot: false, profile: { display_name: name } } });
+      }
+      return json({ ok: false, error: "unknown_method" });
+    };
+
+    let awards: SlackAwardsData | null = null;
+    const compiled = await afterPrimaryWork(
+      async () => ["compiled"],
+      async () => {
+        awards = await collectSlackAwards({
+          token: "fixture-token",
+          writingMonth: "2026-03",
+          fetchImpl,
+          sleep: async () => undefined,
+        });
+      },
+    );
+
+    expect(compiled).toEqual(["compiled"]);
+    expect(awards).not.toBeNull();
+    const joined = calls.filter((call) => call.method === "conversations.join").map((call) => call.params.get("channel"));
+    expect(joined).toEqual(["channel-kettle", "channel-locked"]);
+    const history = calls.filter((call) => call.method === "conversations.history").map((call) => call.params.get("channel"));
+    expect(history).toEqual(["channel-lantern", "channel-kettle"]);
+    expect(awards!.senders.map((sender) => sender.name)).toEqual(["Pip", "Nim"]);
+    expect(awards!.channel).toEqual({ name: "lantern-room", count: 1 });
+    const methods = calls.map((call) => call.method);
+    expect(methods.lastIndexOf("conversations.list")).toBeLessThan(methods.indexOf("conversations.join"));
+    expect(methods.lastIndexOf("conversations.join")).toBeLessThan(methods.indexOf("conversations.history"));
+  });
 });
 
 describe("slack awards wiring", () => {
-  it("keeps the manifest to the four bot scopes", () => {
+  it("keeps the manifest to the listed bot scopes", () => {
     const manifest = readFileSync(resolve(here, "../../docs/slack-app-manifest.yml"), "utf8");
-    expect(manifest).toContain("channels:read");
-    expect(manifest).toContain("channels:history");
-    expect(manifest).toContain("reactions:read");
-    expect(manifest).toContain("users:read");
+    const scopes = [...manifest.matchAll(/^\s+- ([a-z:]+)$/gm)].map((match) => match[1]);
+    expect(scopes).toEqual([
+      "channels:read",
+      "channels:history",
+      "channels:join",
+      "reactions:read",
+      "users:read",
+    ]);
     expect(manifest).not.toMatch(/chat:write|channels:write|groups:|im:|mpim:|users:write|reactions:write/);
     expect(manifest).not.toMatch(/^\s*user:\s*$/m);
     const docs = readFileSync(resolve(here, "../../docs/slack-awards.md"), "utf8");
     expect(docs).toContain("SLACK_BOT_TOKEN");
     expect(docs).toContain("process.env.SLACK_BOT_TOKEN");
+    expect(docs).toContain("No `/invite` is needed");
+    expect(docs).toContain("joins public, non-archived channels");
+    expect(docs).toContain("Private channels remain out of scope");
+    expect(docs).not.toContain("Invite the app");
   });
 
   it("reads the bot token only from process.env.SLACK_BOT_TOKEN and does not log it", () => {

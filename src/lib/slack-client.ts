@@ -98,7 +98,34 @@ async function slackPages(input: SlackCall & { collectionKey: string }): Promise
   return items;
 }
 
-type RawChannel = { id?: unknown; name?: unknown; is_member?: unknown };
+type RawChannel = {
+  id?: unknown;
+  name?: unknown;
+  is_member?: unknown;
+  is_archived?: unknown;
+  is_private?: unknown;
+  is_channel?: unknown;
+  is_group?: unknown;
+  is_im?: unknown;
+  is_mpim?: unknown;
+};
+
+/** Public and not archived. Missing flags stay eligible: conversations.list already asks for that set. */
+function publicOpenChannel(item: unknown): { id: string; name: string; member: boolean } | null {
+  if (!item || typeof item !== "object") return null;
+  const channel = item as RawChannel;
+  if (channel.is_archived === true) return null;
+  if (channel.is_private === true) return null;
+  if (channel.is_group === true) return null;
+  if (channel.is_im === true) return null;
+  if (channel.is_mpim === true) return null;
+  if (channel.is_channel === false) return null;
+  const id = typeof channel.id === "string" ? channel.id : "";
+  const name = typeof channel.name === "string" ? channel.name : "";
+  if (!id || !name) return null;
+  return { id, name, member: channel.is_member === true };
+}
+
 type RawReaction = { name?: unknown; count?: unknown };
 type RawMessage = {
   type?: unknown;
@@ -179,7 +206,9 @@ async function replyCountFor(
 }
 
 /**
- * Public channels the bot has joined, for one America/Chicago calendar month.
+ * Public, non-archived channels for one America/Chicago calendar month.
+ * Joins any the bot is not already in, then reads history for members, including ones just joined.
+ * A join error skips that channel and does not fail the job.
  * `conversations.replies` runs only when a parent has no reply_count.
  */
 export async function collectSlackAwards(input: {
@@ -206,13 +235,28 @@ export async function collectSlackAwards(input: {
   const names = new Map<string, string>();
   const bots = new Set<string>();
 
+  const readable: { id: string; name: string }[] = [];
   for (const item of channels) {
-    if (!item || typeof item !== "object") continue;
-    const channel = item as RawChannel;
-    if (channel.is_member !== true) continue;
-    const channelId = typeof channel.id === "string" ? channel.id : "";
-    const channelName = typeof channel.name === "string" ? channel.name : "";
-    if (!channelId || !channelName) continue;
+    const channel = publicOpenChannel(item);
+    if (!channel) continue;
+    if (!channel.member) {
+      try {
+        await slackApiCall({
+          ...transport,
+          method: "conversations.join",
+          params: { channel: channel.id },
+        });
+      } catch {
+        // One channel can refuse the join. Skip it and keep the rest of the job going.
+        continue;
+      }
+    }
+    readable.push({ id: channel.id, name: channel.name });
+  }
+
+  for (const channel of readable) {
+    const channelId = channel.id;
+    const channelName = channel.name;
     const history = await slackPages({
       ...transport,
       method: "conversations.history",

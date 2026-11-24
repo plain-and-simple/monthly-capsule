@@ -7,9 +7,9 @@ Optional per group. One Slack workspace can fill a Slack awards section. The gro
 1. Create a Slack app from `docs/slack-app-manifest.yml` (Your Apps, Create New App, From a manifest).
 2. Install the app on the workspace.
 3. Store the bot token as the Vercel environment variable `SLACK_BOT_TOKEN`. The server reads it only from `process.env.SLACK_BOT_TOKEN` and never logs it.
-4. Invite the app to each public channel that should be counted. The job lists channels the bot has joined.
+4. No `/invite` is needed. The bot joins public, non-archived channels itself. Private channels remain out of scope.
 
-The manifest requests only these bot scopes: `channels:read`, `channels:history`, `reactions:read`, `users:read`. It has no write scopes and no user scopes.
+The manifest requests only these bot scopes: `channels:read`, `channels:history`, `channels:join`, `reactions:read`, `users:read`. It has no other write scopes and no user scopes.
 
 ## When it runs
 

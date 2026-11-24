@@ -1,5 +1,5 @@
 # Slack app manifest for optional capsule awards.
-# Bot scopes only. No write scopes. No user scopes.
+# Bot scopes only. No user scopes. No write scopes other than channels:join.
 _metadata:
   major_version: 1
   minor_version: 1
@@ -15,6 +15,7 @@ oauth_config:
     bot:
       - channels:read
       - channels:history
+      - channels:join
       - reactions:read
       - users:read
 settings:
