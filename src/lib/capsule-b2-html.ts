@@ -155,8 +155,9 @@ function renderPage(page: PagePlan, pageIndex: number, images: ReadonlyMap<strin
     `<div class="page" data-tpl="${esc(page.templateId)}" data-header="${page.headerStyle}" style="background:${page.paper};color:${page.ink}">`,
   ];
   for (const band of page.bands) {
+    const radius = band.radius && band.radius > 0 ? `border-radius:${px(band.radius)}px;` : "";
     parts.push(
-      `<div class="band" style="left:${px(band.x)}px;top:${px(band.y)}px;width:${px(band.w)}px;height:${px(band.h)}px;background:${band.fill}"></div>`,
+      `<div class="band" style="left:${px(band.x)}px;top:${px(band.y)}px;width:${px(band.w)}px;height:${px(band.h)}px;background:${band.fill};${radius}"></div>`,
     );
   }
   if (page.personName && page.headerStyle === "block") {

@@ -60,6 +60,8 @@ export type PageBand = {
   w: number;
   h: number;
   fill: string;
+  /** Corner radius in points. A circle sets this to half the side. */
+  radius?: number;
 };
 
 export type PagePlan = {
