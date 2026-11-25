@@ -46,7 +46,7 @@ This repo is PUBLIC. This file holds no secrets, member data, or logins, and it 
 - Product questions get settled with Chandler in one line. Don't invent product rules.
 - Anything run on Chandler's Mac mini runs under the macOS user `youcha-agent`. Grok CLI is installed there and signed in to GitHub, and it can be used for repo work on branches.
 
-## 5. Current state (as of 2026-11-23)
+## 5. Current state (as of 2026-11-25)
 **Live and done:**
 - PR #64, the B2 magazine PDF.
 - PR #65, PDF compression.
@@ -83,6 +83,12 @@ This repo is PUBLIC. This file holds no secrets, member data, or logins, and it 
   - The group page (`/g/[id]`) catches a remaining TransientError and shows a calm "Couldn't load this group. Try again in a moment." screen with a Try again button that reloads, instead of the generic error page.
   - The ops alert for that failure is sent at most once per request.
   - CI was green (Unit and E2E smoke). The Vercel preview was Ready.
+- PR #78, optional Slack awards, squash-merged as cb6ac787 on 2026-11-25 at 5:12 AM CT (prod deploy `dpl_9fjbdDBNMS1GDHWyWkAiXmETBnoY`, Ready at 5:14 AM CT).
+  - The migration `supabase/migrations/20261124120000_slack_awards.sql` is applied to prod. It adds `groups.slack_awards_enabled` (off by default) and `group_slack_awards`, with RLS and a unique constraint on group plus month.
+  - A group only includes the section when the owner turns that flag on. The awards page comes after the letters.
+  - A monthly Vercel cron at `15 6 1 * *` UTC (12:15 AM CT on the 1st, or 1:15 AM CT during daylight time) counts the previous America/Chicago calendar month and stores a draft. Owner-edited rows are left alone. A Slack failure is masked and does not block compile or email.
+  - A protected manual pull can pass `year_month` and an optional `group_id` without turning the flag on or replacing owner edits. See `docs/slack-awards.md`.
+  - CI was green (Unit and E2E smoke; Unit needed one rerun of the known vitest flake). The Vercel preview was Ready.
 
 **Decisions (Chandler, 2026-11-22):**
 - Old stored PDFs keep their old cover labels and will not be re-rendered.
