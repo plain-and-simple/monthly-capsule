@@ -7,6 +7,9 @@
     "src/app/api/cron/email/route.ts": {
       "maxDuration": 60
     },
+    "src/app/api/cron/slack-awards/route.ts": {
+      "maxDuration": 60
+    },
     "src/app/(app)/g/[uuid]/capsule/[yearMonth]/pdf/route.ts": {
       "memory": 2048,
       "maxDuration": 60
@@ -24,6 +27,10 @@
     {
       "path": "/api/cron/email",
       "schedule": "0 15 * * *"
+    },
+    {
+      "path": "/api/cron/slack-awards",
+      "schedule": "15 6 1 * *"
     }
   ]
 }

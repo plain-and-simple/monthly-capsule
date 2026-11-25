@@ -1,13 +1,10 @@
 import {
   chicagoDate,
-  cycleCloseChicagoDate,
-  nextYearMonth,
+  lastDayOfMonth,
+  monthLabel,
   parseYearMonth,
   previousYearMonth,
   writingYearMonth,
-  yearMonthString,
-  type ChicagoDate,
-  type ScheduleDays,
 } from "@/lib/schedule";
 
 export const SLACK_AWARD_TEXT_MAX = 200;
@@ -157,47 +154,36 @@ export function chicagoLocalToUtc(
   return new Date(instant);
 }
 
-/** [start, end) unix seconds for a calendar month in America/Chicago. */
+/**
+ * Inclusive America/Chicago window for one calendar month.
+ * `start` is the 1st at 00:00:00. `end` is the last day at 23:59:59.
+ * Callers include the whole last second (`ts < end + 1`) and stop at the next second.
+ */
 export function chicagoMonthUnixRange(yearMonth: string): { start: number; end: number } | null {
   const parsed = parseYearMonth(yearMonth);
   if (!parsed) return null;
-  const start = chicagoLocalToUtc(parsed.year, parsed.month, 1);
-  const next =
-    parsed.month === 12
-      ? chicagoLocalToUtc(parsed.year + 1, 1, 1)
-      : chicagoLocalToUtc(parsed.year, parsed.month + 1, 1);
-  return { start: start.getTime() / 1000, end: next.getTime() / 1000 };
-}
-
-export function shiftChicagoDate(date: ChicagoDate, days: number): ChicagoDate {
-  const utc = new Date(Date.UTC(date.year, date.month - 1, date.day + days));
-  return { year: utc.getUTCFullYear(), month: utc.getUTCMonth() + 1, day: utc.getUTCDate() };
-}
-
-function sameChicagoDay(a: ChicagoDate, b: ChicagoDate): boolean {
-  return a.year === b.year && a.month === b.month && a.day === b.day;
+  const start = chicagoLocalToUtc(parsed.year, parsed.month, 1, 0, 0, 0);
+  const last = lastDayOfMonth(parsed.year, parsed.month);
+  const end = chicagoLocalToUtc(parsed.year, parsed.month, last, 23, 59, 59);
+  return { start: start.getTime() / 1000, end: end.getTime() / 1000 };
 }
 
 /**
- * Capsule cycle whose submit close is tomorrow in America/Chicago.
- * Null on every other day.
+ * Awards row for a capsule cycle. The row key is the writing month (cycle minus one).
+ * That is the previous calendar month when the monthly cron runs on the 1st.
  */
-export function slackAwardsDueCycle(
-  schedule: Pick<ScheduleDays, "submit_end_day">,
-  now: Date,
-): string | null {
-  const today = chicagoDate(now);
-  const months = [previousYearMonth(today), yearMonthString(today), nextYearMonth(today)];
-  for (const yearMonth of months) {
-    const close = cycleCloseChicagoDate(yearMonth, schedule.submit_end_day);
-    if (sameChicagoDay(shiftChicagoDate(close, -1), today)) return yearMonth;
-  }
-  return null;
-}
-
-/** Slack history window for a capsule cycle: the writing month (cycle minus one). */
 export function slackHistoryYearMonth(cycleYearMonth: string): string {
   return writingYearMonth(cycleYearMonth);
+}
+
+/** Previous America/Chicago calendar month. The monthly cron stores this `year_month`. */
+export function slackAwardsStatsYearMonth(now: Date): string {
+  return previousYearMonth(chicagoDate(now));
+}
+
+/** Visible name of an awards `year_month`: that calendar month, not the next cycle key. */
+export function slackAwardsMonthLabel(yearMonth: string): string {
+  return monthLabel(yearMonth);
 }
 
 export function isIgnoredSlackMessage(message: {
@@ -223,7 +209,7 @@ export function filterMessagesToChicagoMonth<T extends { ts: string }>(
   if (!range) return [];
   return messages.filter((message) => {
     const ts = slackTsSeconds(message.ts);
-    return ts >= range.start && ts < range.end;
+    return ts >= range.start && ts < range.end + 1;
   });
 }
 
@@ -472,6 +458,48 @@ export async function saveGeneratedSlackAwards(
   return updated ? "saved" : "skipped";
 }
 
+/**
+ * Pull one month from Slack into the draft.
+ * `force` false (the cron) leaves an owner-edited row alone and does not call `collect`.
+ * `force` true is the owner refresh, which may replace that row.
+ */
+export async function pullSlackAwardsDraft(input: {
+  groupId: string;
+  yearMonth: string;
+  force: boolean;
+  read: (groupId: string, yearMonth: string) => Promise<SlackAwardsRow | null>;
+  collect: (yearMonth: string) => Promise<SlackAwardsData>;
+  writeGenerated: (row: {
+    groupId: string;
+    yearMonth: string;
+    data: SlackAwardsData;
+  }) => Promise<"saved" | "skipped">;
+  writeForced: (row: {
+    groupId: string;
+    yearMonth: string;
+    data: SlackAwardsData;
+    hidden: boolean;
+  }) => Promise<void>;
+}): Promise<"saved" | "skipped"> {
+  const existing = await input.read(input.groupId, input.yearMonth);
+  if (existing?.owner_edited && !input.force) return "skipped";
+  const data = await input.collect(input.yearMonth);
+  if (input.force) {
+    await input.writeForced({
+      groupId: input.groupId,
+      yearMonth: input.yearMonth,
+      data,
+      hidden: existing?.hidden ?? false,
+    });
+    return "saved";
+  }
+  return input.writeGenerated({
+    groupId: input.groupId,
+    yearMonth: input.yearMonth,
+    data,
+  });
+}
+
 export async function loadVisibleSlackAwardsFrom(input: {
   enabled: boolean;
   hidden?: boolean;
@@ -510,25 +538,125 @@ export async function afterPrimaryWork<T>(
   return results;
 }
 
+export type SlackAwardsCronStatus = "saved" | "skipped" | "failed";
+
+export type SlackAwardsCronSummary = {
+  year_month: string;
+  results: { group_id: string; status: SlackAwardsCronStatus }[];
+};
+
+export type SlackAwardsCronTarget = {
+  yearMonth: string | null;
+  groupId: string | null;
+  now: Date;
+};
+
+const SLACK_AWARDS_YEAR_MONTH_RE = /^\d{4}-\d{2}$/;
+const SLACK_AWARDS_GROUP_ID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export type SlackAwardsCronQuery =
+  | { ok: true; yearMonth: string | null; groupId: string | null }
+  | { ok: false; error: "invalid_year_month" | "invalid_group_id" };
+
+/**
+ * Optional manual query. Omitted params stay null.
+ * `year_month` must match YYYY-MM and be a real calendar month (the Chicago window has to exist).
+ * `group_id` must be one uuid.
+ */
+export function parseSlackAwardsCronQuery(input: {
+  yearMonth: string | null;
+  groupId: string | null;
+}): SlackAwardsCronQuery {
+  let yearMonth: string | null = null;
+  if (input.yearMonth != null) {
+    if (!SLACK_AWARDS_YEAR_MONTH_RE.test(input.yearMonth) || chicagoMonthUnixRange(input.yearMonth) == null) {
+      return { ok: false, error: "invalid_year_month" };
+    }
+    yearMonth = input.yearMonth;
+  }
+  let groupId: string | null = null;
+  if (input.groupId != null) {
+    if (!SLACK_AWARDS_GROUP_ID_RE.test(input.groupId)) {
+      return { ok: false, error: "invalid_group_id" };
+    }
+    groupId = input.groupId.toLowerCase();
+  }
+  return { ok: true, yearMonth, groupId };
+}
+
+function cronStatus(status: SlackAwardsCronStatus | void): SlackAwardsCronStatus {
+  if (status === "saved" || status === "skipped" || status === "failed") return status;
+  return "saved";
+}
+
+/**
+ * Default: previous America/Chicago month, and only groups with Slack awards on.
+ * A manual yearMonth is stored as that calendar month. A manual groupId runs that
+ * group even when the setting is off, and this function does not change the flag.
+ * One failure does not stop the next. The summary has ids and statuses only.
+ */
 export async function runSlackAwardsForGroups(input: {
   groups: readonly {
     id: string;
     slack_awards_enabled?: boolean;
-    submit_end_day: number;
   }[];
   now: Date;
-  generate: (groupId: string, yearMonth: string) => Promise<void>;
-}): Promise<void> {
+  yearMonth?: string | null;
+  groupId?: string | null;
+  generate: (groupId: string, yearMonth: string) => Promise<SlackAwardsCronStatus | void>;
+}): Promise<SlackAwardsCronSummary> {
+  const yearMonth = input.yearMonth ?? slackAwardsStatsYearMonth(input.now);
+  const onlyGroupId = input.groupId?.toLowerCase() || null;
+  const results: SlackAwardsCronSummary["results"] = [];
   for (const group of input.groups) {
-    if (group.slack_awards_enabled !== true) continue;
-    const yearMonth = slackAwardsDueCycle(group, input.now);
-    if (!yearMonth) continue;
+    if (onlyGroupId) {
+      if (group.id.toLowerCase() !== onlyGroupId) continue;
+    } else if (group.slack_awards_enabled !== true) {
+      continue;
+    }
     try {
-      await input.generate(group.id, yearMonth);
+      const status = await input.generate(group.id, yearMonth);
+      results.push({ group_id: group.id, status: cronStatus(status) });
     } catch (error) {
       console.error("slack awards skipped", maskSlackOpsDetail(error));
+      results.push({ group_id: group.id, status: "failed" });
     }
   }
+  return { year_month: yearMonth, results };
+}
+
+/** Validate the query, then run. An invalid query does not call `run` (and so does not call Slack). */
+export async function dispatchSlackAwardsCron(input: {
+  yearMonth: string | null;
+  groupId: string | null;
+  now: Date;
+  run: (target: SlackAwardsCronTarget) => Promise<SlackAwardsCronSummary>;
+}): Promise<
+  | { status: 400; body: { error: string } }
+  | { status: 200; body: { ok: true; year_month: string; results: SlackAwardsCronSummary["results"] } }
+> {
+  const parsed = parseSlackAwardsCronQuery(input);
+  if (!parsed.ok) {
+    const error = parsed.error === "invalid_year_month" ? "Invalid year_month." : "Invalid group_id.";
+    return { status: 400, body: { error } };
+  }
+  const summary = await input.run({
+    yearMonth: parsed.yearMonth,
+    groupId: parsed.groupId,
+    now: input.now,
+  });
+  return {
+    status: 200,
+    body: {
+      ok: true,
+      year_month: summary.year_month,
+      results: summary.results.map((row) => ({
+        group_id: row.group_id,
+        status: row.status,
+      })),
+    },
+  };
 }
 
 function readTrimmed(formData: FormData, name: string, max: number): string {

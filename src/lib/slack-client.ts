@@ -263,7 +263,8 @@ export async function collectSlackAwards(input: {
       params: {
         channel: channelId,
         oldest: range.start.toFixed(6),
-        latest: range.end.toFixed(6),
+        // `end` is 23:59:59. The next second is the following month, so ask through that instant.
+        latest: (range.end + 1).toFixed(6),
         inclusive: "true",
       },
       collectionKey: "messages",

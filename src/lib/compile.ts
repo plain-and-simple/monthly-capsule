@@ -17,6 +17,7 @@ import {
   type CycleMonthRow,
 } from "@/lib/month-version";
 import { compileTargetYearMonth } from "@/lib/schedule";
+import { slackHistoryYearMonth } from "@/lib/slack-awards";
 import { loadVisibleSlackAwards } from "@/lib/slack-awards-store";
 import { includedSubmissions } from "@/lib/submit";
 import { createAdminClient } from "@/lib/supabase";
@@ -235,7 +236,7 @@ export async function snapshotMonthArchive(
     }
   }
 
-  const slackAwards = await loadVisibleSlackAwards(group, yearMonth);
+  const slackAwards = await loadVisibleSlackAwards(group, slackHistoryYearMonth(yearMonth));
   return buildCapsuleArchive({
     yearMonth,
     groupName: group.name,

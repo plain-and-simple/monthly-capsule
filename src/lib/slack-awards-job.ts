@@ -1,7 +1,7 @@
 import "server-only";
 
 import { reportOpsAlert } from "@/lib/ops-alert-mail";
-import { slackHistoryYearMonth, runSlackAwardsForGroups, maskSlackOpsDetail } from "@/lib/slack-awards";
+import { pullSlackAwardsDraft, runSlackAwardsForGroups, maskSlackOpsDetail } from "@/lib/slack-awards";
 import { collectSlackAwards, requireSlackBotToken } from "@/lib/slack-client";
 import {
   readSlackAwardsRow,
@@ -24,7 +24,8 @@ async function alertSlackFailure(groupId: string | null, error: unknown): Promis
 }
 
 /**
- * Fill one cycle's draft from Slack. Skips rows the owner has edited unless force is set.
+ * Fill one month's draft from Slack. `yearMonth` is the calendar month the messages cover.
+ * Skips rows the owner has edited unless force is set.
  * Returns "failed" instead of throwing when Slack or the token is unavailable.
  */
 export async function generateSlackAwardsForGroup(input: {
@@ -33,26 +34,20 @@ export async function generateSlackAwardsForGroup(input: {
   force: boolean;
 }): Promise<"saved" | "skipped" | "failed"> {
   try {
-    const existing = await readSlackAwardsRow(input.groupId, input.yearMonth);
-    if (existing?.owner_edited && !input.force) return "skipped";
-    const token = requireSlackBotToken();
-    const data = await collectSlackAwards({
-      token,
-      writingMonth: slackHistoryYearMonth(input.yearMonth),
-    });
-    if (input.force) {
-      await writeForcedSlackAwards({
-        groupId: input.groupId,
-        yearMonth: input.yearMonth,
-        data,
-        hidden: existing?.hidden ?? false,
-      });
-      return "saved";
-    }
-    return writeGeneratedSlackAwards({
+    return await pullSlackAwardsDraft({
       groupId: input.groupId,
       yearMonth: input.yearMonth,
-      data,
+      force: input.force,
+      read: readSlackAwardsRow,
+      collect: async (yearMonth) => {
+        const token = requireSlackBotToken();
+        return collectSlackAwards({
+          token,
+          writingMonth: yearMonth,
+        });
+      },
+      writeGenerated: (row) => writeGeneratedSlackAwards(row),
+      writeForced: (row) => writeForcedSlackAwards(row),
     });
   } catch (error) {
     await alertSlackFailure(input.groupId, error);
@@ -60,16 +55,23 @@ export async function generateSlackAwardsForGroup(input: {
   }
 }
 
-/** Day-before-close draft for every group that opted in. One group's failure does not stop the next. */
-export async function refreshDueSlackAwards(now: Date = new Date()): Promise<void> {
+/**
+ * Previous Chicago month for every group that opted in, unless a manual run names a month or one group.
+ * Always force=false, so an owner-edited row is skipped. Does not change slack_awards_enabled.
+ * One group's failure does not stop the next.
+ */
+export async function refreshMonthlySlackAwards(
+  now: Date = new Date(),
+  options?: { yearMonth?: string | null; groupId?: string | null },
+) {
   const admin = createAdminClient();
   const { data: groups, error } = await admin.from("groups").select("*");
   if (error) throw new Error("Could not list groups");
-  await runSlackAwardsForGroups({
+  return runSlackAwardsForGroups({
     groups: (groups ?? []) as Group[],
     now,
-    generate: async (groupId, yearMonth) => {
-      await generateSlackAwardsForGroup({ groupId, yearMonth, force: false });
-    },
+    yearMonth: options?.yearMonth,
+    groupId: options?.groupId,
+    generate: (groupId, yearMonth) => generateSlackAwardsForGroup({ groupId, yearMonth, force: false }),
   });
 }

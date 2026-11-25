@@ -190,6 +190,9 @@ After env + **all** migrations (init, accounts, force-cycle, submission_status, 
 curl -H "Authorization: Bearer $CRON_SECRET" http://localhost:3000/api/cron/compile
 curl -H "Authorization: Bearer $CRON_SECRET" "http://localhost:3000/api/cron/email?dry=1"
 curl -H "Authorization: Bearer $CRON_SECRET" http://localhost:3000/api/cron/email
+curl -H "Authorization: Bearer $CRON_SECRET" http://localhost:3000/api/cron/slack-awards
+curl -H "Authorization: Bearer $CRON_SECRET" "http://localhost:3000/api/cron/slack-awards?year_month=2026-03"
+curl -H "Authorization: Bearer $CRON_SECRET" "http://localhost:3000/api/cron/slack-awards?year_month=2026-03&group_id=11111111-1111-4111-8111-111111111111"
 ```
 
 Compile is idempotent (unique `capsules.month_id`) and writes `capsules.archive`. Email sets `email_sent_at` only after Resend accepts every attempted send. Cron skips a capsule with `email_held`.
@@ -200,9 +203,9 @@ Vercel Cron (`vercel.json`), UTC:
 
 - `GET /api/cron/compile` at `10 6 * * *` — after midnight Chicago (CST=06:00 UTC, CDT=05:00 UTC). Compiles the month whose submit window has ended.
 - `GET /api/cron/email` at `0 15 * * *` — 09:00/10:00 Chicago. Emails every due unsent edition (subject **Your monthly capsule is ready**, From **Capsule**). Same run sends due **open** and **reminder** emails for the submit window. `?dry=1` previews without sending.
-- After compile, and after a non-dry email run, groups with Slack awards on get a draft the Chicago day before submit close. A Slack error is logged (token masked) and does not block compile or email. See `docs/slack-awards.md`.
+- `GET /api/cron/slack-awards` at `15 6 1 * *` — 12:15 AM Chicago on the 1st (1:15 AM during daylight time). For each group with Slack awards on, counts the previous calendar month, from the 1st at 00:00 through the last day at 23:59:59 America/Chicago, and stores that month's `year_month`. Optional `year_month=2026-03` counts that month instead. Optional `group_id` (a uuid such as `11111111-1111-4111-8111-111111111111`) runs one group, even if Slack awards are off, and does not turn the setting on. A bad `year_month` or `group_id` returns 400 and does not call Slack. Owner-edited rows are left as they are. A Slack error is logged (token masked), that group is skipped, and the route still returns 200 with a summary that has no tokens or names. See `docs/slack-awards.md`.
 
-Both require `Authorization: Bearer $CRON_SECRET`.
+All three require `Authorization: Bearer $CRON_SECRET`.
 
 ## Deploy (capsule.plainandsimple.app)
 
@@ -211,7 +214,7 @@ Both require `Authorization: Bearer $CRON_SECRET`.
 3. Add the env vars above. Production `APP_URL=https://capsule.plainandsimple.app`. Set `CREATE_GROUP_CODE` on Vercel (ops).
 4. Apply `supabase/migrations` to the production Supabase project. Confirm the `capsule-photos` bucket exists and is private.
 5. Attach the domain `capsule.plainandsimple.app` (DNS at the registrar / Vercel). Cookies stay on that host.
-6. Confirm Vercel Cron is enabled (Pro) or call the two routes from an external scheduler with `CRON_SECRET`.
+6. Confirm Vercel Cron is enabled (Pro) or call the three routes from an external scheduler with `CRON_SECRET`.
 
 ## Schema (minimal)
 

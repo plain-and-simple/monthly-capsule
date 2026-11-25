@@ -18,6 +18,7 @@ This repo is PUBLIC. This file holds no secrets, member data, or logins, and it 
 - **Crons (vercel.json):**
   - `/api/cron/compile` runs at `10 6 * * *` UTC.
   - `/api/cron/email` runs at `0 15 * * *` UTC (9 AM CT). It sends the compiled capsule, plus the open and reminder emails added in PR #67.
+  - `/api/cron/slack-awards` runs at `15 6 1 * *` UTC (12:15 AM CT on the 1st, or 1:15 AM CT during daylight time). It stores the previous Chicago month for groups that turned Slack awards on.
 - **PDF format (locked by Chandler 2026-10-22, "B2"):**
   - A template library with a scorer picks each person's best-fit page, rendered as HTML/CSS in headless Chromium.
   - Photos stay close to their true shape, with at most ~10% face-aware trim per side and no cut-off faces.

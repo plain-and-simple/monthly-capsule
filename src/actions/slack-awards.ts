@@ -8,18 +8,18 @@ import {
   SLACK_AWARDS_REFRESHED,
 } from "@/lib/copy";
 import { forceCloseYearMonth } from "@/lib/cycle";
-import { parseSlackAwardsForm, slackRefreshAllowed } from "@/lib/slack-awards";
+import { parseSlackAwardsForm, slackHistoryYearMonth, slackRefreshAllowed } from "@/lib/slack-awards";
 import { generateSlackAwardsForGroup } from "@/lib/slack-awards-job";
 import { readSlackAwardsRow, setSlackAwardsEnabled, writeOwnerSlackAwards } from "@/lib/slack-awards-store";
 import { requireOwnerUncached } from "@/lib/session";
 
 export type SlackAwardsState = { error?: string; ok?: boolean; notice?: string } | null;
 
-async function draftCycleYearMonth(groupId: string) {
+async function draftAwardsYearMonth(groupId: string) {
   const { group } = await requireOwnerUncached(groupId);
   const months = await listGroupMonthRows(groupId);
-  const yearMonth = forceCloseYearMonth(group, closedYearMonthsFromRows(months));
-  return { group, yearMonth };
+  const cycleYearMonth = forceCloseYearMonth(group, closedYearMonthsFromRows(months));
+  return { group, yearMonth: slackHistoryYearMonth(cycleYearMonth) };
 }
 
 function revalidateGroup(groupId: string) {
@@ -48,7 +48,7 @@ export async function saveSlackAwardsDraft(
   formData: FormData,
 ): Promise<SlackAwardsState> {
   const groupId = String(formData.get("groupId") ?? "");
-  const { yearMonth } = await draftCycleYearMonth(groupId);
+  const { yearMonth } = await draftAwardsYearMonth(groupId);
   if (String(formData.get("year_month") ?? "") !== yearMonth) {
     return { error: "Could not save." };
   }
@@ -73,7 +73,7 @@ export async function refreshSlackAwards(
   formData: FormData,
 ): Promise<SlackAwardsState> {
   const groupId = String(formData.get("groupId") ?? "");
-  const { group, yearMonth } = await draftCycleYearMonth(groupId);
+  const { group, yearMonth } = await draftAwardsYearMonth(groupId);
   if (group.slack_awards_enabled !== true) {
     return { error: SLACK_AWARDS_FAILED };
   }

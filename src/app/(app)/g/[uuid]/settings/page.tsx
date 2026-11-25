@@ -8,8 +8,7 @@ import { forceCloseYearMonth } from "@/lib/cycle";
 import { loadCycleEmailSentMap } from "@/lib/cycle-mail";
 import { appUrl } from "@/lib/env";
 import { invitePayload } from "@/lib/manage";
-import { capsuleMonthLabel } from "@/lib/schedule";
-import { emptySlackAwards } from "@/lib/slack-awards";
+import { emptySlackAwards, slackAwardsMonthLabel, slackHistoryYearMonth } from "@/lib/slack-awards";
 import { readSlackAwardsRow } from "@/lib/slack-awards-store";
 import { requireOwner } from "@/lib/session";
 
@@ -23,11 +22,12 @@ export default async function SettingsPage({ params }: { params: Promise<{ uuid:
   const closedYearMonths = closedYearMonthsFromRows(months);
   const cycleEmailSent = await loadCycleEmailSentMap(group.id);
   const draftCycle = forceCloseYearMonth(group, closedYearMonths);
+  const awardsYearMonth = slackHistoryYearMonth(draftCycle);
   let awards = emptySlackAwards();
   let ownerEdited = false;
   let hidden = false;
   try {
-    const row = await readSlackAwardsRow(group.id, draftCycle);
+    const row = await readSlackAwardsRow(group.id, awardsYearMonth);
     if (row) {
       awards = row.data;
       ownerEdited = row.owner_edited;
@@ -56,10 +56,10 @@ export default async function SettingsPage({ params }: { params: Promise<{ uuid:
           />
           <hr className="rule" />
           <SlackAwardsForm
-            key={`${draftCycle}:${group.slack_awards_enabled === true}:${ownerEdited}:${hidden}:${JSON.stringify(awards)}`}
+            key={`${awardsYearMonth}:${group.slack_awards_enabled === true}:${ownerEdited}:${hidden}:${JSON.stringify(awards)}`}
             groupId={group.id}
-            yearMonth={draftCycle}
-            monthLabel={capsuleMonthLabel(draftCycle)}
+            yearMonth={awardsYearMonth}
+            monthLabel={slackAwardsMonthLabel(awardsYearMonth)}
             enabled={group.slack_awards_enabled === true}
             ownerEdited={ownerEdited}
             hidden={hidden}
