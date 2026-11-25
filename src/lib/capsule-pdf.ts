@@ -2,6 +2,7 @@ import { PDFDocument, rgb, type RGB } from "pdf-lib";
 import sharp from "sharp";
 import type { CapsuleArchive } from "@/lib/capsule-archive";
 import { B2_PAGE_H, layoutCapsuleDocument, parseFaceBoxes, type DocumentPlan } from "@/lib/capsule-b2";
+import { appendSlackAwardsPage } from "@/lib/slack-awards-page";
 import { capsulePhotoKey, renderCapsuleHtml, type CapsuleHtmlImage } from "@/lib/capsule-b2-html";
 import { printHtmlToPdf, getCapsuleBrowser } from "@/lib/capsule-pdf-chromium";
 import { preparePlacedPhotoJpeg } from "@/lib/capsule-pdf-image";
@@ -392,7 +393,7 @@ export function planForArchive(archive: CapsuleArchive, monthLabelText?: string)
   const theme = parseCapsuleTheme(archive.theme);
   const groupName = groupDisplayName(archive.group_name);
   const title = monthLabelText ?? capsuleMonthTitle(archive.year_month, archive.month_version);
-  return layoutCapsuleDocument({
+  const plan = layoutCapsuleDocument({
     groupName,
     monthLabel: title,
     theme,
@@ -411,6 +412,17 @@ export function planForArchive(archive: CapsuleArchive, monthLabelText?: string)
           order: photo.sort_order ?? index,
         })),
     })),
+  });
+  const awards = archive.slack_awards ?? null;
+  if (!awards) return plan;
+  const swatch = capsuleThemeMeta(theme);
+  return appendSlackAwardsPage(plan, {
+    awards,
+    groupName,
+    monthLabel: title,
+    paper: swatch.colors[0],
+    ink: swatch.colors[1],
+    accent: swatch.colors[2],
   });
 }
 

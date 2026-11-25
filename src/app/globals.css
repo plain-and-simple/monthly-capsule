@@ -1199,6 +1199,36 @@ button.listitem:hover {
   text-align: center;
 }
 
+.slack-awards {
+  margin-top: 2.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--line);
+}
+
+.slack-awards h2 {
+  margin: 0 0 0.75rem;
+  font-size: 1.2rem;
+}
+
+.slack-awards ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.slack-awards li {
+  font-size: 0.95rem;
+}
+
+fieldset.stack {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+
 .mailframe {
   border: 1px solid var(--line-strong);
   border-radius: var(--r-lg);

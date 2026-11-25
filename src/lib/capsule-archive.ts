@@ -11,6 +11,11 @@ import {
 import { contributorsLine } from "@/lib/copy";
 import { parseFaceBoxes, type FaceBox } from "@/lib/face-boxes";
 import { capsuleMonthLabel } from "@/lib/schedule";
+import {
+  parseSlackAwardsData,
+  renderSlackAwardsSectionHtml,
+  type SlackAwardsData,
+} from "@/lib/slack-awards";
 
 export const CAPSULE_ARCHIVE_VERSION = 1 as const;
 
@@ -39,6 +44,8 @@ export type CapsuleArchive = {
   letters: CapsuleArchiveLetter[];
   member_count: number;
   missed_count: number;
+  /** Present only when this compile included a visible Slack awards draft. */
+  slack_awards?: SlackAwardsData;
 };
 
 export function capsuleHasArchive(value: unknown): boolean {
@@ -88,6 +95,9 @@ export function parseCapsuleArchive(value: unknown): CapsuleArchive | null {
     ? Number(row.month_version)
     : 1;
   const theme = parseCapsuleTheme(row.theme);
+  const slackAwards = parseSlackAwardsData(
+    (row as { slack_awards?: unknown }).slack_awards,
+  );
 
   return {
     version: CAPSULE_ARCHIVE_VERSION,
@@ -101,10 +111,12 @@ export function parseCapsuleArchive(value: unknown): CapsuleArchive | null {
       letters,
       month_version: monthVersion,
       theme,
+      slack_awards: slackAwards,
     }),
     letters,
     member_count: memberCount,
     missed_count: missedCount,
+    ...(slackAwards ? { slack_awards: slackAwards } : {}),
   };
 }
 
@@ -115,6 +127,7 @@ export function buildCapsuleArchive(input: {
   memberCount: number;
   monthVersion?: number;
   theme?: CapsuleTheme;
+  slackAwards?: SlackAwardsData | null;
 }): CapsuleArchive {
   const monthVersion =
     Number.isInteger(input.monthVersion) && Number(input.monthVersion) >= 1
@@ -136,19 +149,26 @@ export function buildCapsuleArchive(input: {
       return stored;
     }),
   }));
+  const slackAwards = input.slackAwards ?? null;
   const snapshot = {
     year_month: input.yearMonth,
     group_name: input.groupName,
     letters,
     month_version: monthVersion,
     theme,
+    slack_awards: slackAwards,
   };
   return {
     version: CAPSULE_ARCHIVE_VERSION,
-    ...snapshot,
+    month_version: snapshot.month_version,
+    year_month: snapshot.year_month,
+    group_name: snapshot.group_name,
+    theme: snapshot.theme,
+    letters: snapshot.letters,
     html: renderArchiveHtml(snapshot),
     member_count: input.memberCount,
     missed_count: Math.max(0, input.memberCount - letters.length),
+    ...(slackAwards ? { slack_awards: slackAwards } : {}),
   };
 }
 
@@ -169,6 +189,7 @@ export function renderArchiveHtml(input: {
   letters: CapsuleArchiveLetter[];
   month_version?: number;
   theme?: CapsuleTheme;
+  slack_awards?: SlackAwardsData | null;
 }): string {
   const theme = parseCapsuleTheme(input.theme);
   const monthVersion =
@@ -185,7 +206,8 @@ export function renderArchiveHtml(input: {
   const sections = input.letters
     .map((letter) => renderPersonSectionHtml(theme, letter))
     .join("");
-  return `<article class="capsule capsule--${theme}" data-theme="${theme}" data-year-month="${escapeAttr(input.year_month)}" data-month-version="${monthVersion}">${cover}${sections}</article>`;
+  const awards = renderSlackAwardsSectionHtml(input.slack_awards);
+  return `<article class="capsule capsule--${theme}" data-theme="${theme}" data-year-month="${escapeAttr(input.year_month)}" data-month-version="${monthVersion}">${cover}${sections}${awards}</article>`;
 }
 
 function renderCoverHtml(input: {
